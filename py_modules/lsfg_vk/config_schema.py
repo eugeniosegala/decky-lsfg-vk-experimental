@@ -71,10 +71,6 @@ SCRIPT_ONLY_FIELDS = {
 # Complete configuration schema (TOML + script-only fields)
 COMPLETE_CONFIG_SCHEMA = {**CONFIG_SCHEMA, **SCRIPT_ONLY_FIELDS}
 
-
-# Import auto-generated configuration components
-from .config_schema_generated import ConfigurationData, get_script_parsing_logic, get_script_generation_logic
-
 # Constants for profile management
 DEFAULT_PROFILE_NAME = "decky-lsfg-vk"
 GLOBAL_SECTION_FIELDS = {"dll", "no_fp16"}
@@ -446,13 +442,6 @@ class ConfigurationManager:
         
         return cast(ConfigurationData, merged_config)
 
-    @staticmethod
-    @staticmethod
-    def create_config_from_args(**kwargs) -> ConfigurationData:
-        """Create configuration from keyword arguments - USES GENERATED CODE"""
-        from .config_schema_generated import create_config_dict
-        return create_config_dict(**kwargs)
-    
     @staticmethod
     def normalize_profile_name(profile_name: str) -> str:
         """Normalize profile name by converting spaces to dashes and trimming

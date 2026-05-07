@@ -1,11 +1,6 @@
 import { PanelSectionRow } from "@decky/ui";
-import { ConfigurationData } from "../config/configSchema";
 
-interface UsageInstructionsProps {
-  config: ConfigurationData;
-}
-
-export function UsageInstructions({ config: _config }: UsageInstructionsProps) {
+export function UsageInstructions() {
   return (
     <>
       <PanelSectionRow>

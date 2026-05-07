@@ -8,7 +8,6 @@ from typing import Dict, Any
 from .base_service import BaseService
 from .config_schema import ConfigurationManager, CONFIG_SCHEMA, ProfileData, DEFAULT_PROFILE_NAME
 from .config_schema_generated import ConfigurationData, get_script_generation_logic
-from .configuration_helpers_generated import log_configuration_update
 from .types import ConfigurationResponse, ProfilesResponse, ProfileResponse
 
 
@@ -71,29 +70,6 @@ class ConfigurationService(BaseService):
             current_profile = profile_data["current_profile"]
             
             return self.update_profile_config(current_profile, config)
-            
-        except (OSError, IOError) as e:
-            error_msg = f"Error updating lsfg config: {str(e)}"
-            self.log.error(error_msg)
-            return self._error_response(ConfigurationResponse, str(e), config=None)
-        except ValueError as e:
-            error_msg = f"Invalid configuration arguments: {str(e)}"
-            self.log.error(error_msg)
-            return self._error_response(ConfigurationResponse, str(e), config=None)
-    
-    def update_config(self, **kwargs) -> ConfigurationResponse:
-        """Update TOML configuration using generated schema - SIMPLIFIED WITH GENERATED CODE
-        
-        Args:
-            **kwargs: Configuration field values (see shared_config.py for available fields)
-            
-        Returns:
-            ConfigurationResponse with success status
-        """
-        try:
-            config = ConfigurationManager.create_config_from_args(**kwargs)
-            
-            return self.update_config_from_dict(config)
             
         except (OSError, IOError) as e:
             error_msg = f"Error updating lsfg config: {str(e)}"
