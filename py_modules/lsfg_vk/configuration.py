@@ -14,6 +14,26 @@ from .types import ConfigurationResponse, ProfilesResponse, ProfileResponse
 
 class ConfigurationService(BaseService):
     """Service for managing TOML-based lsfg configuration"""
+
+    @staticmethod
+    def _profile_selection_lines(profile_name: str, config: ConfigurationData) -> list[str]:
+        """Choose between Decky's selected profile and v2 automatic matching.
+
+        ``LSFGVK_PROFILE`` deliberately overrides lsfg-vk's ``active_in`` matching.
+        Keep Decky's selected-profile behaviour for profiles without activation rules,
+        but let v2 perform its native automatic selection when rules are present.
+        """
+        active_in = config.get("active_in", "")
+        if isinstance(active_in, (list, tuple)):
+            has_active_in = bool(active_in)
+        else:
+            has_active_in = bool(str(active_in).strip())
+
+        if has_active_in:
+            return [
+                "# active_in is configured; lsfg-vk will select a matching profile automatically.",
+            ]
+        return [f"export LSFGVK_PROFILE={shlex.quote(profile_name)}"]
     
     def get_config(self) -> ConfigurationResponse:
         """Read current TOML configuration merged with launch script environment variables
@@ -126,9 +146,9 @@ class ConfigurationService(BaseService):
         
         lines.extend([
             f"export LSFGVK_CONFIG={shlex.quote(str(self.config_file_path))}",
-            f"export LSFGVK_PROFILE={shlex.quote(DEFAULT_PROFILE_NAME)}",
-            'exec "$@"'
         ])
+        lines.extend(self._profile_selection_lines(DEFAULT_PROFILE_NAME, config))
+        lines.append('exec "$@"')
         
         return "\n".join(lines) + "\n"
     
@@ -158,9 +178,9 @@ class ConfigurationService(BaseService):
         
         lines.extend([
             f"export LSFGVK_CONFIG={shlex.quote(str(self.config_file_path))}",
-            f"export LSFGVK_PROFILE={shlex.quote(current_profile)}",
-            'exec "$@"'
         ])
+        lines.extend(self._profile_selection_lines(current_profile, merged_config))
+        lines.append('exec "$@"')
         
         return "\n".join(lines) + "\n"
     

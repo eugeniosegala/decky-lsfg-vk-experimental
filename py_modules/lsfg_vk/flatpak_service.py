@@ -4,9 +4,11 @@ Flatpak service for managing lsfg-vk Flatpak runtime extensions.
 
 import subprocess
 import os
+from pathlib import Path
 from typing import Dict, Any, List, Optional
 
 from .base_service import BaseService
+from .config_schema import ConfigurationManager
 from .constants import CONFIG_DIR
 from .types import BaseResponse
 
@@ -48,6 +50,32 @@ class FlatpakService(BaseService):
         self.extension_id_24_08 = "org.freedesktop.Platform.VulkanLayer.lsfgvk/x86_64/24.08"
         self.extension_id_25_08 = "org.freedesktop.Platform.VulkanLayer.lsfgvk/x86_64/25.08"
         self.flatpak_command = None
+
+    def _get_lsfg_paths(self) -> tuple[str, str]:
+        """Return the config directory and read-only directory containing Lossless.dll.
+
+        Upstream's Flatpak guide grants the Steam common directory so the sandbox can
+        load Lossless Scaling. If the user selected a custom DLL path, grant that
+        DLL's directory instead.
+        """
+        home_path = os.path.expanduser("~")
+        config_path = f"{home_path}/.config/lsfg-vk"
+        dll_directory = f"{home_path}/.local/share/Steam/steamapps/common"
+
+        if not self.config_file_path.exists():
+            return config_path, dll_directory
+
+        try:
+            profile_data = ConfigurationManager.parse_toml_content_multi_profile(
+                self.config_file_path.read_text(encoding="utf-8")
+            )
+            configured_dll = profile_data["global_config"].get("dll", "")
+            if configured_dll:
+                dll_directory = str(Path(str(configured_dll)).parent)
+        except Exception as error:
+            self.log.debug("Could not read configured DLL path for Flatpak override: %s", error)
+
+        return config_path, dll_directory
 
     def _get_clean_env(self):
         """Get a clean environment without PyInstaller's bundled libraries"""
@@ -175,7 +203,7 @@ class FlatpakService(BaseService):
                 return self._error_response(BaseResponse, "Flatpak is not available on this system")
 
             if version == "23.08":
-                return self._error_response(BaseResponse, "lsfg-vk v2 is published for Flatpak runtimes 24.08 and 25.08 only")
+                return self._error_response(BaseResponse, "Decky installs Flatpak extensions from Flathub, which supports runtimes 24.08 and 25.08. Install 23.08 manually using the upstream lsfg-vk guide.")
 
             result = self._run_flatpak_command(
                 ["install", "--user", "--noninteractive", "flathub", f"org.freedesktop.Platform.VulkanLayer.lsfgvk//{version}"],
@@ -286,10 +314,7 @@ class FlatpakService(BaseService):
                 return {"filesystem": False, "env": False}
 
             output = result.stdout
-            home_path = os.path.expanduser("~")
-            config_path = f"{home_path}/.config/lsfg-vk"
-            dll_path = f"{home_path}/.local/share/Steam/steamapps/common/Lossless Scaling/Lossless.dll"
-            lsfg_path = f"{home_path}/lsfg"
+            config_path, dll_directory = self._get_lsfg_paths()
 
             filesystem_section = ""
             in_context = False
@@ -305,10 +330,9 @@ class FlatpakService(BaseService):
                     break
             
             has_config_fs = config_path in filesystem_section
-            has_dll_fs = dll_path in filesystem_section
-            has_lsfg_fs = lsfg_path in filesystem_section
+            has_dll_fs = dll_directory in filesystem_section
 
-            filesystem_override = has_config_fs and has_dll_fs and has_lsfg_fs
+            filesystem_override = has_config_fs and has_dll_fs
 
             env_override = False
             in_environment = False
@@ -323,7 +347,7 @@ class FlatpakService(BaseService):
                     env_override = True
                     break
 
-            self.log.debug(f"Override status for {app_id}: filesystem={filesystem_override} ({has_config_fs}/{has_dll_fs}/{has_lsfg_fs}), env={env_override}")
+            self.log.debug(f"Override status for {app_id}: filesystem={filesystem_override} ({has_config_fs}/{has_dll_fs}), env={env_override}")
             
             return {"filesystem": filesystem_override, "env": env_override}
 
@@ -339,15 +363,11 @@ class FlatpakService(BaseService):
                                           "Flatpak is not available on this system",
                                           app_id=app_id, operation="set")
 
-            home_path = os.path.expanduser("~")
-            config_path = f"{home_path}/.config/lsfg-vk"
-            dll_path = f"{home_path}/.local/share/Steam/steamapps/common/Lossless Scaling/Lossless.dll"
-            lsfg_path = f"{home_path}/lsfg"
+            config_path, dll_directory = self._get_lsfg_paths()
 
             filesystem_overrides = [
-                f"--filesystem={dll_path}",
-                f"--filesystem={config_path}:rw", 
-                f"--filesystem={lsfg_path}:rw"
+                f"--filesystem={config_path}:rw",
+                f"--filesystem={dll_directory}:ro",
             ]
             
             for override in filesystem_overrides:
@@ -389,28 +409,11 @@ class FlatpakService(BaseService):
                                           "Flatpak is not available on this system",
                                           app_id=app_id, operation="remove")
 
-            home_path = os.path.expanduser("~")
-            config_path = f"{home_path}/.config/lsfg-vk"
-            dll_path = f"{home_path}/.local/share/Steam/steamapps/common/Lossless Scaling/Lossless.dll"
-            lsfg_path = f"{home_path}/lsfg"
-
-            reset_result = self._run_flatpak_command(
-                ["override", "--user", "--reset", app_id],
-                capture_output=True, text=True
-            )
-            
-            if reset_result.returncode == 0:
-                self.log.info(f"Successfully reset all overrides for {app_id}")
-                return self._success_response(FlatpakOverrideResponse,
-                                            f"All overrides reset for {app_id}",
-                                            app_id=app_id, operation="remove")
-            
-            self.log.debug(f"Reset failed, trying individual removal: {reset_result.stderr}")
+            config_path, dll_directory = self._get_lsfg_paths()
             
             filesystem_overrides = [
-                f"--nofilesystem={dll_path}",
+                f"--nofilesystem={dll_directory}",
                 f"--nofilesystem={config_path}",
-                f"--nofilesystem={lsfg_path}"
             ]
             
             removal_errors = []

@@ -175,14 +175,14 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
                 <PanelSectionRow>
                   <Field 
                     label="Runtime 23.08"
-                    description="Not available for lsfg-vk v2"
+                    description="Manual upstream installation required (not on Flathub)"
                     icon={<FaTimes style={{color: 'red'}} />}
                   >
                     <ButtonItem
                       layout="below"
                       disabled
                     >
-                      Unavailable in v2
+                      Manual install required
                     </ButtonItem>
                   </Field>
                 </PanelSectionRow>

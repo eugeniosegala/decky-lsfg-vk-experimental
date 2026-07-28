@@ -21,6 +21,7 @@ PERFORMANCE_MODE = "performance_mode"
 PACING = "pacing"
 ACTIVE_IN = "active_in"
 GPU = "gpu"
+DISABLE_LSFGVK = "disable_lsfgvk"
 DXVK_FRAME_RATE = "dxvk_frame_rate"
 ENABLE_WOW64 = "enable_wow64"
 DISABLE_STEAMDECK_MODE = "disable_steamdeck_mode"
@@ -41,6 +42,7 @@ class ConfigurationData(TypedDict):
     pacing: str
     active_in: str
     gpu: str
+    disable_lsfgvk: bool
     dxvk_frame_rate: int
     enable_wow64: bool
     disable_steamdeck_mode: bool
@@ -66,6 +68,8 @@ def get_script_parsing_logic():
                 value = value.strip()
 
                 # Auto-generated parsing logic:
+                if key == "DISABLE_LSFGVK":
+                        script_values["disable_lsfgvk"] = value == "1"
                 if key == "DXVK_FRAME_RATE":
                         try:
                             script_values["dxvk_frame_rate"] = int(value)
@@ -98,6 +102,8 @@ def get_script_generation_logic():
     """Return the script generation logic as a callable"""
     def generate_script_lines(config):
         lines = []
+        if config.get("disable_lsfgvk", False):
+            lines.append("export DISABLE_LSFGVK=1")
         dxvk_frame_rate = config.get("dxvk_frame_rate", 0)
         if dxvk_frame_rate > 0:
             lines.append(f"export DXVK_FRAME_RATE={dxvk_frame_rate}")
@@ -121,4 +127,4 @@ def get_script_generation_logic():
     return generate_script_lines
 
 
-ALL_FIELDS = ['dll', 'allow_fp16', 'multiplier', 'flow_scale', 'performance_mode', 'pacing', 'active_in', 'gpu', 'dxvk_frame_rate', 'enable_wow64', 'disable_steamdeck_mode', 'mangohud_workaround', 'disable_vkbasalt', 'force_enable_vkbasalt', 'enable_wsi', 'enable_zink']
+ALL_FIELDS = ['dll', 'allow_fp16', 'multiplier', 'flow_scale', 'performance_mode', 'pacing', 'active_in', 'gpu', 'disable_lsfgvk', 'dxvk_frame_rate', 'enable_wow64', 'disable_steamdeck_mode', 'mangohud_workaround', 'disable_vkbasalt', 'force_enable_vkbasalt', 'enable_wsi', 'enable_zink']

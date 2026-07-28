@@ -50,7 +50,8 @@ The plugin provides several configuration options to optimize frame generation f
 - **Flow Scale**: Choose a value from 0.25 to 1.0 (lower generally favors performance; higher favors optical-flow quality).
 - **Performance Mode**: Uses a lighter processing model.
 - **Allow FP16**: Permit v2 to use half-precision processing when supported.
-- **Active In**: Optionally limit a profile to one or more executable/process names.
+- **Disable Frame Generation**: Temporarily exports upstream's `DISABLE_LSFGVK=1` for Decky-generated launches.
+- **Active In**: Optionally limit a profile to one or more executable/process names. When set, the launch script leaves selection to lsfg-vk's native automatic matching; otherwise it uses the profile selected in Decky.
 - **GPU**: Optionally select the GPU identifier that lsfg-vk should use.
 
 The current upstream v2 `develop` line supports only `pacing = 'none'`; it forces FIFO presentation. HDR and dual-GPU operation are not currently supported by upstream v2, so this plugin deliberately does not expose the old controls.
@@ -87,8 +88,8 @@ The plugin:
   - **Performance Mode**: Use lighter processing for better performance
   - **Allow FP16**, executable matching, and optional GPU selection
 - Writes the lsfg-vk **v2** `version = 2` TOML configuration format, including named profiles
-- Uses the upstream `LSFGVK_CONFIG` and `LSFGVK_PROFILE` launch environment variables
-- Flatpak extension installation is available for Freedesktop runtimes 24.08 and 25.08; 23.08 has no v2 extension
+- Uses the upstream `LSFGVK_CONFIG` and `LSFGVK_PROFILE` launch environment variables without overriding `active_in` matching
+- Configures Flatpak applications with v2's required config and Lossless Scaling filesystem access; extension installation through Flathub is available for Freedesktop runtimes 24.08 and 25.08
 - Easy uninstallation that removes all installed files when no longer needed
 
 ## Credits
