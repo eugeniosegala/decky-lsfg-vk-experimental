@@ -4,13 +4,10 @@ Flatpak service for managing lsfg-vk Flatpak runtime extensions.
 
 import subprocess
 import os
-from pathlib import Path
 from typing import Dict, Any, List, Optional
 
 from .base_service import BaseService
-from .constants import (
-    FLATPAK_23_08_FILENAME, FLATPAK_24_08_FILENAME, FLATPAK_25_08_FILENAME, BIN_DIR, CONFIG_DIR
-)
+from .constants import CONFIG_DIR
 from .types import BaseResponse
 
 
@@ -177,20 +174,11 @@ class FlatpakService(BaseService):
             if not self.check_flatpak_available():
                 return self._error_response(BaseResponse, "Flatpak is not available on this system")
 
-            plugin_dir = Path(__file__).parent.parent.parent
             if version == "23.08":
-                filename = FLATPAK_23_08_FILENAME
-            elif version == "24.08":
-                filename = FLATPAK_24_08_FILENAME
-            else:
-                filename = FLATPAK_25_08_FILENAME
-            flatpak_path = plugin_dir / BIN_DIR / filename
-
-            if not flatpak_path.exists():
-                return self._error_response(BaseResponse, f"Flatpak file not found: {flatpak_path}")
+                return self._error_response(BaseResponse, "lsfg-vk v2 is published for Flatpak runtimes 24.08 and 25.08 only")
 
             result = self._run_flatpak_command(
-                ["install", "--user", "--noninteractive", str(flatpak_path)],
+                ["install", "--user", "--noninteractive", "flathub", f"org.freedesktop.Platform.VulkanLayer.lsfgvk//{version}"],
                 capture_output=True, text=True
             )
 
@@ -331,7 +319,7 @@ class FlatpakService(BaseService):
                     in_environment = True
                 elif line.startswith("[") and line != "[Environment]":
                     in_environment = False
-                elif in_environment and line.startswith(f"LSFG_CONFIG={config_path}/conf.toml"):
+                elif in_environment and line.startswith(f"LSFGVK_CONFIG={config_path}/conf.toml"):
                     env_override = True
                     break
 
@@ -373,7 +361,7 @@ class FlatpakService(BaseService):
                                               app_id=app_id, operation="set")
 
             result = self._run_flatpak_command(
-                ["override", "--user", f"--env=LSFG_CONFIG={config_path}/conf.toml", app_id],
+                ["override", "--user", f"--env=LSFGVK_CONFIG={config_path}/conf.toml", app_id],
                 capture_output=True, text=True
             )
 
@@ -437,7 +425,7 @@ class FlatpakService(BaseService):
                     removal_errors.append(f"{override}: {result.stderr}")
 
             result = self._run_flatpak_command(
-                ["override", "--user", "--unset-env=LSFG_CONFIG", app_id],
+                ["override", "--user", "--unset-env=LSFGVK_CONFIG", app_id],
                 capture_output=True, text=True
             )
 

@@ -171,42 +171,18 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
 
             {extensionStatus && extensionStatus.success ? (
               <>
-                {/* 23.08 Runtime */}
+                {/* v2 has no 23.08 Flatpak runtime extension. */}
                 <PanelSectionRow>
                   <Field 
                     label="Runtime 23.08"
-                    description={extensionStatus.installed_23_08 ? "Installed" : "Not installed"}
-                    icon={extensionStatus.installed_23_08 ? <FaCheck style={{color: 'green'}} /> : <FaTimes style={{color: 'red'}} />}
+                    description="Not available for lsfg-vk v2"
+                    icon={<FaTimes style={{color: 'red'}} />}
                   >
                     <ButtonItem
                       layout="below"
-                      onClick={() => {
-                        const operation = extensionStatus.installed_23_08 ? 'uninstall' : 'install';
-                        const action = () => handleExtensionOperation(operation, '23.08');
-
-                        if (operation === 'uninstall') {
-                          confirmOperation(
-                            action,
-                            'Uninstall Runtime Extension',
-                            'Are you sure you want to uninstall the 23.08 runtime extension?'
-                          );
-                        } else {
-                          action();
-                        }
-                      }}
-                      disabled={operationInProgress === 'install-23.08' || operationInProgress === 'uninstall-23.08'}
+                      disabled
                     >
-                      {operationInProgress === 'install-23.08' || operationInProgress === 'uninstall-23.08' ? (
-                        <Spinner />
-                      ) : extensionStatus.installed_23_08 ? (
-                        <>
-                          <FaTrash /> Uninstall
-                        </>
-                      ) : (
-                        <>
-                          <FaDownload /> Install
-                        </>
-                      )}
+                      Unavailable in v2
                     </ButtonItem>
                   </Field>
                 </PanelSectionRow>

@@ -11,18 +11,10 @@ CONFIG_DIR = ".config/lsfg-vk"
 
 SCRIPT_NAME = "lsfg"
 CONFIG_FILENAME = "conf.toml"
-# v2.0 file names
-LIB_FILENAME = "libVkLayer_LSFGVK_frame_generation.so"
+# lsfg-vk v2.0 payload names
+LIB_FILENAME = "liblsfg-vk-layer.so"
 JSON_FILENAME = "VkLayer_LSFGVK_frame_generation.json"
-ZIP_FILENAME = "lsfg-vk_noui.zip"
-ARM_LIB_FILENAME = "liblsfg-vk-arm64.so"
-
-FLATPAK_23_08_FILENAME = "org.freedesktop.Platform.VulkanLayer.lsfg_vk_23.08.flatpak"
-FLATPAK_24_08_FILENAME = "org.freedesktop.Platform.VulkanLayer.lsfg_vk_24.08.flatpak"
-FLATPAK_25_08_FILENAME = "org.freedesktop.Platform.VulkanLayer.lsfg_vk_25.08.flatpak"
-
-SO_EXT = ".so"
-JSON_EXT = ".json"
+ARCHIVE_FILENAME = "lsfg-vk-2.0.0-dev28-linux.tar.xz"
 
 BIN_DIR = "bin"
 
@@ -32,4 +24,3 @@ LOSSLESS_DLL_NAME = "Lossless.dll"
 ENV_LSFG_DLL_PATH = "LSFG_DLL_PATH"
 ENV_XDG_DATA_HOME = "XDG_DATA_HOME"
 ENV_HOME = "HOME"
-

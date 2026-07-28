@@ -9,11 +9,13 @@ export enum ConfigFieldType {
 
 // Field name constants for type-safe access
 export const DLL = "dll" as const;
-export const NO_FP16 = "no_fp16" as const;
+export const ALLOW_FP16 = "allow_fp16" as const;
 export const MULTIPLIER = "multiplier" as const;
 export const FLOW_SCALE = "flow_scale" as const;
 export const PERFORMANCE_MODE = "performance_mode" as const;
 export const PACING = "pacing" as const;
+export const ACTIVE_IN = "active_in" as const;
+export const GPU = "gpu" as const;
 export const DXVK_FRAME_RATE = "dxvk_frame_rate" as const;
 export const ENABLE_WOW64 = "enable_wow64" as const;
 export const DISABLE_STEAMDECK_MODE = "disable_steamdeck_mode" as const;
@@ -39,22 +41,22 @@ export const CONFIG_SCHEMA: Record<string, ConfigField> = {
     default: "/games/Lossless Scaling/Lossless.dll",
     description: "specify where Lossless.dll is stored"
   },
-  no_fp16: {
-    name: "no_fp16",
+  allow_fp16: {
+    name: "allow_fp16",
     fieldType: ConfigFieldType.BOOLEAN,
-    default: false,
-    description: "force-disable fp16 (use on older nvidia cards)"
+    default: true,
+    description: "allow FP16 acceleration (disable on older NVIDIA GPUs)"
   },
   multiplier: {
     name: "multiplier",
     fieldType: ConfigFieldType.INTEGER,
-    default: 1,
+    default: 2,
     description: "change the fps multiplier"
   },
   flow_scale: {
     name: "flow_scale",
     fieldType: ConfigFieldType.FLOAT,
-    default: 0.8,
+    default: 1.0,
     description: "change the flow scale"
   },
   performance_mode: {
@@ -68,6 +70,18 @@ export const CONFIG_SCHEMA: Record<string, ConfigField> = {
     fieldType: ConfigFieldType.STRING,
     default: "none",
     description: "frame pacing mode (currently only 'none' supported)"
+  },
+  active_in: {
+    name: "active_in",
+    fieldType: ConfigFieldType.STRING,
+    default: "",
+    description: "optional executable or process names, separated by commas"
+  },
+  gpu: {
+    name: "gpu",
+    fieldType: ConfigFieldType.STRING,
+    default: "",
+    description: "optional GPU name, vendor:device ID, or PCI bus ID"
   },
   dxvk_frame_rate: {
     name: "dxvk_frame_rate",
@@ -122,11 +136,13 @@ export const CONFIG_SCHEMA: Record<string, ConfigField> = {
 // Type-safe configuration data structure
 export interface ConfigurationData {
   dll: string;
-  no_fp16: boolean;
+  allow_fp16: boolean;
   multiplier: number;
   flow_scale: number;
   performance_mode: boolean;
   pacing: string;
+  active_in: string;
+  gpu: string;
   dxvk_frame_rate: number;
   enable_wow64: boolean;
   disable_steamdeck_mode: boolean;
@@ -145,11 +161,13 @@ export function getFieldNames(): string[] {
 export function getDefaults(): ConfigurationData {
   return {
     dll: "/games/Lossless Scaling/Lossless.dll",
-    no_fp16: false,
-    multiplier: 1,
-    flow_scale: 0.8,
+    allow_fp16: true,
+    multiplier: 2,
+    flow_scale: 1.0,
     performance_mode: false,
     pacing: "none",
+    active_in: "",
+    gpu: "",
     dxvk_frame_rate: 0,
     enable_wow64: false,
     disable_steamdeck_mode: false,
@@ -164,11 +182,13 @@ export function getDefaults(): ConfigurationData {
 export function getFieldTypes(): Record<string, ConfigFieldType> {
   return {
     dll: ConfigFieldType.STRING,
-    no_fp16: ConfigFieldType.BOOLEAN,
+    allow_fp16: ConfigFieldType.BOOLEAN,
     multiplier: ConfigFieldType.INTEGER,
     flow_scale: ConfigFieldType.FLOAT,
     performance_mode: ConfigFieldType.BOOLEAN,
     pacing: ConfigFieldType.STRING,
+    active_in: ConfigFieldType.STRING,
+    gpu: ConfigFieldType.STRING,
     dxvk_frame_rate: ConfigFieldType.INTEGER,
     enable_wow64: ConfigFieldType.BOOLEAN,
     disable_steamdeck_mode: ConfigFieldType.BOOLEAN,

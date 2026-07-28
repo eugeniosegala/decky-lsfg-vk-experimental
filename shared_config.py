@@ -24,21 +24,21 @@ CONFIG_SCHEMA_DEF = {
         "fieldType": ConfigFieldType.STRING,
         "default": "/games/Lossless Scaling/Lossless.dll",
         "description": "specify where Lossless.dll is stored",
-        "location": "toml"
+        "location": "global"
     },
     
-    "no_fp16": {
-        "name": "no_fp16",
+    "allow_fp16": {
+        "name": "allow_fp16",
         "fieldType": ConfigFieldType.BOOLEAN,
-        "default": False,
-        "description": "force-disable fp16 (use on older nvidia cards)",
-        "location": "toml"
+        "default": True,
+        "description": "allow FP16 acceleration (disable on older NVIDIA GPUs)",
+        "location": "global"
     },
     
     "multiplier": {
         "name": "multiplier",
         "fieldType": ConfigFieldType.INTEGER,
-        "default": 1,
+        "default": 2,
         "description": "change the fps multiplier",
         "location": "toml"
     },
@@ -46,7 +46,7 @@ CONFIG_SCHEMA_DEF = {
     "flow_scale": {
         "name": "flow_scale",
         "fieldType": ConfigFieldType.FLOAT,
-        "default": 0.8,
+        "default": 1.0,
         "description": "change the flow scale",
         "location": "toml"
     },
@@ -65,6 +65,22 @@ CONFIG_SCHEMA_DEF = {
         "default": "none",
         "description": "frame pacing mode (currently only 'none' supported)",
         "location": "toml"
+    },
+
+    "active_in": {
+        "name": "active_in",
+        "fieldType": ConfigFieldType.STRING,
+        "default": "",
+        "description": "optional executable or process names, separated by commas",
+        "location": "profile"
+    },
+
+    "gpu": {
+        "name": "gpu",
+        "fieldType": ConfigFieldType.STRING,
+        "default": "",
+        "description": "optional GPU name, vendor:device ID, or PCI bus ID",
+        "location": "profile"
     },
     
     # Removed in v2.0: hdr_mode and experimental_present_mode no longer supported

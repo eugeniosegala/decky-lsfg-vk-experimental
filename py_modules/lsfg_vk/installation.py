@@ -2,11 +2,9 @@
 Installation service for lsfg-vk.
 """
 
-import os
-import platform
 import shutil
 import traceback
-import zipfile
+import tarfile
 import tempfile
 import json
 from pathlib import Path
@@ -14,8 +12,7 @@ from typing import Dict, Any
 
 from .base_service import BaseService
 from .constants import (
-    LIB_FILENAME, JSON_FILENAME, ZIP_FILENAME, BIN_DIR,
-    SO_EXT, JSON_EXT, ARM_LIB_FILENAME
+    LIB_FILENAME, JSON_FILENAME, ARCHIVE_FILENAME, BIN_DIR,
 )
 from .config_schema import ConfigurationManager
 from .types import InstallationResponse, UninstallationResponse, InstallationCheckResponse
@@ -31,30 +28,23 @@ class InstallationService(BaseService):
         self.json_file = self.local_share_dir / JSON_FILENAME
     
     def install(self) -> InstallationResponse:
-        """Install lsfg-vk by extracting the zip file to ~/.local
+        """Install the official lsfg-vk v2 archive to ~/.local.
         
         Returns:
             InstallationResponse with success status and message/error
         """
         try:
             plugin_dir = Path(__file__).parent.parent.parent
-            zip_path = plugin_dir / BIN_DIR / ZIP_FILENAME
+            archive_path = plugin_dir / BIN_DIR / ARCHIVE_FILENAME
             
-            if not zip_path.exists():
-                error_msg = f"{ZIP_FILENAME} not found at {zip_path}"
+            if not archive_path.exists():
+                error_msg = f"{ARCHIVE_FILENAME} not found at {archive_path}"
                 self.log.error(error_msg)
                 return self._error_response(InstallationResponse, error_msg, message="")
             
             self._ensure_directories()
             
-            self._extract_and_install_files(zip_path)
-            
-            # If on ARM, overwrite the .so with the ARM version
-            if self._is_arm_architecture():
-                self.log.info("Detected ARM architecture, using ARM binary")
-                arm_so_path = plugin_dir / BIN_DIR / ARM_LIB_FILENAME
-                shutil.copy2(arm_so_path, self.lib_file)
-                self.log.info(f"Overwrote with ARM binary: {self.lib_file}")
+            self._extract_and_install_files(archive_path)
             
             self._create_config_file()
             
@@ -63,7 +53,7 @@ class InstallationService(BaseService):
             self.log.info("lsfg-vk installed successfully")
             return self._success_response(InstallationResponse, "lsfg-vk installed successfully")
             
-        except (OSError, zipfile.BadZipFile, shutil.Error) as e:
+        except (OSError, tarfile.TarError, shutil.Error) as e:
             error_msg = f"Error installing lsfg-vk: {str(e)}"
             self.log.error(error_msg)
             return self._error_response(InstallationResponse, str(e), message="")
@@ -72,54 +62,52 @@ class InstallationService(BaseService):
             self.log.error(error_msg)
             return self._error_response(InstallationResponse, str(e), message="")
     
-    def _is_arm_architecture(self) -> bool:
-        """Check if running on ARM architecture
-        
-        Returns:
-            True if running on ARM (aarch64), False otherwise
-        """
-        return platform.machine().lower() == 'aarch64'
-    
-    def _extract_and_install_files(self, zip_path: Path) -> None:
-        """Extract zip file and install files to appropriate locations
+    def _extract_and_install_files(self, archive_path: Path) -> None:
+        """Install the layer, manifest, and optional CLI from an upstream tar.xz.
         
         Args:
-            zip_path: Path to the zip file to extract
+            archive_path: Path to the tar.xz archive to extract
             
         Raises:
-            zipfile.BadZipFile: If zip file is corrupted
+            tarfile.TarError: If the archive is corrupted
             OSError: If file operations fail
         """
-        # Destination mapping for file types
-        dest_map = {
-            SO_EXT: self.local_lib_dir,
-            JSON_EXT: self.local_share_dir
+        destinations = {
+            LIB_FILENAME: self.local_lib_dir / LIB_FILENAME,
+            JSON_FILENAME: self.local_share_dir / JSON_FILENAME,
         }
-        
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        cli_destination = self.user_home / ".local" / "bin" / "lsfg-vk-cli"
+
+        with tarfile.open(archive_path, "r:xz") as archive:
             with tempfile.TemporaryDirectory() as temp_dir:
                 temp_path = Path(temp_dir)
-                zip_ref.extractall(temp_path)
-                
-                # Process extracted files
-                for root, dirs, files in os.walk(temp_path):
-                    root_path = Path(root)
-                    for file in files:
-                        src_file = root_path / file
-                        file_path = Path(file)
-                        
-                        # Check if we know where this file type should go
-                        dst_dir = dest_map.get(file_path.suffix)
-                        if dst_dir:
-                            dst_file = dst_dir / file
-                            
-                            # Special handling for JSON files - need to modify library_path
-                            if file_path.suffix == JSON_EXT and file == JSON_FILENAME:
-                                self._copy_and_fix_json_file(src_file, dst_file)
-                            else:
-                                shutil.copy2(src_file, dst_file)
-                            
-                            self.log.info(f"Copied {file} to {dst_file}")
+                for member in archive.getmembers():
+                    if not member.isfile():
+                        continue
+                    filename = Path(member.name).name
+                    destination = destinations.get(filename)
+                    if filename == "lsfg-vk-cli":
+                        destination = cli_destination
+                    if destination is None:
+                        continue
+                    source = archive.extractfile(member)
+                    if source is None:
+                        continue
+                    temp_file = temp_path / filename
+                    with source, temp_file.open("wb") as output:
+                        shutil.copyfileobj(source, output)
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    if filename == JSON_FILENAME:
+                        self._copy_and_fix_json_file(temp_file, destination)
+                    else:
+                        shutil.copy2(temp_file, destination)
+                        if filename == "lsfg-vk-cli":
+                            destination.chmod(0o755)
+                    self.log.info("Installed %s to %s", filename, destination)
+
+        missing = [str(path) for path in destinations.values() if not path.exists()]
+        if missing:
+            raise OSError("Archive did not contain required lsfg-vk v2 files: " + ", ".join(missing))
     
     def _copy_and_fix_json_file(self, src_file: Path, dst_file: Path) -> None:
         """Copy JSON file and fix the library_path to use relative path
@@ -133,12 +121,9 @@ class InstallationService(BaseService):
             with open(src_file, 'r') as f:
                 json_data = json.load(f)
             
-            # Fix the library_path from "liblsfg-vk.so" to "../../../lib/liblsfg-vk.so"
+            # The manifest lives under ~/.local/share/vulkan/implicit_layer.d.
             if 'layer' in json_data and 'library_path' in json_data['layer']:
-                current_path = json_data['layer']['library_path']
-                if current_path == "liblsfg-vk.so":
-                    json_data['layer']['library_path'] = "../../../lib/liblsfg-vk.so"
-                    self.log.info(f"Fixed library_path from '{current_path}' to '../../../lib/liblsfg-vk.so'")
+                json_data['layer']['library_path'] = "../../../lib/liblsfg-vk-layer.so"
             
             # Write the modified JSON file
             with open(dst_file, 'w') as f:
@@ -361,7 +346,7 @@ class InstallationService(BaseService):
         default_config = ConfigurationManager.get_defaults_with_dll_detection(dll_service)
         default_global_config = {
             "dll": default_config.get("dll", ""),
-            "no_fp16": False
+            "allow_fp16": default_config.get("allow_fp16", True)
         }
         
         # Start with existing data
@@ -394,7 +379,7 @@ class InstallationService(BaseService):
             # Add any missing fields from current schema with default values
             added_fields = []
             for key, default_value in default_config.items():
-                if key not in merged_profile_config and key not in ["dll", "no_fp16"]:  # Skip global fields
+                if key not in merged_profile_config and key not in ["dll", "allow_fp16"]:  # Skip global fields
                     merged_profile_config[key] = default_value
                     added_fields.append(key)
             
@@ -407,7 +392,7 @@ class InstallationService(BaseService):
         if not merged_data["profiles"]:
             merged_data["profiles"]["decky-lsfg-vk"] = {
                 k: v for k, v in default_config.items() 
-                if k not in ["dll", "no_fp16"]  # Exclude global fields
+                if k not in ["dll", "allow_fp16"]  # Exclude global fields
             }
             merged_data["current_profile"] = "decky-lsfg-vk"
             self.log.info("No existing profiles found, created default profile")

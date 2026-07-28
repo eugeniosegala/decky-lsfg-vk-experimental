@@ -1,4 +1,4 @@
-# Decky LSFG-VK
+# Decky LSFG-VK — v2 preview
 
 > **Note:**  
 > This is an **unofficial community plugin**. It is independently developed and **not officially supported** by the creators of Lossless Scaling or lsfg-vk. For support, please use the [decky-lsfg-vk Discord Channel](https://discord.gg/TwvHdVucC3).
@@ -16,7 +16,9 @@
 
 ## What is this?
 
-A Decky plugin that streamlines the installation of **lsfg-vk** ([Lossless Scaling Frame Generation Vulkan layer](https://github.com/PancakeTAS/lsfg-vk)) on Steam Deck, allowing you to use the Lossless Scaling frame generation features on Linux with a controller friendly UI in SteamOS, Bazzite, or any other Linux platform compatible with Decky Loader.
+A Decky plugin that installs and configures the **lsfg-vk v2** ([Lossless Scaling Frame Generation Vulkan layer](https://github.com/PancakeTAS/lsfg-vk)) on Steam Deck. It provides a controller-friendly interface for SteamOS, Bazzite, and other Decky Loader-compatible Linux systems.
+
+This preview pins the upstream `v2.0.0-dev28` release. It is a development build of lsfg-vk, so expect to test it per game before relying on it.
 
 ## Installation
 
@@ -33,7 +35,7 @@ A Decky plugin that streamlines the installation of **lsfg-vk** ([Lossless Scali
 1. **Purchase and install** [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) from Steam
 2. **Open the plugin** from the Decky menu
 3. **Click "Install lsfg-vk"** to automatically set up the lsfg-vk vulkan layer
-4. **Configure settings** using the plugin's UI - adjust FPS multiplier, flow scale, performance mode, HDR settings, and experimental features
+4. **Configure settings** using the plugin's UI — choose a v2 FPS multiplier, flow scale, performance mode, FP16 behavior, and optional executable/GPU matching rules
 5. **Apply launch option** to games you want to use frame generation with:
    - Add `~/lsfg %command%` to your game's launch options in Steam Properties
    - Or use the "Launch Option Clipboard" button in the plugin to copy the command
@@ -44,10 +46,14 @@ A Decky plugin that streamlines the installation of **lsfg-vk** ([Lossless Scali
 The plugin provides several configuration options to optimize frame generation for your games:
 
 ### Core Settings
-- **FPS Multiplier**: Choose between 2x, 3x, or 4x frame generation
-- **Flow Scale**: Adjust motion estimation quality (lower = better performance, higher = better quality)
-- **Performance Mode**: Uses a lighter processing model - recommended for most games
-- **HDR Mode**: Enable for games that support HDR output
+- **FPS Multiplier**: Choose 2x, 3x, or 4x frame generation. v2 requires at least 2x.
+- **Flow Scale**: Choose a value from 0.25 to 1.0 (lower generally favors performance; higher favors optical-flow quality).
+- **Performance Mode**: Uses a lighter processing model.
+- **Allow FP16**: Permit v2 to use half-precision processing when supported.
+- **Active In**: Optionally limit a profile to one or more executable/process names.
+- **GPU**: Optionally select the GPU identifier that lsfg-vk should use.
+
+The current upstream v2 `develop` line supports only `pacing = 'none'`; it forces FIFO presentation. HDR and dual-GPU operation are not currently supported by upstream v2, so this plugin deliberately does not expose the old controls.
 
 ## Feedback and Support
 
@@ -59,7 +65,8 @@ For per-game feedback and community support, please join the [decky-lsfg-vk Disc
 - Ensure you've added `~/lsfg %command%` to your game's launch options
 - Check that the Lossless Scaling DLL was detected correctly in the plugin
 - Try enabling Performance Mode if you're experiencing crashes
-- Make sure your game is running in fullscreen mode for best results
+- Make sure your game is using a supported Vulkan presentation path
+- HDR is currently unsupported upstream; turn HDR off while testing
 
 **Performance issues?**
 - Lower the Flow Scale setting for better performance
@@ -78,9 +85,10 @@ The plugin:
   - **FPS Multiplier**: Choose 2x, 3x, or 4x frame generation
   - **Flow Scale**: Adjust motion estimation quality vs performance
   - **Performance Mode**: Use lighter processing for better performance
-  - **HDR Mode**: Enable for HDR-compatible games
-  - **Experimental Features**: Override present mode and set FPS limits
-- **Hot-reloading**: Configuration changes apply immediately without restarting games
+  - **Allow FP16**, executable matching, and optional GPU selection
+- Writes the lsfg-vk **v2** `version = 2` TOML configuration format, including named profiles
+- Uses the upstream `LSFGVK_CONFIG` and `LSFGVK_PROFILE` launch environment variables
+- Flatpak extension installation is available for Freedesktop runtimes 24.08 and 25.08; 23.08 has no v2 extension
 - Easy uninstallation that removes all installed files when no longer needed
 
 ## Credits

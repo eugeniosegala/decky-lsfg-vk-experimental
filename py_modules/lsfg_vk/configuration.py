@@ -3,6 +3,7 @@ Configuration service for TOML-based lsfg configuration management.
 """
 
 from pathlib import Path
+import shlex
 from typing import Dict, Any
 
 from .base_service import BaseService
@@ -124,7 +125,8 @@ class ConfigurationService(BaseService):
         lines.extend(generate_script_lines(config))
         
         lines.extend([
-            "export LSFG_PROCESS=decky-lsfg-vk",
+            f"export LSFGVK_CONFIG={shlex.quote(str(self.config_file_path))}",
+            f"export LSFGVK_PROFILE={shlex.quote(DEFAULT_PROFILE_NAME)}",
             'exec "$@"'
         ])
         
@@ -155,7 +157,8 @@ class ConfigurationService(BaseService):
         lines.extend(generate_script_lines(merged_config))
         
         lines.extend([
-            f"export LSFG_PROCESS={current_profile}",
+            f"export LSFGVK_CONFIG={shlex.quote(str(self.config_file_path))}",
+            f"export LSFGVK_PROFILE={shlex.quote(current_profile)}",
             'exec "$@"'
         ])
         
@@ -172,7 +175,7 @@ class ConfigurationService(BaseService):
                 profiles={DEFAULT_PROFILE_NAME: default_config},
                 global_config={
                     "dll": default_config.get("dll", ""),
-                    "no_fp16": False
+                    "allow_fp16": default_config.get("allow_fp16", True)
                 }
             )
         
@@ -378,7 +381,7 @@ class ConfigurationService(BaseService):
             profile_data["profiles"][profile_name] = config
             
             # Update global config fields if they're in the config
-            for field_name in ["dll", "no_fp16"]:
+            for field_name in ["dll", "allow_fp16"]:
                 if field_name in config:
                     profile_data["global_config"][field_name] = config[field_name]
             
