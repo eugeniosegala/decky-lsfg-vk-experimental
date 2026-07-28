@@ -49,6 +49,7 @@ The plugin provides several configuration options to optimize frame generation f
 - **FPS Multiplier**: Choose 2x, 3x, or 4x frame generation. v2 requires at least 2x.
 - **Flow Scale**: Choose a value from 0.25 to 1.0 (lower generally favors performance; higher favors optical-flow quality).
 - **Performance Mode**: Uses a lighter processing model.
+- **Lossless.dll Path**: Override the detected DLL path, or leave it blank for upstream automatic discovery.
 - **Allow FP16**: Permit v2 to use half-precision processing when supported.
 - **Disable Frame Generation**: Temporarily exports upstream's `DISABLE_LSFGVK=1` for Decky-generated launches.
 - **Active In**: Optionally limit a profile to one or more executable/process names. When set, the launch script leaves selection to lsfg-vk's native automatic matching; otherwise it uses the profile selected in Decky.

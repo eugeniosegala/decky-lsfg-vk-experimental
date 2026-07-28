@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { RiArrowDownSFill, RiArrowUpSFill } from "react-icons/ri";
 import { ConfigurationData } from "../config/configSchema";
 import {
-  ACTIVE_IN, ALLOW_FP16, DISABLE_LSFGVK, FLOW_SCALE, GPU, PERFORMANCE_MODE,
+  ACTIVE_IN, ALLOW_FP16, DISABLE_LSFGVK, DLL, FLOW_SCALE, GPU, PERFORMANCE_MODE,
   DXVK_FRAME_RATE, DISABLE_STEAMDECK_MODE,
   MANGOHUD_WORKAROUND, DISABLE_VKBASALT, FORCE_ENABLE_VKBASALT, ENABLE_WSI, ENABLE_ZINK
 } from "../config/generatedConfigSchema";
@@ -113,6 +113,15 @@ export function ConfigurationSection({
 
       {!configCollapsed && (
         <>
+          <PanelSectionRow>
+            <TextField
+              label="Lossless.dll Path"
+              description="Optional full path to Lossless.dll. Leave blank to use lsfg-vk automatic discovery."
+              value={config.dll}
+              onChange={(event) => onConfigChange(DLL, event.currentTarget.value)}
+            />
+          </PanelSectionRow>
+
           <PanelSectionRow>
             <SliderField
               label={`Flow Scale (${Math.round(config.flow_scale * 100)}%)`}
