@@ -1,4 +1,4 @@
-# Decky LSFG-VK — v2 preview
+# Decky LSFG-VK V2 Preview
 
 > **Note:**  
 > This is an **unofficial community plugin**. It is independently developed and **not officially supported** by the creators of Lossless Scaling or lsfg-vk. For support, please use the [decky-lsfg-vk Discord Channel](https://discord.gg/TwvHdVucC3).
@@ -22,13 +22,15 @@ This preview pins the upstream `v2.0.0-dev28` release. It is a development build
 
 ## Installation
 
-1. **Download the plugin** from the [releases tab](https://github.com/xXJSONDeruloXx/decky-lsfg-vk/releases)
-   - Download the "decky-lsfg-vk.zip" file to your Steam Deck
+1. **Download the plugin** from [this fork's releases](https://github.com/eugeniosegala/decky-lsfg-vk/releases)
+   - Download the `Decky LSFG-VK V2 Preview.zip` file to your Steam Deck
 2. **Install manually through Decky**:
    - In Game Mode, go to the settings cog in the top right of the Decky Loader tab
    - Enable "Developer Mode"
    - Go to "Developer" tab and select "Install Plugin from Zip"
-   - Select the downloaded "decky-lsfg-vk.zip" file
+   - Select the downloaded `Decky LSFG-VK V2 Preview.zip` file
+
+> **Coexistence:** Decky will show this as a separate plugin from the public release. Both plugins manage the same system-wide lsfg-vk Vulkan layer, however, so use only one lsfg-vk version at a time.
 
 ## How to Use
 

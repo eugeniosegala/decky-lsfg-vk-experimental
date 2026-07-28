@@ -1,5 +1,5 @@
 {
-  "name": "decky-lsfg-vk",
+  "name": "decky-lsfg-vk-v2-preview",
   "version": "0.13.0-v2.preview.1",
   "description": "Use Lossless Scaling on the Steam Deck using the lsfg-vk vulkan layer",
   "type": "module",
@@ -10,7 +10,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/xXJSONDeruloXx/decky-lsfg-vk.git"
+    "url": "git+https://github.com/eugeniosegala/decky-lsfg-vk.git"
   },
   "keywords": [
     "decky",
@@ -22,12 +22,12 @@
     "lsfg-vk",
     "framegen"
   ],
-  "author": "Kurt Himebauch <dkh4830@gmail.com>",
+  "author": "Eugenio Segala",
   "license": "BSD-3-Clause",
   "bugs": {
-    "url": "https://github.com/xXJSONDeruloXx/decky-lossless-scaling-vk/issues"
+    "url": "https://github.com/eugeniosegala/decky-lsfg-vk/issues"
   },
-  "homepage": "https://github.com/xXJSONDeruloXx/decky-lossless-scaling-vk#readme",
+  "homepage": "https://github.com/eugeniosegala/decky-lsfg-vk#readme",
   "devDependencies": {
     "@decky/rollup": "^1.0.1",
     "@decky/ui": "^4.7.2",

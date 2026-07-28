@@ -8,7 +8,7 @@ build:
     python3 scripts/generate_ts_schema.py && sudo rm -rf node_modules && .vscode/build.sh
 
 test:
-    scp "out/Decky LSFG-VK.zip" deck@192.168.0.6:~/Desktop
+    scp "out/Decky LSFG-VK V2 Preview.zip" deck@192.168.0.6:~/Desktop
 
 watch:
     ssh deck@192.168.0.6 "journalctl -f"

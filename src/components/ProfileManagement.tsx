@@ -26,7 +26,7 @@ import {
 } from "../api/lsfgApi";
 import { showSuccessToast, showErrorToast } from "../utils/toastUtils";
 
-const PROFILES_COLLAPSED_KEY = 'lsfg-profiles-collapsed';
+const PROFILES_COLLAPSED_KEY = 'lsfg-v2-preview-profiles-collapsed';
 
 interface TextInputModalProps {
   title: string;
