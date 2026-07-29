@@ -1,4 +1,4 @@
-"""Version-2 lsfg-vk configuration and Decky profile management."""
+"""lsfg-vk configuration and Decky profile management."""
 
 import json
 import logging
@@ -52,7 +52,7 @@ def _toml_string(value: str) -> str:
 
 
 class ConfigurationManager:
-    """Read and write exactly the configuration format accepted by lsfg-vk v2."""
+    """Read and write the configuration format accepted by lsfg-vk."""
 
     @staticmethod
     def get_defaults() -> ConfigurationData:
@@ -99,11 +99,11 @@ class ConfigurationManager:
             validated[name] = value
 
         if validated["multiplier"] < 2:
-            raise ValueError("multiplier must be 2 or greater for lsfg-vk v2")
+            raise ValueError("multiplier must be 2 or greater")
         if not 0.25 <= validated["flow_scale"] <= 1.0:
             raise ValueError("flow_scale must be between 0.25 and 1.0")
         if validated["pacing"] != "none":
-            raise ValueError("lsfg-vk v2 currently supports only pacing = 'none'")
+            raise ValueError("only pacing = 'none' is currently available")
         return cast(ConfigurationData, validated)
 
     @staticmethod
@@ -162,7 +162,7 @@ class ConfigurationManager:
         return "\n".join(lines) + "\n"
 
     @staticmethod
-    def _profile_data_from_v1(data: Dict[str, Any]) -> ProfileData:
+    def _profile_data_from_previous_schema(data: Dict[str, Any]) -> ProfileData:
         old_global = data.get("global", {})
         global_config = {
             "dll": old_global.get("dll", ""),
@@ -171,9 +171,9 @@ class ConfigurationManager:
         profiles: Dict[str, ConfigurationData] = {}
         for game in data.get("game", []):
             name = str(game.get("exe", DEFAULT_PROFILE_NAME))
-            legacy_profile = dict(game)
-            legacy_profile["multiplier"] = max(2, int(legacy_profile.get("multiplier", 2)))
-            profiles[name] = ConfigurationManager._config_from_profile(legacy_profile, global_config)
+            migrated_profile = dict(game)
+            migrated_profile["multiplier"] = max(2, int(migrated_profile.get("multiplier", 2)))
+            profiles[name] = ConfigurationManager._config_from_profile(migrated_profile, global_config)
         if not profiles:
             profiles[DEFAULT_PROFILE_NAME] = ConfigurationManager.get_defaults()
         current = str(old_global.get("current_profile", DEFAULT_PROFILE_NAME))
@@ -185,7 +185,7 @@ class ConfigurationManager:
     def parse_toml_content_multi_profile(content: str) -> ProfileData:
         data = tomllib.loads(content)
         if data.get("version") == 1:
-            return ConfigurationManager._profile_data_from_v1(data)
+            return ConfigurationManager._profile_data_from_previous_schema(data)
         if data.get("version") != 2:
             raise ValueError("unsupported lsfg-vk configuration version")
         global_config = dict(data.get("global", {}))

@@ -28,7 +28,7 @@ class InstallationService(BaseService):
         self.json_file = self.local_share_dir / JSON_FILENAME
     
     def install(self) -> InstallationResponse:
-        """Install the official lsfg-vk v2 archive to ~/.local.
+        """Install the bundled lsfg-vk archive to ~/.local.
         
         Returns:
             InstallationResponse with success status and message/error
@@ -107,7 +107,7 @@ class InstallationService(BaseService):
 
         missing = [str(path) for path in destinations.values() if not path.exists()]
         if missing:
-            raise OSError("Archive did not contain required lsfg-vk v2 files: " + ", ".join(missing))
+            raise OSError("Archive did not contain required lsfg-vk files: " + ", ".join(missing))
     
     def _copy_and_fix_json_file(self, src_file: Path, dst_file: Path) -> None:
         """Copy JSON file and fix the library_path to use relative path
@@ -230,10 +230,10 @@ class InstallationService(BaseService):
                 "installed": lib_exists and json_exists,
                 "lib_exists": lib_exists,
                 "json_exists": json_exists,
-                "script_exists": config_exists,  # Keep script_exists for backward compatibility
+                "script_exists": config_exists,
                 "lib_path": str(self.lib_file),
                 "json_path": str(self.json_file),
-                "script_path": str(self.config_file_path),  # Keep script_path for backward compatibility
+                "script_path": str(self.config_file_path),
                 "error": None
             }
             
@@ -268,7 +268,7 @@ class InstallationService(BaseService):
                 if self._remove_if_exists(file_path):
                     removed_files.append(str(file_path))
             
-            # Also try to remove the old script file if it exists (for backward compatibility)
+            # Remove the generated launch script if it exists.
             if self._remove_if_exists(self.lsfg_script_path):
                 removed_files.append(str(self.lsfg_script_path))
             
@@ -301,7 +301,7 @@ class InstallationService(BaseService):
             self.log.info(f"  JSON file: {self.json_file}")
             self.log.info(f"  Config file: {self.config_file_path} (preserved)")
             self.log.info(f"  Launch script: {self.lsfg_launch_script_path}")
-            self.log.info(f"  Old script file: {self.lsfg_script_path}")
+            self.log.info(f"  Launch script: {self.lsfg_script_path}")
             
             removed_files = []
             # Remove core lsfg-vk files, but preserve config file to maintain user's custom profiles

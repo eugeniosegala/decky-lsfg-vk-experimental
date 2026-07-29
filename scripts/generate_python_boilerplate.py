@@ -77,7 +77,7 @@ def generate_script_parsing() -> str:
                 lines.append(f'                        script_values["{field_name}"] = value == "0"')
             elif field_name == "enable_wsi":
                 # Special case: ENABLE_GAMESCOPE_WSI=0 means enable_wsi=False.
-                # DXVK_HDR is deliberately not managed: lsfg-vk v2 does not support HDR.
+                # DXVK_HDR is deliberately not managed: HDR is not currently available.
                 lines.append(f'                    elif key == "{env_var}":')
                 lines.append(f'                        script_values["{field_name}"] = value != "0"')
             elif field_name == "enable_zink":
@@ -131,7 +131,7 @@ def generate_script_generation() -> str:
                 lines.append(f'            lines.append("export {env_var}=0")')
             elif field_name == "enable_wsi":
                 # Special case: enable_wsi=False should export ENABLE_GAMESCOPE_WSI=0.
-                # Do not set DXVK_HDR: HDR is unsupported by lsfg-vk v2.
+                # Do not set DXVK_HDR: HDR is not currently available.
                 lines.append(f'        if not config.get("{field_name}", False):')
                 lines.append(f'            lines.append("export {env_var}=0")')
             elif field_name == "enable_zink":

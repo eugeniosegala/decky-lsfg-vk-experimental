@@ -91,7 +91,7 @@ CONFIG_SCHEMA_DEF = {
         "location": "script"
     },
     
-    # Removed in v2.0: hdr_mode and experimental_present_mode no longer supported
+    # Unsupported controls are intentionally omitted from the current schema.
     
     "dxvk_frame_rate": {
         "name": "dxvk_frame_rate",

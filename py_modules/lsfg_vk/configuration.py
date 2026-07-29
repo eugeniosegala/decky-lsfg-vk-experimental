@@ -17,11 +17,11 @@ class ConfigurationService(BaseService):
 
     @staticmethod
     def _profile_selection_lines(profile_name: str, config: ConfigurationData) -> list[str]:
-        """Choose between Decky's selected profile and v2 automatic matching.
+        """Choose between Decky's selected profile and automatic matching.
 
         ``LSFGVK_PROFILE`` deliberately overrides lsfg-vk's ``active_in`` matching.
         Keep Decky's selected-profile behaviour for profiles without activation rules,
-        but let v2 perform its native automatic selection when rules are present.
+        but let lsfg-vk perform its native automatic selection when rules are present.
         """
         active_in = config.get("active_in", "")
         if isinstance(active_in, (list, tuple)):

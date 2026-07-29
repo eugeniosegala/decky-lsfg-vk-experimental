@@ -155,7 +155,7 @@ export const updateLsfgConfig = callable<
   ConfigUpdateResult
 >("update_lsfg_config");
 
-// Legacy helper function for backward compatibility
+// Object-based configuration helper
 export const updateLsfgConfigFromObject = async (config: ConfigurationData): Promise<ConfigUpdateResult> => {
   return updateLsfgConfig(config);
 };

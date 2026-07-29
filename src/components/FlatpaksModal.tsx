@@ -171,7 +171,7 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
 
             {extensionStatus && extensionStatus.success ? (
               <>
-                {/* v2 has no 23.08 Flatpak runtime extension. */}
+                {/* This runtime requires manual installation. */}
                 <PanelSectionRow>
                   <Field 
                     label="Runtime 23.08"

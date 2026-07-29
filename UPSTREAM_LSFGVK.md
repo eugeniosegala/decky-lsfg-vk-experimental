@@ -22,8 +22,8 @@ At this baseline, the `v2.0.0-dev` tag resolves to the same commit as `develop`.
 
 ## Decky integration commits
 
-- `b846c9aa4834213122533bea4134904f9081fc7b` — core v2 installer, configuration, launcher, UI, and docs migration.
-- `d52acde3131ea7f4a71764d58254dd46eb35d213` — v2 automatic profile matching, Flatpak overrides, and disable switch.
+- `b846c9aa4834213122533bea4134904f9081fc7b` — core installer, configuration, launcher, UI, and documentation update.
+- `d52acde3131ea7f4a71764d58254dd46eb35d213` — automatic profile matching, Flatpak overrides, and disable switch.
 - `15c21ac748ceb22b615f7fdc10e4ee391bcd3f00` — editable Lossless.dll path in the Decky UI.
 
 ## Next update procedure

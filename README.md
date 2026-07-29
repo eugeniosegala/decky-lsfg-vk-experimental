@@ -15,9 +15,9 @@
 
 ## What is this?
 
-A Decky plugin that installs and configures the **lsfg-vk v2** ([Lossless Scaling Frame Generation Vulkan layer](https://github.com/PancakeTAS/lsfg-vk)) on Steam Deck. It provides a controller-friendly interface for SteamOS, Bazzite, and other Decky Loader-compatible Linux systems.
+A Decky plugin that installs and configures the current [lsfg-vk](https://github.com/PancakeTAS/lsfg-vk) frame-generation layer on Steam Deck. It provides a controller-friendly interface for SteamOS, Bazzite, and other Decky Loader-compatible Linux systems.
 
-This preview pins the upstream `v2.0.0-dev28` release. It is a development build of lsfg-vk, so expect to test it per game before relying on it.
+This experimental build pins upstream release `v2.0.0-dev28`. Test it per game before relying on it.
 
 ## Installation
 
@@ -36,7 +36,7 @@ This preview pins the upstream `v2.0.0-dev28` release. It is a development build
 1. **Purchase and install** [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) from Steam
 2. **Open the plugin** from the Decky menu
 3. **Click "Install lsfg-vk"** to automatically set up the lsfg-vk vulkan layer
-4. **Configure settings** using the plugin's UI — choose a v2 FPS multiplier, flow scale, performance mode, FP16 behavior, and optional executable/GPU matching rules
+4. **Configure settings** using the plugin's UI — choose an FPS multiplier, flow scale, performance mode, FP16 behavior, and optional executable/GPU matching rules
 5. **Apply launch option** to games you want to use frame generation with:
    - Add `~/lsfg %command%` to your game's launch options in Steam Properties
    - Or use the "Launch Option Clipboard" button in the plugin to copy the command
@@ -47,16 +47,16 @@ This preview pins the upstream `v2.0.0-dev28` release. It is a development build
 The plugin provides several configuration options to optimize frame generation for your games:
 
 ### Core Settings
-- **FPS Multiplier**: Choose 2x, 3x, or 4x frame generation. v2 requires at least 2x.
+- **FPS Multiplier**: Choose 2x, 3x, or 4x frame generation. The minimum is 2x.
 - **Flow Scale**: Choose a value from 0.25 to 1.0 (lower generally favors performance; higher favors optical-flow quality).
 - **Performance Mode**: Uses a lighter processing model.
 - **Lossless.dll Path**: Override the detected DLL path, or leave it blank for upstream automatic discovery.
-- **Allow FP16**: Permit v2 to use half-precision processing when supported.
+- **Allow FP16**: Permit half-precision processing when supported.
 - **Disable Frame Generation**: Temporarily exports upstream's `DISABLE_LSFGVK=1` for Decky-generated launches.
 - **Active In**: Optionally limit a profile to one or more executable/process names. When set, the launch script leaves selection to lsfg-vk's native automatic matching; otherwise it uses the profile selected in Decky.
 - **GPU**: Optionally select the GPU identifier that lsfg-vk should use.
 
-The current upstream v2 `develop` line supports only `pacing = 'none'`; it forces FIFO presentation. HDR and dual-GPU operation are not currently supported by upstream v2, so this plugin deliberately does not expose the old controls.
+The current upstream build supports only `pacing = 'none'`; it forces FIFO presentation. HDR and dual-GPU operation are not currently available, so the plugin does not expose controls for them.
 
 ## Feedback and Support
 
@@ -89,9 +89,9 @@ The plugin:
   - **Flow Scale**: Adjust motion estimation quality vs performance
   - **Performance Mode**: Use lighter processing for better performance
   - **Allow FP16**, executable matching, and optional GPU selection
-- Writes the lsfg-vk **v2** `version = 2` TOML configuration format, including named profiles
+- Writes the current lsfg-vk TOML configuration format, including named profiles
 - Uses the upstream `LSFGVK_CONFIG` and `LSFGVK_PROFILE` launch environment variables without overriding `active_in` matching
-- Configures Flatpak applications with v2's required config and Lossless Scaling filesystem access; extension installation through Flathub is available for Freedesktop runtimes 24.08 and 25.08
+- Configures Flatpak applications with the required config and Lossless Scaling filesystem access; extension installation through Flathub is available for Freedesktop runtimes 24.08 and 25.08
 - Easy uninstallation that removes all installed files when no longer needed
 
 ## Credits

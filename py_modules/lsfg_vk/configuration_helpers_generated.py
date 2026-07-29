@@ -9,7 +9,7 @@ from .config_schema_generated import ConfigurationData, ALL_FIELDS
 
 def log_configuration_update(logger, config: ConfigurationData) -> None:
     """Log configuration update with all field values"""
-    logger.info(f"Updated lsfg-vk v2 configuration: dll={config['dll']}, allow_fp16={config['allow_fp16']}, multiplier={config['multiplier']}, flow_scale={config['flow_scale']}, performance_mode={config['performance_mode']}, pacing={config['pacing']}, active_in={config['active_in']}, gpu={config['gpu']}")
+    logger.info(f"Updated lsfg-vk configuration: dll={config['dll']}, allow_fp16={config['allow_fp16']}, multiplier={config['multiplier']}, flow_scale={config['flow_scale']}, performance_mode={config['performance_mode']}, pacing={config['pacing']}, active_in={config['active_in']}, gpu={config['gpu']}")
 
 
 def get_config_field_names() -> list[str]:

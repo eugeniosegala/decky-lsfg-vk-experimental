@@ -11,7 +11,7 @@ CONFIG_DIR = ".config/lsfg-vk"
 
 SCRIPT_NAME = "lsfg"
 CONFIG_FILENAME = "conf.toml"
-# lsfg-vk v2.0 payload names
+# Bundled upstream payload names
 LIB_FILENAME = "liblsfg-vk-layer.so"
 JSON_FILENAME = "VkLayer_LSFGVK_frame_generation.json"
 ARCHIVE_FILENAME = "lsfg-vk-2.0.0-dev28-linux.tar.xz"
