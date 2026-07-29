@@ -4,8 +4,7 @@ import { RiArrowDownSFill, RiArrowUpSFill } from "react-icons/ri";
 import { ConfigurationData } from "../config/configSchema";
 import {
   ACTIVE_IN, ALLOW_FP16, DISABLE_LSFGVK, DLL, FLOW_SCALE, GPU, PERFORMANCE_MODE,
-  DXVK_FRAME_RATE, DISABLE_STEAMDECK_MODE,
-  MANGOHUD_WORKAROUND, DISABLE_VKBASALT, FORCE_ENABLE_VKBASALT, ENABLE_WSI, ENABLE_ZINK
+  DXVK_FRAME_RATE, DISABLE_STEAMDECK_MODE, MANGOHUD_WORKAROUND, ENABLE_WSI, ENABLE_ZINK
 } from "../config/generatedConfigSchema";
 
 interface ConfigurationSectionProps {
@@ -268,38 +267,6 @@ export function ConfigurationSection({
               description="Enables a transparent mangohud overlay, sometimes fixes issues with 2X multiplier in game mode"
               checked={config.mangohud_workaround}
               onChange={(value) => onConfigChange(MANGOHUD_WORKAROUND, value)}
-            />
-          </PanelSectionRow>
-
-          <PanelSectionRow>
-            <ToggleField
-              label="Disable vkBasalt"
-              description="Disables vkBasalt layer which can conflict with LSFG (Reshade, some Decky plugins)"
-              checked={config.disable_vkbasalt}
-              disabled={config.force_enable_vkbasalt}
-              onChange={(value) => {
-                if (value && config.force_enable_vkbasalt) {
-                  // Turn off force enable when enabling disable
-                  onConfigChange(FORCE_ENABLE_VKBASALT, false);
-                }
-                onConfigChange(DISABLE_VKBASALT, value);
-              }}
-            />
-          </PanelSectionRow>
-
-          <PanelSectionRow>
-            <ToggleField
-              label="Force Enable vkBasalt"
-              description="Force vkBasalt to engage to fix framepacing issues in gamemode"
-              checked={config.force_enable_vkbasalt}
-              disabled={config.disable_vkbasalt}
-              onChange={(value) => {
-                if (value && config.disable_vkbasalt) {
-                  // Turn off disable when enabling force enable
-                  onConfigChange(DISABLE_VKBASALT, false);
-                }
-                onConfigChange(FORCE_ENABLE_VKBASALT, value);
-              }}
             />
           </PanelSectionRow>
 

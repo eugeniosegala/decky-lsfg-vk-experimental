@@ -418,6 +418,11 @@ class Plugin:
         Any initialization code should go here.
         """
         decky.logger.info("decky-lsfg-vk-experimental plugin loaded")
+        try:
+            if self.configuration_service.remove_legacy_vkbasalt_exports():
+                decky.logger.info("Removed obsolete vkBasalt exports from isolated launcher")
+        except OSError as error:
+            decky.logger.warning("Could not remove obsolete vkBasalt exports: %s", error)
 
     async def _unload(self):
         """

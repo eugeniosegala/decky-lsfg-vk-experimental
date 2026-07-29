@@ -125,6 +125,35 @@ class ConfigurationService(BaseService):
             error_msg = f"Error updating launch script: {str(e)}"
             self.log.error(error_msg)
             return self._error_response(ConfigurationResponse, str(e), config=None)
+
+    def remove_legacy_vkbasalt_exports(self) -> bool:
+        """Remove obsolete vkBasalt exports from an existing isolated launcher.
+
+        The isolated launcher overrides Vulkan implicit-layer discovery, so it
+        cannot load a globally installed vkBasalt layer. Older plugin versions
+        nevertheless wrote these exports; remove them during upgrade rather
+        than leaving no-op settings in a user's launcher.
+        """
+        if not self.lsfg_script_path.exists():
+            return False
+
+        legacy_exports = {"DISABLE_VKBASALT", "ENABLE_VKBASALT"}
+        existing_lines = self.lsfg_script_path.read_text(encoding="utf-8").splitlines()
+        cleaned_lines = []
+        removed = False
+
+        for line in existing_lines:
+            stripped = line.strip()
+            if stripped.startswith("export "):
+                variable = stripped[len("export "):].split("=", 1)[0].strip()
+                if variable in legacy_exports:
+                    removed = True
+                    continue
+            cleaned_lines.append(line)
+
+        if removed:
+            self._write_file(self.lsfg_script_path, "\n".join(cleaned_lines) + "\n", 0o755)
+        return removed
     
     def _generate_script_content(self, config: ConfigurationData) -> str:
         """Generate the content for the isolated per-game launch script

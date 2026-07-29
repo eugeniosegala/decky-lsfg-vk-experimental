@@ -21,8 +21,6 @@ export const DXVK_FRAME_RATE = "dxvk_frame_rate" as const;
 export const ENABLE_WOW64 = "enable_wow64" as const;
 export const DISABLE_STEAMDECK_MODE = "disable_steamdeck_mode" as const;
 export const MANGOHUD_WORKAROUND = "mangohud_workaround" as const;
-export const DISABLE_VKBASALT = "disable_vkbasalt" as const;
-export const FORCE_ENABLE_VKBASALT = "force_enable_vkbasalt" as const;
 export const ENABLE_WSI = "enable_wsi" as const;
 export const ENABLE_ZINK = "enable_zink" as const;
 
@@ -114,18 +112,6 @@ export const CONFIG_SCHEMA: Record<string, ConfigField> = {
     default: false,
     description: "Enables a transparent mangohud overlay, sometimes fixes issues with 2X multiplier in game mode"
   },
-  disable_vkbasalt: {
-    name: "disable_vkbasalt",
-    fieldType: ConfigFieldType.BOOLEAN,
-    default: false,
-    description: "Disables vkBasalt layer which can conflict with LSFG (Reshade, some Decky plugins)"
-  },
-  force_enable_vkbasalt: {
-    name: "force_enable_vkbasalt",
-    fieldType: ConfigFieldType.BOOLEAN,
-    default: false,
-    description: "Force vkBasalt to engage to fix framepacing issues in gamemode"
-  },
   enable_wsi: {
     name: "enable_wsi",
     fieldType: ConfigFieldType.BOOLEAN,
@@ -155,8 +141,6 @@ export interface ConfigurationData {
   enable_wow64: boolean;
   disable_steamdeck_mode: boolean;
   mangohud_workaround: boolean;
-  disable_vkbasalt: boolean;
-  force_enable_vkbasalt: boolean;
   enable_wsi: boolean;
   enable_zink: boolean;
 }
@@ -181,8 +165,6 @@ export function getDefaults(): ConfigurationData {
     enable_wow64: false,
     disable_steamdeck_mode: false,
     mangohud_workaround: false,
-    disable_vkbasalt: false,
-    force_enable_vkbasalt: false,
     enable_wsi: false,
     enable_zink: false,
   };
@@ -203,8 +185,6 @@ export function getFieldTypes(): Record<string, ConfigFieldType> {
     enable_wow64: ConfigFieldType.BOOLEAN,
     disable_steamdeck_mode: ConfigFieldType.BOOLEAN,
     mangohud_workaround: ConfigFieldType.BOOLEAN,
-    disable_vkbasalt: ConfigFieldType.BOOLEAN,
-    force_enable_vkbasalt: ConfigFieldType.BOOLEAN,
     enable_wsi: ConfigFieldType.BOOLEAN,
     enable_zink: ConfigFieldType.BOOLEAN,
   };

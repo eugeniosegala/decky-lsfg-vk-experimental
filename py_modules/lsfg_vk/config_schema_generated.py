@@ -26,8 +26,6 @@ DXVK_FRAME_RATE = "dxvk_frame_rate"
 ENABLE_WOW64 = "enable_wow64"
 DISABLE_STEAMDECK_MODE = "disable_steamdeck_mode"
 MANGOHUD_WORKAROUND = "mangohud_workaround"
-DISABLE_VKBASALT = "disable_vkbasalt"
-FORCE_ENABLE_VKBASALT = "force_enable_vkbasalt"
 ENABLE_WSI = "enable_wsi"
 ENABLE_ZINK = "enable_zink"
 
@@ -47,8 +45,6 @@ class ConfigurationData(TypedDict):
     enable_wow64: bool
     disable_steamdeck_mode: bool
     mangohud_workaround: bool
-    disable_vkbasalt: bool
-    force_enable_vkbasalt: bool
     enable_wsi: bool
     enable_zink: bool
 
@@ -81,10 +77,6 @@ def get_script_parsing_logic():
                         script_values["disable_steamdeck_mode"] = value == "0"
                 if key == "MANGOHUD":
                         script_values["mangohud_workaround"] = value == "1"
-                if key == "DISABLE_VKBASALT":
-                        script_values["disable_vkbasalt"] = value == "1"
-                if key == "ENABLE_VKBASALT":
-                        script_values["force_enable_vkbasalt"] = value == "1"
                 if key == "ENABLE_GAMESCOPE_WSI":
                         script_values["enable_wsi"] = value != "0"
                 if key == "__GLX_VENDOR_LIBRARY_NAME" and value == "mesa":
@@ -113,10 +105,6 @@ def get_script_generation_logic():
             lines.append("export SteamDeck=0")
         if config.get("mangohud_workaround", False):
             lines.append("export MANGOHUD=1")
-        if config.get("disable_vkbasalt", False):
-            lines.append("export DISABLE_VKBASALT=1")
-        if config.get("force_enable_vkbasalt", False):
-            lines.append("export ENABLE_VKBASALT=1")
         if not config.get("enable_wsi", False):
             lines.append("export ENABLE_GAMESCOPE_WSI=0")
         if config.get("enable_zink", False):
@@ -127,4 +115,4 @@ def get_script_generation_logic():
     return generate_script_lines
 
 
-ALL_FIELDS = ['dll', 'allow_fp16', 'multiplier', 'flow_scale', 'performance_mode', 'pacing', 'active_in', 'gpu', 'disable_lsfgvk', 'dxvk_frame_rate', 'enable_wow64', 'disable_steamdeck_mode', 'mangohud_workaround', 'disable_vkbasalt', 'force_enable_vkbasalt', 'enable_wsi', 'enable_zink']
+ALL_FIELDS = ['dll', 'allow_fp16', 'multiplier', 'flow_scale', 'performance_mode', 'pacing', 'active_in', 'gpu', 'disable_lsfgvk', 'dxvk_frame_rate', 'enable_wow64', 'disable_steamdeck_mode', 'mangohud_workaround', 'enable_wsi', 'enable_zink']

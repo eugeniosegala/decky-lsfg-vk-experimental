@@ -125,22 +125,6 @@ CONFIG_SCHEMA_DEF = {
         "location": "script"
     },
     
-    "disable_vkbasalt": {
-        "name": "disable_vkbasalt",
-        "fieldType": ConfigFieldType.BOOLEAN,
-        "default": False,
-        "description": "Disables vkBasalt layer which can conflict with LSFG (Reshade, some Decky plugins)",
-        "location": "script"
-    },
-    
-    "force_enable_vkbasalt": {
-        "name": "force_enable_vkbasalt",
-        "fieldType": ConfigFieldType.BOOLEAN,
-        "default": False,
-        "description": "Force vkBasalt to engage to fix framepacing issues in gamemode",
-        "location": "script"
-    },
-    
     "enable_wsi": {
         "name": "enable_wsi",
         "fieldType": ConfigFieldType.BOOLEAN,

@@ -9,17 +9,18 @@ that updates the bundled upstream payload.
 |----------------------------|-------------------------------------------------------------------------------------------------------|
 | Upstream repository        | [`PancakeTAS/lsfg-vk`](https://github.com/PancakeTAS/lsfg-vk)                                         |
 | Tracked branch             | `develop`                                                                                             |
-| Last checked               | 2026-07-28                                                                                            |
+| Last checked               | 2026-07-29                                                                                            |
 | Integrated upstream commit | `8b0da2661c6f3473a7fccc8ba643880050e71642`                                                            |
 | Commit date and subject    | 2026-06-28 — `fix: fix: Unset HDR enabled property entirely`                                          |
 | Upstream prerelease tag    | `v2.0.0-dev`                                                                                          |
 | Release asset              | `lsfg-vk-2.0.0-dev28-linux.tar.xz`                                                                    |
 | Asset SHA-256              | `bb2b691939fc6c51888b10349345a3c0ae9ad0b5c3892fd7859d0cdf697b734e`                                    |
 | Asset URL                  | `https://github.com/PancakeTAS/lsfg-vk/releases/download/v2.0.0-dev/lsfg-vk-2.0.0-dev28-linux.tar.xz` |
-| Decky plugin version       | `0.13.0-experimental.3`                                                                               |
+| Decky plugin version       | `0.13.0-experimental.6`                                                                               |
 | Decky plugin package ID    | `decky-lsfg-vk-experimental`                                                                          |
 
-At this baseline, the `v2.0.0-dev` tag resolves to the same commit as `develop`.
+The package is pinned to this release asset and SHA-256. The `develop` branch may advance independently; do not treat
+newer branch commits as integrated until their release asset and configuration changes have been reviewed.
 
 ## Decky integration commits
 

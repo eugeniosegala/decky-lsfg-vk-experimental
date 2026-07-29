@@ -106,8 +106,8 @@ The plugin provides several configuration options to optimize frame generation f
 
 - **Base FPS Cap**: Optionally caps the base framerate for DirectX games before the frame multiplier is applied.
 - **WoW64**: Enables `PROTON_USE_WOW64=1` for compatible 32-bit games, primarily as a ProtonGE crash workaround.
-- **Steam Deck Mode**, **MangoHud workaround**, and **vkBasalt controls**: Per-game compatibility options for cases
-  where the normal launch path needs adjustment.
+- **Steam Deck Mode** and **MangoHud workaround**: Per-game compatibility options for cases where the normal launch
+  path needs adjustment.
 - **Gamescope WSI Layer** and **Zink**: Optional compatibility paths for Gamescope or OpenGL games.
 
 This plugin currently writes only `pacing = 'none'` and does not expose HDR or dual-GPU controls. Test HDR games with
@@ -149,8 +149,8 @@ The plugin:
     - **Flow Scale**: Adjust motion estimation quality vs performance
     - **Performance Mode**: Use lighter processing for better performance
     - **Allow FP16**, executable matching, and optional GPU selection
-- Provides launch compatibility controls for DirectX base FPS caps, WoW64, Steam Deck mode, MangoHud, vkBasalt,
-  Gamescope WSI, and Zink
+- Provides launch compatibility controls for DirectX base FPS caps, WoW64, Steam Deck mode, MangoHud, Gamescope WSI,
+  and Zink
 - Writes the current lsfg-vk TOML configuration format, including named profiles
 - Uses the upstream `LSFGVK_CONFIG` and `LSFGVK_PROFILE` launch environment variables without overriding `active_in`
   matching
