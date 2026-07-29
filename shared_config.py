@@ -22,8 +22,8 @@ CONFIG_SCHEMA_DEF = {
     "dll": {
         "name": "dll",
         "fieldType": ConfigFieldType.STRING,
-        "default": "/games/Lossless Scaling/Lossless.dll",
-        "description": "specify where Lossless.dll is stored",
+        "default": "",
+        "description": "optional full path to Lossless.dll; leave blank for automatic discovery",
         "location": "global"
     },
     

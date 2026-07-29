@@ -39,8 +39,8 @@ export const CONFIG_SCHEMA: Record<string, ConfigField> = {
   dll: {
     name: "dll",
     fieldType: ConfigFieldType.STRING,
-    default: "/games/Lossless Scaling/Lossless.dll",
-    description: "specify where Lossless.dll is stored"
+    default: "",
+    description: "optional full path to Lossless.dll; leave blank for automatic discovery"
   },
   allow_fp16: {
     name: "allow_fp16",
@@ -168,7 +168,7 @@ export function getFieldNames(): string[] {
 
 export function getDefaults(): ConfigurationData {
   return {
-    dll: "/games/Lossless Scaling/Lossless.dll",
+    dll: "",
     allow_fp16: true,
     multiplier: 2,
     flow_scale: 1.0,

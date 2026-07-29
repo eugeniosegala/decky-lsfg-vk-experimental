@@ -68,8 +68,6 @@ class ConfigurationManager:
                     defaults["dll"] = result["path"]
             except (OSError, IOError, KeyError, TypeError) as error:
                 logging.getLogger(__name__).debug("DLL detection failed: %s", error)
-        if not defaults["dll"]:
-            defaults["dll"] = "/home/deck/.local/share/Steam/steamapps/common/Lossless Scaling/Lossless.dll"
         return defaults
 
     @staticmethod

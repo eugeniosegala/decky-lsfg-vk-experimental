@@ -15,6 +15,7 @@ CONFIG_FILENAME = "conf.toml"
 LIB_FILENAME = "liblsfg-vk-layer.so"
 JSON_FILENAME = "VkLayer_LSFGVK_frame_generation.json"
 ARCHIVE_FILENAME = "lsfg-vk-2.0.0-dev28-linux.tar.xz"
+CLI_FILENAME = "lsfg-vk-cli"
 
 BIN_DIR = "bin"
 

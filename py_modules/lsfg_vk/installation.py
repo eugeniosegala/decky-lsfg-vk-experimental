@@ -12,7 +12,7 @@ from typing import Dict, Any
 
 from .base_service import BaseService
 from .constants import (
-    LIB_FILENAME, JSON_FILENAME, ARCHIVE_FILENAME, BIN_DIR,
+    LIB_FILENAME, JSON_FILENAME, ARCHIVE_FILENAME, CLI_FILENAME, BIN_DIR,
 )
 from .config_schema import ConfigurationManager
 from .types import InstallationResponse, UninstallationResponse, InstallationCheckResponse
@@ -26,6 +26,7 @@ class InstallationService(BaseService):
         
         self.lib_file = self.local_lib_dir / LIB_FILENAME
         self.json_file = self.local_share_dir / JSON_FILENAME
+        self.cli_file = self.user_home / ".local" / "bin" / CLI_FILENAME
     
     def install(self) -> InstallationResponse:
         """Install the bundled lsfg-vk archive to ~/.local.
@@ -76,8 +77,6 @@ class InstallationService(BaseService):
             LIB_FILENAME: self.local_lib_dir / LIB_FILENAME,
             JSON_FILENAME: self.local_share_dir / JSON_FILENAME,
         }
-        cli_destination = self.user_home / ".local" / "bin" / "lsfg-vk-cli"
-
         with tarfile.open(archive_path, "r:xz") as archive:
             with tempfile.TemporaryDirectory() as temp_dir:
                 temp_path = Path(temp_dir)
@@ -86,8 +85,8 @@ class InstallationService(BaseService):
                         continue
                     filename = Path(member.name).name
                     destination = destinations.get(filename)
-                    if filename == "lsfg-vk-cli":
-                        destination = cli_destination
+                    if filename == CLI_FILENAME:
+                        destination = self.cli_file
                     if destination is None:
                         continue
                     source = archive.extractfile(member)
@@ -101,7 +100,7 @@ class InstallationService(BaseService):
                         self._copy_and_fix_json_file(temp_file, destination)
                     else:
                         shutil.copy2(temp_file, destination)
-                        if filename == "lsfg-vk-cli":
+                        if filename == CLI_FILENAME:
                             destination.chmod(0o755)
                     self.log.info("Installed %s to %s", filename, destination)
 
@@ -262,7 +261,7 @@ class InstallationService(BaseService):
         try:
             removed_files = []
             # Remove core lsfg-vk files, but preserve config file to maintain user's custom profiles
-            files_to_remove = [self.lib_file, self.json_file, self.lsfg_launch_script_path]
+            files_to_remove = [self.lib_file, self.json_file, self.cli_file, self.lsfg_launch_script_path]
             
             for file_path in files_to_remove:
                 if self._remove_if_exists(file_path):
@@ -300,12 +299,13 @@ class InstallationService(BaseService):
             self.log.info(f"  Library file: {self.lib_file}")
             self.log.info(f"  JSON file: {self.json_file}")
             self.log.info(f"  Config file: {self.config_file_path} (preserved)")
+            self.log.info(f"  CLI file: {self.cli_file}")
             self.log.info(f"  Launch script: {self.lsfg_launch_script_path}")
             self.log.info(f"  Launch script: {self.lsfg_script_path}")
             
             removed_files = []
             # Remove core lsfg-vk files, but preserve config file to maintain user's custom profiles
-            files_to_remove = [self.lib_file, self.json_file, self.lsfg_launch_script_path, self.lsfg_script_path]
+            files_to_remove = [self.lib_file, self.json_file, self.cli_file, self.lsfg_launch_script_path, self.lsfg_script_path]
             
             for file_path in files_to_remove:
                 try:
@@ -369,6 +369,14 @@ class InstallationService(BaseService):
             merged_data["global_config"]["dll"] = dll_result["path"]
             if old_dll != dll_result["path"]:
                 self.log.info(f"Updated DLL path from '{old_dll}' to: {dll_result['path']}")
+        elif merged_data["global_config"].get("dll") == "/games/Lossless Scaling/Lossless.dll":
+            # Releases before 0.13.0-experimental.2 wrote this placeholder when
+            # detection failed. Removing a nonexistent placeholder lets lsfg-vk
+            # use its own automatic discovery instead.
+            legacy_path = Path("/games/Lossless Scaling/Lossless.dll")
+            if not legacy_path.exists():
+                merged_data["global_config"]["dll"] = ""
+                self.log.info("Removed obsolete Lossless.dll placeholder to enable upstream automatic discovery")
         
         # Merge each profile: preserve user values, add missing fields
         existing_profiles = existing_profile_data.get("profiles", {})
