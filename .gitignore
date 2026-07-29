@@ -52,6 +52,9 @@ decky_plugin.py
 # Ignore decky CLI for building plugins
 out
 out/*
+
+# Locally retained upstream release archives. These are never committed or packaged.
+upstream-archive-cache/
 cli/
 cli/*
 cli/decky
@@ -83,4 +86,3 @@ htmlcov/
 *.sublime-workspace
 .vscode/settings.json
 .vscode/.ropeproject
-
