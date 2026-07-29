@@ -7,6 +7,7 @@ interface InstallationButtonProps {
   isUninstalling: boolean;
   onInstall: () => void;
   onUninstall: () => void;
+  topMargin?: string;
 }
 
 export function InstallationButton({
@@ -14,7 +15,8 @@ export function InstallationButton({
   isInstalling,
   isUninstalling,
   onInstall,
-  onUninstall
+  onUninstall,
+  topMargin = "0"
 }: InstallationButtonProps) {
   const renderButtonContent = () => {
     if (isInstalling) {
@@ -52,13 +54,15 @@ export function InstallationButton({
 
   return (
     <PanelSectionRow>
-      <ButtonItem
-        layout="below"
-        onClick={isInstalled ? onUninstall : onInstall}
-        disabled={isInstalling || isUninstalling}
-      >
-        {renderButtonContent()}
-      </ButtonItem>
+      <div style={{ marginTop: topMargin }}>
+        <ButtonItem
+          layout="below"
+          onClick={isInstalled ? onUninstall : onInstall}
+          disabled={isInstalling || isUninstalling}
+        >
+          {renderButtonContent()}
+        </ButtonItem>
+      </div>
     </PanelSectionRow>
   );
 }

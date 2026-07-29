@@ -163,21 +163,25 @@ export function Content() {
       <UsageInstructions />
 
       <PanelSectionRow>
-        <ButtonItem
-          layout="below"
-          onClick={handleShowNerdStuff}
-        >
-          Nerd Stuff
-        </ButtonItem>
+        <div style={{ marginTop: "14px" }}>
+          <ButtonItem
+            layout="below"
+            onClick={handleShowNerdStuff}
+          >
+            Nerd Stuff
+          </ButtonItem>
+        </div>
       </PanelSectionRow>
 
       <PanelSectionRow>
-        <ButtonItem
-          layout="below"
-          onClick={handleShowFlatpaks}
-        >
-          Flatpak Setup
-        </ButtonItem>
+        <div style={{ marginTop: "8px" }}>
+          <ButtonItem
+            layout="below"
+            onClick={handleShowFlatpaks}
+          >
+            Flatpak Setup
+          </ButtonItem>
+        </div>
       </PanelSectionRow>
 
       {isInstalled && (
@@ -187,6 +191,8 @@ export function Content() {
             dllDetectionStatus={dllDetectionStatus}
             isInstalled={isInstalled}
             installationStatus={installationStatus}
+            topMargin="20px"
+            showTopDivider
           />
 
           <InstallationButton
@@ -195,6 +201,7 @@ export function Content() {
             isUninstalling={isUninstalling}
             onInstall={onInstall}
             onUninstall={onUninstall}
+            topMargin="8px"
           />
         </>
       )}

@@ -5,17 +5,29 @@ interface StatusDisplayProps {
   dllDetectionStatus: string;
   isInstalled: boolean;
   installationStatus: string;
+  topMargin?: string;
+  showTopDivider?: boolean;
 }
 
 export function StatusDisplay({
   dllDetected,
   dllDetectionStatus,
   isInstalled,
-  installationStatus
+  installationStatus,
+  topMargin = "0",
+  showTopDivider = false
 }: StatusDisplayProps) {
   return (
     <PanelSectionRow>
-      <div style={{ marginBottom: "8px", fontSize: "14px" }}>
+      <div
+        style={{
+          marginTop: topMargin,
+          marginBottom: "8px",
+          paddingTop: showTopDivider ? "14px" : "0",
+          borderTop: showTopDivider ? "1px solid rgba(255, 255, 255, 0.16)" : "none",
+          fontSize: "14px"
+        }}
+      >
         <div
           style={{
             color: dllDetected ? "#4CAF50" : "#F44336",

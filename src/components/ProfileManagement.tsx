@@ -425,7 +425,7 @@ export function ProfileManagement({ currentProfile, onProfileChange }: ProfileMa
           </PanelSectionRow>
           
           <PanelSectionRow>
-            <div
+            <Focusable
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -435,6 +435,8 @@ export function ProfileManagement({ currentProfile, onProfileChange }: ProfileMa
                 margin: "0",
                 marginTop: "8px"
               }}
+              flow-children="horizontal"
+              noFocusRing
             >
               <DialogButton
                 style={{
@@ -487,7 +489,7 @@ export function ProfileManagement({ currentProfile, onProfileChange }: ProfileMa
               >
                 <RiDeleteBinLine size={20} style={{ color: "#fff5f5" }} />
               </DialogButton>
-            </div>
+            </Focusable>
           </PanelSectionRow>
         </>
       )}

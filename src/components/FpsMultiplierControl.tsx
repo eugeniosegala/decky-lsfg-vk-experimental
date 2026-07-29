@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { PanelSectionRow, DialogButton } from "@decky/ui";
+import { PanelSectionRow, DialogButton, Focusable } from "@decky/ui";
 import { ConfigurationData } from "../config/configSchema";
 import { MULTIPLIER } from "../config/generatedConfigSchema";
 
@@ -37,7 +37,7 @@ export function FpsMultiplierControl({
 
   return (
     <PanelSectionRow>
-      <div
+      <Focusable
         style={{
           marginTop: "6px",
           marginBottom: "6px",
@@ -45,6 +45,8 @@ export function FpsMultiplierControl({
           justifyContent: "center",
           alignItems: "center"
         }}
+        flow-children="horizontal"
+        noFocusRing
       >
         <DialogButton
           style={{
@@ -83,7 +85,7 @@ export function FpsMultiplierControl({
         >
           +
         </DialogButton>
-      </div>
+      </Focusable>
     </PanelSectionRow>
   );
 }
