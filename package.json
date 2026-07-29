@@ -1,6 +1,6 @@
 {
   "name": "decky-lsfg-vk-experimental",
-  "version": "0.13.0-experimental.3",
+  "version": "0.13.0-experimental.4",
   "description": "Experimental lsfg-vk features for Lossless Scaling on Steam OS",
   "type": "module",
   "scripts": {
