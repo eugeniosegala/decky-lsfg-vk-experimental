@@ -2,7 +2,7 @@
 Main plugin class for the lsfg-vk Decky Loader plugin.
 
 This plugin provides services for installing and managing the lsfg-vk 
-Vulkan layer for frame generation on Steam Deck.
+Vulkan layer for frame generation on Steam OS.
 """
 
 import os

@@ -255,7 +255,7 @@ export function ConfigurationSection({
 
           <PanelSectionRow>
             <ToggleField
-              label="Disable Steam Deck Mode"
+              label="Disable Steam Deck mode"
               description="Disables Steam Deck mode (Unlocks hidden settings in some games)"
               checked={config.disable_steamdeck_mode}
               onChange={(value) => onConfigChange(DISABLE_STEAMDECK_MODE, value)}

@@ -127,7 +127,7 @@ cp "$project_dir/LICENSE" "$project_dir/README.md" "$project_dir/main.py" \
 cp -R "$project_dir/dist/." "$package_dir/dist/"
 cp -R "$project_dir/py_modules/." "$package_dir/py_modules/"
 
-# Python bytecode is host-version-specific and is regenerated on the Steam Deck.
+# Python bytecode is host-version-specific and is regenerated on Steam OS.
 find "$package_dir/py_modules" -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
 find "$package_dir/py_modules" -type d -name '__pycache__' -prune -exec rm -rf {} +
 
@@ -182,7 +182,7 @@ if [[ "$publish_release" == true ]]; then
     '## Installation' \
     '' \
     "1. Download \`$(basename "$output_path")\` below." \
-    "2. On the Steam Deck, open Decky Loader's settings and enable **Developer Mode**." \
+    "2. On the Steam OS, open Decky Loader's settings and enable **Developer Mode**." \
     '3. Choose **Developer** → **Install Plugin from Zip**, then select the downloaded ZIP.' \
     '4. In the plugin, install lsfg-vk and add `~/.local/bin/lsfg-vk-experimental %command%` to the game’s Steam launch options.' \
     '' \
