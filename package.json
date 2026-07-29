@@ -10,7 +10,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/eugeniosegala/decky-lsfg-vk.git"
+    "url": "git+https://github.com/eugeniosegala/decky-lsfg-vk-experimental.git"
   },
   "keywords": [
     "decky",
@@ -25,9 +25,9 @@
   "author": "Eugenio Segala",
   "license": "BSD-3-Clause",
   "bugs": {
-    "url": "https://github.com/eugeniosegala/decky-lsfg-vk/issues"
+    "url": "https://github.com/eugeniosegala/decky-lsfg-vk-experimental/issues"
   },
-  "homepage": "https://github.com/eugeniosegala/decky-lsfg-vk#readme",
+  "homepage": "https://github.com/eugeniosegala/decky-lsfg-vk-experimental#readme",
   "devDependencies": {
     "@decky/rollup": "^1.0.1",
     "@decky/ui": "^4.7.2",

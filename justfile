@@ -1,5 +1,5 @@
 default:
-    echo "Available recipes: build, package-release, test, clean, generate-schema"
+    echo "Available recipes: build, package-release, publish-release, test, clean, generate-schema"
 
 generate-schema:
     python3 scripts/generate_ts_schema.py
@@ -9,6 +9,9 @@ build:
 
 package-release:
     scripts/package-release.sh
+
+publish-release:
+    scripts/package-release.sh --publish
 
 test:
     scp "out/Decky.LSFG-VK.Experimental.zip" deck@192.168.0.6:~/Desktop

@@ -10,7 +10,7 @@ This experimental build pins upstream release `v2.0.0-dev28`. Test it per game b
 
 ## Installation
 
-1. **Download the plugin** from [this fork's releases](https://github.com/eugeniosegala/decky-lsfg-vk/releases)
+1. **Download the plugin** from [this fork's releases](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/releases)
    - Download the `Decky.LSFG-VK.Experimental.zip` file to your Steam Deck
 2. **Install manually through Decky**:
    - In Game Mode, go to the settings cog in the top right of the Decky Loader tab
@@ -34,6 +34,19 @@ This creates `out/Decky.LSFG-VK.Experimental.zip`. The script regenerates config
 ```bash
 scripts/package-release.sh /path/to/Decky.LSFG-VK.Experimental.zip
 ```
+
+## Publish a GitHub pre-release
+
+After committing the version and release changes on a clean checkout, authenticate the GitHub CLI once with
+`gh auth login -h github.com`, then run:
+
+```bash
+scripts/package-release.sh --publish
+```
+
+This verifies and builds the ZIP, creates or verifies the matching `v<package-version>` tag, pushes the current
+branch and tag, generates Deck installation notes, and creates or updates the matching GitHub pre-release with the
+ZIP attached. Publishing is opt-in; a normal packaging command never pushes or changes GitHub.
 
 ## How to Use
 
