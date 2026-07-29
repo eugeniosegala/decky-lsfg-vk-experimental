@@ -372,10 +372,8 @@ export function ProfileManagement({ currentProfile, onProfileChange }: ProfileMa
           style={{
             fontSize: "14px",
             fontWeight: "bold",
-            marginTop: "8px",
-            marginBottom: "6px",
-            borderBottom: "1px solid rgba(255, 255, 255, 0.2)",
-            paddingBottom: "3px",
+            marginTop: "24px",
+            marginBottom: "8px",
             color: "white"
           }}
         >
@@ -386,7 +384,7 @@ export function ProfileManagement({ currentProfile, onProfileChange }: ProfileMa
       <PanelSectionRow>
         <div
           className="LSFG_ProfilesCollapseButton_Container"
-          style={{ marginTop: "-2px", marginBottom: "4px" }}
+          style={{ marginTop: "4px", marginBottom: "8px" }}
         >
           <ButtonItem
             layout="below"

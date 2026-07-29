@@ -39,8 +39,8 @@ export function FpsMultiplierControl({
     <PanelSectionRow>
       <Focusable
         style={{
-          marginTop: "6px",
-          marginBottom: "6px",
+          marginTop: "8px",
+          marginBottom: "8px",
           display: "flex",
           justifyContent: "center",
           alignItems: "center"

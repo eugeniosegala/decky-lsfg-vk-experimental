@@ -13,6 +13,9 @@ This experimental build pins upstream release `v2.0.0-dev28`. It installs into a
 activates only games launched through its dedicated wrapper, so it can coexist with the public Decky LSFG-VK plugin.
 Test it per game before relying on it.
 
+> **Version-specific notes:** Check the [latest experimental release notes](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/releases)
+> for known issues and compatibility guidance for the bundled lsfg-vk build.
+
 ## Installation
 
 1. **Download the plugin**
@@ -33,11 +36,6 @@ Test it per game before relying on it.
 > public LSFG-VK layer cannot load alongside it. For that game, other globally installed implicit layers (for example
 > vkBasalt) are also not discovered. Use the public plugin's wrapper for games that need those layers.
 
-> **SteamOS display mode:** In Steam Deck Game Mode, start with the game's normal **Fullscreen** mode. Game Mode
-> already presents games through Gamescope, so Windows desktop Lossless Scaling advice to force borderless does not
-> automatically apply here. Borderless is a per-game fallback for a specific fullscreen problem, not a requirement for
-> lsfg-vk to attach.
-
 ## How to Use
 
 1. **Purchase and install** [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) from Steam
@@ -49,18 +47,6 @@ Test it per game before relying on it.
     - Add `~/.local/bin/lsfg-vk-experimental %command%` to your game's launch options in Steam Properties
     - Or use the "Launch Option Clipboard" button in the plugin to copy the command
 6. **Launch your game** - frame generation will activate automatically using your plugin configuration
-
-### SteamOS Game Mode display mode
-
-Start with the game's normal **Fullscreen** mode and leave the display mode unchanged for the session. SteamOS Game
-Mode already uses [Gamescope](https://github.com/ValveSoftware/gamescope) to present the game, even when the game
-selects fullscreen. Do not assume that Windows desktop Lossless Scaling advice to force borderless will improve a
-Steam Deck game.
-
-If a particular game has a fullscreen-specific problem, test borderless as a fallback after fully restarting that game.
-The choice does not control whether lsfg-vk attaches: the game must use Vulkan and have a compatible 64-bit process.
-Avoid switching display mode, refresh rate, or the Steam performance-menu FPS limit while frame generation is active;
-restart the game after changing one of those settings.
 
 ### Updating the experimental plugin
 
@@ -123,10 +109,10 @@ The plugin provides several configuration options to optimize frame generation f
 - **FPS Multiplier**: Choose 2x, 3x, or 4x frame generation. The minimum is 2x.
 - **Flow Scale**: Choose a value from 0.25 to 1.0 (lower generally favors performance; higher favors optical-flow
   quality).
-- **Performance Mode**: Uses a lighter processing model.
+- **Performance Mode**: Uses a lighter frame-generation model to reduce GPU overhead, at the cost of more visual artifacts.
 - **Lossless.dll Path**: Override the detected DLL path, or leave it blank for upstream automatic discovery.
 - **Allow FP16**: Permit half-precision processing when supported.
-- **Disable Frame Generation**: Temporarily exports upstream's `DISABLE_LSFGVK=1` for Decky-generated launches.
+- **Disable Frame Generation**: Applies `DISABLE_LSFGVK=1` on the next Decky-generated launch. It cannot affect an already-running game; close the game, change the toggle, then launch it again.
 - **Active In**: Optionally limit a profile to one or more executable/process names. When set, the launch script leaves
   selection to lsfg-vk's native automatic matching; otherwise it uses the profile selected in Decky.
 - **GPU**: Optionally select the GPU identifier that lsfg-vk should use.
@@ -139,8 +125,9 @@ The plugin provides several configuration options to optimize frame generation f
   path needs adjustment.
 - **Gamescope WSI Layer** and **Zink**: Optional compatibility paths for Gamescope or OpenGL games.
 
-This plugin currently writes only `pacing = 'none'` and does not expose HDR or dual-GPU controls. Test HDR games with
-HDR disabled unless a future pinned upstream build explicitly adds supported controls.
+This plugin currently writes only `pacing = 'none'` and does not expose HDR or dual-GPU controls. See the
+[latest experimental release notes](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/releases) for
+build-specific compatibility notes.
 
 ## Feedback and Support
 
@@ -153,14 +140,15 @@ the [decky-lsfg-vk Discord Channel](https://discord.gg/TwvHdVucC3)
 
 - Ensure you've added `~/.local/bin/lsfg-vk-experimental %command%` to your game's launch options
 - Check that the Lossless Scaling DLL was detected correctly in the plugin
-- Try enabling Performance Mode if you're experiencing crashes
+- Try enabling Performance Mode when frame generation has too much GPU overhead; expect more visual artifacts
 - Make sure your game is using a supported Vulkan presentation path
-- This experimental plugin does not expose HDR controls; turn HDR off while testing
+- Check the [latest experimental release notes](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/releases)
+  for build-specific known issues
 
 **Performance issues?**
 
 - Lower the Flow Scale setting for better performance
-- Enable Performance Mode (recommended for most games)
+- Enable Performance Mode when lower GPU overhead matters more than image quality
 - Try reducing the FPS multiplier from 4x to 2x or 3x
 - Try **Base FPS Cap** for DirectX games when the game needs a lower base framerate before frame generation
 
@@ -176,7 +164,7 @@ The plugin:
 - Provides an easy-to-use interface to configure frame generation settings:
     - **FPS Multiplier**: Choose 2x, 3x, or 4x frame generation
     - **Flow Scale**: Adjust motion estimation quality vs performance
-    - **Performance Mode**: Use lighter processing for better performance
+    - **Performance Mode**: Lower GPU overhead with more visual artifacts
     - **Allow FP16**, executable matching, and optional GPU selection
 - Provides launch compatibility controls for DirectX base FPS caps, WoW64, Steam Deck mode, MangoHud, Gamescope WSI,
   and Zink

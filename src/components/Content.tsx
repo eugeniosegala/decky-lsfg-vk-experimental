@@ -118,10 +118,8 @@ export function Content() {
               style={{
                 fontSize: "14px",
                 fontWeight: "bold",
-                marginTop: "8px",
-                marginBottom: "6px",
-                borderBottom: "1px solid rgba(255, 255, 255, 0.2)",
-                paddingBottom: "3px",
+                marginTop: "24px",
+                marginBottom: "8px",
                 color: "white"
               }}
             >
@@ -163,7 +161,7 @@ export function Content() {
       <UsageInstructions />
 
       <PanelSectionRow>
-        <div style={{ marginTop: "14px" }}>
+        <div style={{ marginTop: "24px" }}>
           <ButtonItem
             layout="below"
             onClick={handleShowNerdStuff}
@@ -191,8 +189,7 @@ export function Content() {
             dllDetectionStatus={dllDetectionStatus}
             isInstalled={isInstalled}
             installationStatus={installationStatus}
-            topMargin="20px"
-            showTopDivider
+            topMargin="24px"
           />
 
           <InstallationButton
@@ -201,7 +198,7 @@ export function Content() {
             isUninstalling={isUninstalling}
             onInstall={onInstall}
             onUninstall={onUninstall}
-            topMargin="8px"
+            topMargin="16px"
           />
         </>
       )}

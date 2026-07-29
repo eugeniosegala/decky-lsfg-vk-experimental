@@ -8,10 +8,8 @@ export function UsageInstructions() {
           style={{
             fontSize: "14px",
             fontWeight: "bold",
-            marginTop: "16px",
+            marginTop: "24px",
             marginBottom: "8px",
-            borderBottom: "1px solid rgba(255, 255, 255, 0.2)",
-            paddingBottom: "4px",
             color: "white"
           }}
         >

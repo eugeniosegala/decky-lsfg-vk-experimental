@@ -6,7 +6,6 @@ interface StatusDisplayProps {
   isInstalled: boolean;
   installationStatus: string;
   topMargin?: string;
-  showTopDivider?: boolean;
 }
 
 export function StatusDisplay({
@@ -14,8 +13,7 @@ export function StatusDisplay({
   dllDetectionStatus,
   isInstalled,
   installationStatus,
-  topMargin = "0",
-  showTopDivider = false
+  topMargin = "0"
 }: StatusDisplayProps) {
   return (
     <PanelSectionRow>
@@ -23,8 +21,6 @@ export function StatusDisplay({
         style={{
           marginTop: topMargin,
           marginBottom: "8px",
-          paddingTop: showTopDivider ? "14px" : "0",
-          borderTop: showTopDivider ? "1px solid rgba(255, 255, 255, 0.16)" : "none",
           fontSize: "14px"
         }}
       >
