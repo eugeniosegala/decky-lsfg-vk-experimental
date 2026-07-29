@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { PanelSectionRow, DialogButton } from "@decky/ui";
 import { ConfigurationData } from "../config/configSchema";
 import { MULTIPLIER } from "../config/generatedConfigSchema";
@@ -11,7 +12,9 @@ export function FpsMultiplierControl({
   config,
   onConfigChange
 }: FpsMultiplierControlProps) {
-  const multiplierButtonStyle = {
+  const [focusedControl, setFocusedControl] = useState<"decrease" | "increase" | null>(null);
+
+  const multiplierButtonStyle = (isFocused: boolean) => ({
     height: "34px",
     display: "flex",
     alignItems: "center",
@@ -24,9 +27,13 @@ export function FpsMultiplierControl({
     background: "linear-gradient(135deg, #a94900 0%, #e87516 55%, #ffae52 100%)",
     border: "1px solid rgba(255, 206, 143, 0.9)",
     borderRadius: "4px",
+    outline: isFocused ? "3px solid #ffffff" : "none",
+    outlineOffset: "3px",
+    boxShadow: isFocused ? "0 0 0 5px rgba(255, 170, 74, 0.45), 0 0 16px rgba(255, 170, 74, 0.95)" : "none",
+    transform: isFocused ? "scale(1.04)" : "none",
     scrollMarginTop: "28px",
     scrollMarginBottom: "28px"
-  } as const;
+  }) as const;
 
   return (
     <PanelSectionRow>
@@ -41,10 +48,12 @@ export function FpsMultiplierControl({
       >
         <DialogButton
           style={{
-            ...multiplierButtonStyle,
+            ...multiplierButtonStyle(focusedControl === "decrease"),
             marginLeft: "0px"
           }}
           onClick={() => onConfigChange(MULTIPLIER, Math.max(2, config.multiplier - 1))}
+          onGamepadFocus={() => setFocusedControl("decrease")}
+          onGamepadBlur={() => setFocusedControl((current) => current === "decrease" ? null : current)}
           disabled={config.multiplier <= 2}
         >
           −
@@ -64,10 +73,12 @@ export function FpsMultiplierControl({
         </div>
         <DialogButton
           style={{
-            ...multiplierButtonStyle,
+            ...multiplierButtonStyle(focusedControl === "increase"),
             marginLeft: "0px"
           }}
           onClick={() => onConfigChange(MULTIPLIER, Math.min(4, config.multiplier + 1))}
+          onGamepadFocus={() => setFocusedControl("increase")}
+          onGamepadBlur={() => setFocusedControl((current) => current === "increase" ? null : current)}
           disabled={config.multiplier >= 4}
         >
           +

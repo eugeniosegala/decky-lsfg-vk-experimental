@@ -110,6 +110,7 @@ export function ProfileManagement({ currentProfile, onProfileChange }: ProfileMa
   const [selectedProfile, setSelectedProfile] = useState<string>(currentProfile || "decky-lsfg-vk");
   const [isLoading, setIsLoading] = useState(false);
   const [mainRunningApp, setMainRunningApp] = useState<AppOverview | undefined>(undefined);
+  const [focusedAction, setFocusedAction] = useState<"edit" | "delete" | null>(null);
   
   // Initialize with localStorage value, fallback to false (expanded) if not found
   const [profilesCollapsed, setProfilesCollapsed] = useState(() => {
@@ -424,7 +425,7 @@ export function ProfileManagement({ currentProfile, onProfileChange }: ProfileMa
           </PanelSectionRow>
           
           <PanelSectionRow>
-            <Focusable
+            <div
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -434,7 +435,6 @@ export function ProfileManagement({ currentProfile, onProfileChange }: ProfileMa
                 margin: "0",
                 marginTop: "8px"
               }}
-              flow-children="horizontal"
             >
               <DialogButton
                 style={{
@@ -449,8 +449,14 @@ export function ProfileManagement({ currentProfile, onProfileChange }: ProfileMa
                   background: "linear-gradient(135deg, #9d4a00 0%, #d97116 55%, #f7a743 100%)",
                   border: "1px solid rgba(255, 212, 154, 0.9)",
                   borderRadius: "4px",
+                  outline: focusedAction === "edit" ? "3px solid #ffffff" : "none",
+                  outlineOffset: "3px",
+                  boxShadow: focusedAction === "edit" ? "0 0 0 5px rgba(255, 184, 83, 0.45), 0 0 16px rgba(255, 184, 83, 0.95)" : "none",
+                  transform: focusedAction === "edit" ? "scale(1.02)" : "none",
                 }}
                 onClick={handleRenameProfile}
+                onGamepadFocus={() => setFocusedAction("edit")}
+                onGamepadBlur={() => setFocusedAction((current) => current === "edit" ? null : current)}
                 disabled={isLoading || selectedProfile === "decky-lsfg-vk" || !!mainRunningApp}
               >
                 <RiEditLine size={20} style={{ color: "#fff8ed" }} />
@@ -469,13 +475,19 @@ export function ProfileManagement({ currentProfile, onProfileChange }: ProfileMa
                   background: "linear-gradient(135deg, #8d1f2d 0%, #c43a47 55%, #ed6b63 100%)",
                   border: "1px solid rgba(255, 183, 178, 0.9)",
                   borderRadius: "4px",
+                  outline: focusedAction === "delete" ? "3px solid #ffffff" : "none",
+                  outlineOffset: "3px",
+                  boxShadow: focusedAction === "delete" ? "0 0 0 5px rgba(255, 126, 118, 0.45), 0 0 16px rgba(255, 126, 118, 0.95)" : "none",
+                  transform: focusedAction === "delete" ? "scale(1.02)" : "none",
                 }}
                 onClick={handleDeleteProfile}
+                onGamepadFocus={() => setFocusedAction("delete")}
+                onGamepadBlur={() => setFocusedAction((current) => current === "delete" ? null : current)}
                 disabled={isLoading || selectedProfile === "decky-lsfg-vk" || !!mainRunningApp}
               >
                 <RiDeleteBinLine size={20} style={{ color: "#fff5f5" }} />
               </DialogButton>
-            </Focusable>
+            </div>
           </PanelSectionRow>
         </>
       )}
