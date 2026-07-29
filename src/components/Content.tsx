@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, type FocusEvent } from "react";
 import { PanelSection, showModal, ButtonItem, PanelSectionRow } from "@decky/ui";
 import { useInstallationStatus, useDllDetection, useLsfgConfig } from "../hooks/useLsfgHooks";
 import { useProfileManagement } from "../hooks/useProfileManagement";
@@ -73,8 +73,25 @@ export function Content() {
     showModal(<FlatpaksModal />);
   };
 
+  const keepFocusedControlVisible = (event: FocusEvent<HTMLDivElement>) => {
+    const target = event.target;
+
+    // Decky's controller navigation can move focus before its scroll container
+    // has caught up, most noticeably when navigating from the bottom back to
+    // the first controls. Centre the newly focused control without animation
+    // so the top of the plugin is fully reachable and no scroll requests queue.
+    requestAnimationFrame(() => {
+      target.scrollIntoView({
+        block: "center",
+        inline: "nearest",
+        behavior: "auto"
+      });
+    });
+  };
+
   return (
-    <PanelSection>
+    <div onFocusCapture={keepFocusedControlVisible}>
+      <PanelSection>
       {!isInstalled && (
         <>
           <InstallationButton
@@ -181,6 +198,7 @@ export function Content() {
           />
         </>
       )}
-    </PanelSection>
+      </PanelSection>
+    </div>
   );
 }

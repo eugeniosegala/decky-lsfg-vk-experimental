@@ -1,4 +1,4 @@
-import { PanelSectionRow, DialogButton, Focusable } from "@decky/ui";
+import { PanelSectionRow, DialogButton } from "@decky/ui";
 import { ConfigurationData } from "../config/configSchema";
 import { MULTIPLIER } from "../config/generatedConfigSchema";
 
@@ -11,9 +11,26 @@ export function FpsMultiplierControl({
   config,
   onConfigChange
 }: FpsMultiplierControlProps) {
+  const multiplierButtonStyle = {
+    height: "34px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "2px 0px 0px",
+    minWidth: "48px",
+    fontSize: "22px",
+    fontWeight: "bold",
+    color: "#fff7ed",
+    background: "linear-gradient(135deg, #a94900 0%, #e87516 55%, #ffae52 100%)",
+    border: "1px solid rgba(255, 206, 143, 0.9)",
+    borderRadius: "4px",
+    scrollMarginTop: "28px",
+    scrollMarginBottom: "28px"
+  } as const;
+
   return (
     <PanelSectionRow>
-      <Focusable
+      <div
         style={{
           marginTop: "6px",
           marginBottom: "6px",
@@ -21,17 +38,11 @@ export function FpsMultiplierControl({
           justifyContent: "center",
           alignItems: "center"
         }}
-        flow-children="horizontal"
       >
         <DialogButton
           style={{
-            marginLeft: "0px",
-            height: "30px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "5px 0px 0px 0px",
-            minWidth: "40px",
+            ...multiplierButtonStyle,
+            marginLeft: "0px"
           }}
           onClick={() => onConfigChange(MULTIPLIER, Math.max(2, config.multiplier - 1))}
           disabled={config.multiplier <= 2}
@@ -53,20 +64,15 @@ export function FpsMultiplierControl({
         </div>
         <DialogButton
           style={{
-            marginLeft: "0px",
-            height: "30px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "5px 0px 0px 0px",
-            minWidth: "40px",
+            ...multiplierButtonStyle,
+            marginLeft: "0px"
           }}
           onClick={() => onConfigChange(MULTIPLIER, Math.min(4, config.multiplier + 1))}
           disabled={config.multiplier >= 4}
         >
           +
         </DialogButton>
-      </Focusable>
+      </div>
     </PanelSectionRow>
   );
 }
