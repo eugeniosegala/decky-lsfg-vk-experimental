@@ -20,7 +20,7 @@ export function InstallationButton({
     if (isInstalling) {
       return (
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <div>Installing...</div>
+          <div>Installing experimental LSFG-VK...</div>
         </div>
       );
     }
@@ -28,7 +28,7 @@ export function InstallationButton({
     if (isUninstalling) {
       return (
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <div>Uninstalling...</div>
+          <div>Removing experimental LSFG-VK...</div>
         </div>
       );
     }
@@ -37,7 +37,7 @@ export function InstallationButton({
       return (
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <FaTrash />
-          <div>Uninstall LSFG-VK</div>
+          <div>Remove Experimental LSFG-VK</div>
         </div>
       );
     }
@@ -45,7 +45,7 @@ export function InstallationButton({
     return (
       <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
         <FaDownload />
-        <div>Install LSFG-VK</div>
+        <div>Install Experimental LSFG-VK (developer build)</div>
       </div>
     );
   };

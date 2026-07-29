@@ -70,7 +70,7 @@ underlying command remains `scripts/package-release.sh`, with `--publish` enabli
 
 1. **Purchase and install** [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) from Steam
 2. **Open the plugin** from the Decky menu
-3. **Click "Install lsfg-vk"** to automatically set up the lsfg-vk vulkan layer
+3. **Click "Install Experimental LSFG-VK (developer build)"** to set up this fork's private lsfg-vk Vulkan layer
 4. **Configure settings** using the plugin's UI — choose an FPS multiplier, flow scale, performance mode, FP16 behavior,
    and optional executable/GPU matching rules
 5. **Apply launch option** to games you want to use frame generation with:

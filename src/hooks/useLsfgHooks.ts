@@ -18,13 +18,13 @@ export function useInstallationStatus() {
       const status = await checkLsfgVkInstalled();
       setIsInstalled(status.installed);
       if (status.installed) {
-        setInstallationStatus("lsfg-vk Installed");
+        setInstallationStatus("Experimental lsfg-vk Installed");
       } else {
-        setInstallationStatus("lsfg-vk Not Installed");
+        setInstallationStatus("Experimental lsfg-vk Not Installed");
       }
       return status.installed;
     } catch (error) {
-      setInstallationStatus("lsfg-vk Not Installed");
+      setInstallationStatus("Experimental lsfg-vk Not Installed");
       return false;
     }
   };

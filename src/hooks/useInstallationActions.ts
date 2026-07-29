@@ -17,13 +17,13 @@ export function useInstallationActions() {
     reloadConfig?: () => Promise<void>
   ) => {
     setIsInstalling(true);
-    setInstallationStatus("Installing lsfg-vk...");
+    setInstallationStatus("Installing experimental lsfg-vk (developer build)...");
 
     try {
       const result = await installLsfgVk();
       if (result.success) {
         setIsInstalled(true);
-        setInstallationStatus("lsfg-vk installed");
+        setInstallationStatus("Experimental lsfg-vk installed");
         showInstallSuccessToast();
 
         // Reload lsfg config after installation
@@ -47,13 +47,13 @@ export function useInstallationActions() {
     setInstallationStatus: (value: string) => void
   ) => {
     setIsUninstalling(true);
-    setInstallationStatus("Uninstalling lsfg-vk...");
+    setInstallationStatus("Removing experimental lsfg-vk...");
 
     try {
       const result = await uninstallLsfgVk();
       if (result.success) {
         setIsInstalled(false);
-        setInstallationStatus("lsfg-vk uninstalled successfully!");
+        setInstallationStatus("Experimental lsfg-vk removed successfully!");
         showUninstallSuccessToast();
       } else {
         setInstallationStatus(`Uninstallation failed: ${result.error}`);

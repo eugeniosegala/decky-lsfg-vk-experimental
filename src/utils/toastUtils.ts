@@ -36,15 +36,15 @@ export function showErrorToast(title: string, body: string): void {
 export const ToastMessages = {
   INSTALL_SUCCESS: {
     title: "Installation Complete",
-    body: "lsfg-vk has been installed successfully"
+    body: "Experimental lsfg-vk developer build installed privately"
   },
   INSTALL_ERROR: {
     title: "Installation Failed",
     body: "Unknown error occurred"
   },
   UNINSTALL_SUCCESS: {
-    title: "Uninstallation Complete", 
-    body: "lsfg-vk has been uninstalled successfully"
+    title: "Experimental Layer Removed",
+    body: "Experimental lsfg-vk files have been removed"
   },
   UNINSTALL_ERROR: {
     title: "Uninstallation Failed",
