@@ -1,5 +1,9 @@
 # Decky LSFG-VK Experimental
 
+<p align="center">
+  <img src="assets/decky-lossless-logo-experimental.png" width="256" alt="Decky LSFG-VK Experimental logo" />
+</p>
+
 > **Experimental fork:** This is a fork of the original [Decky LSFG-VK](https://github.com/xXJSONDeruloXx/decky-lsfg-vk)
 > plugin. It packages the reviewed `v2.0.0-dev28` prerelease of [lsfg-vk](https://github.com/PancakeTAS/lsfg-vk). It is
 > independently developed and not officially supported by the creators of Lossless Scaling or lsfg-vk.
