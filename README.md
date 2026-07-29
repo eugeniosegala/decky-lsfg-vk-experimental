@@ -1,15 +1,13 @@
 # Decky LSFG-VK Experimental
 
 > **Experimental fork:** This is a fork of the original [Decky LSFG-VK](https://github.com/xXJSONDeruloXx/decky-lsfg-vk)
-> plugin. It carries experimental features and tracks the latest reviewed `develop` release
-> of [lsfg-vk](https://github.com/PancakeTAS/lsfg-vk). It is independently developed and not officially supported by the
-> creators of Lossless Scaling or lsfg-vk.
+> plugin. It packages the reviewed `v2.0.0-dev28` prerelease of [lsfg-vk](https://github.com/PancakeTAS/lsfg-vk). It is
+> independently developed and not officially supported by the creators of Lossless Scaling or lsfg-vk.
 
 ## What is this?
 
-A Decky plugin that installs and configures the current [lsfg-vk](https://github.com/PancakeTAS/lsfg-vk)
-frame-generation layer on Steam OS. It provides a controller-friendly interface for SteamOS, Bazzite, and other Decky
-Loader-compatible Linux systems.
+A Decky plugin that installs and configures a pinned experimental [lsfg-vk](https://github.com/PancakeTAS/lsfg-vk)
+frame-generation layer on SteamOS, Bazzite, and other Decky Loader-compatible Linux systems.
 
 This experimental build pins upstream release `v2.0.0-dev28`. It installs into a private experimental directory and
 activates only games launched through its dedicated wrapper, so it can coexist with the public Decky LSFG-VK plugin.
@@ -19,12 +17,13 @@ Test it per game before relying on it.
 
 1. **Download the plugin**
    from [this fork's releases](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/releases)
-    - Download the `Decky.LSFG-VK.Experimental.zip` file to your Steam OS
+   - Download the release asset ending in `.zip` to your Steam Deck, for example
+     `Decky.LSFG-VK.Experimental-<version>.zip`
 2. **Install manually through Decky**:
     - In Game Mode, go to the settings cog in the top right of the Decky Loader tab
     - Enable "Developer Mode"
     - Go to "Developer" tab and select "Install Plugin from Zip"
-    - Select the downloaded `Decky LSFG-VK Experimental.zip` file
+   - Select the downloaded experimental plugin ZIP
 
 > **Coexistence:** This build does not register its layer in Vulkan's global user directory. Keep both Decky plugins
 > installed if you wish, then choose the implementation per game with that plugin's launch wrapper. Do not use both
@@ -36,10 +35,11 @@ Test it per game before relying on it.
 
 ## Create a local install archive
 
-Install the JavaScript dependencies once, then run the local packager:
+Install pnpm and the JavaScript dependencies once, then run the local packager. If you use Volta, install pnpm with
+`volta install pnpm`; otherwise, enable it with your preferred Node.js package-manager setup.
 
 ```bash
-corepack pnpm install --frozen-lockfile
+pnpm install --frozen-lockfile
 pnpm run package
 ```
 
@@ -65,6 +65,9 @@ and tag, generates Deck installation notes, and creates or updates the matching 
 attached. Publishing is opt-in; `pnpm run package` never pushes or changes GitHub. `./scripts/package.sh`,
 `./scripts/publish.sh`, and the short `just package` / `just publish` recipes are equivalent alternatives. The
 underlying command remains `scripts/package-release.sh`, with `--publish` enabling GitHub operations.
+
+The release version must be committed first. The script creates a new matching tag, or accepts an existing tag only
+when it already points to the current commit; it never moves a published tag to newer code.
 
 ## How to Use
 
@@ -135,8 +138,16 @@ The plugin provides several configuration options to optimize frame generation f
   selection to lsfg-vk's native automatic matching; otherwise it uses the profile selected in Decky.
 - **GPU**: Optionally select the GPU identifier that lsfg-vk should use.
 
-The current upstream build supports only `pacing = 'none'`; it forces FIFO presentation. HDR and dual-GPU operation are
-not currently available, so the plugin does not expose controls for them.
+### Launch compatibility settings
+
+- **Base FPS Cap**: Optionally caps the base framerate for DirectX games before the frame multiplier is applied.
+- **WoW64**: Enables `PROTON_USE_WOW64=1` for compatible 32-bit games, primarily as a ProtonGE crash workaround.
+- **Steam Deck Mode**, **MangoHud workaround**, and **vkBasalt controls**: Per-game compatibility options for cases
+  where the normal launch path needs adjustment.
+- **Gamescope WSI Layer** and **Zink**: Optional compatibility paths for Gamescope or OpenGL games.
+
+This plugin currently writes only `pacing = 'none'` and does not expose HDR or dual-GPU controls. Test HDR games with
+HDR disabled unless a future pinned upstream build explicitly adds supported controls.
 
 ## Feedback and Support
 
@@ -151,20 +162,20 @@ the [decky-lsfg-vk Discord Channel](https://discord.gg/TwvHdVucC3)
 - Check that the Lossless Scaling DLL was detected correctly in the plugin
 - Try enabling Performance Mode if you're experiencing crashes
 - Make sure your game is using a supported Vulkan presentation path
-- HDR is currently unsupported upstream; turn HDR off while testing
+- This experimental plugin does not expose HDR controls; turn HDR off while testing
 
 **Performance issues?**
 
 - Lower the Flow Scale setting for better performance
 - Enable Performance Mode (recommended for most games)
 - Try reducing the FPS multiplier from 4x to 2x or 3x
-- Consider using the experimental FPS limit feature for DirectX games
+- Try **Base FPS Cap** for DirectX games when the game needs a lower base framerate before frame generation
 
 ## What it does
 
 The plugin:
 
-- Automatically downloads and installs its lsfg-vk layer to `~/.local/share/decky-lsfg-vk-experimental/`
+- Extracts the bundled, checksum-verified lsfg-vk payload to `~/.local/share/decky-lsfg-vk-experimental/`
 - Keeps its manifest out of Vulkan's global implicit-layer directory and exports `VK_IMPLICIT_LAYER_PATH` only from its
   wrapper
 - Creates a TOML configuration file in `~/.config/decky-lsfg-vk-experimental/conf.toml` with your settings
@@ -174,12 +185,15 @@ The plugin:
     - **Flow Scale**: Adjust motion estimation quality vs performance
     - **Performance Mode**: Use lighter processing for better performance
     - **Allow FP16**, executable matching, and optional GPU selection
+- Provides launch compatibility controls for DirectX base FPS caps, WoW64, Steam Deck mode, MangoHud, vkBasalt,
+  Gamescope WSI, and Zink
 - Writes the current lsfg-vk TOML configuration format, including named profiles
 - Uses the upstream `LSFGVK_CONFIG` and `LSFGVK_PROFILE` launch environment variables without overriding `active_in`
   matching
 - Configures Flatpak applications with this plugin's private config and Lossless Scaling filesystem access; Flatpak
   runtime extensions remain shared system resources, so configure a given Flatpak app through only one plugin
-- Easy uninstallation that removes all installed files when no longer needed
+- Removes its private layer, manifest, CLI, and launcher on uninstall while preserving the private configuration for a
+  later reinstall; shared Flatpak extensions are not removed automatically
 
 ## Credits
 

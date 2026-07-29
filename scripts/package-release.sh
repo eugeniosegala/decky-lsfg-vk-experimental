@@ -184,7 +184,7 @@ if [[ "$publish_release" == true ]]; then
     "1. Download \`$(basename "$output_path")\` below." \
     "2. On the Steam OS, open Decky Loader's settings and enable **Developer Mode**." \
     '3. Choose **Developer** → **Install Plugin from Zip**, then select the downloaded ZIP.' \
-    '4. In the plugin, install lsfg-vk and add `~/.local/bin/lsfg-vk-experimental %command%` to the game’s Steam launch options.' \
+    '4. In the plugin, select **Install Experimental LSFG-VK (developer build)** and add `~/.local/bin/lsfg-vk-experimental %command%` to the game’s Steam launch options.' \
     '' \
     '## Important' \
     '' \
