@@ -45,6 +45,18 @@ Test it per game before relying on it.
     - Or use the "Launch Option Clipboard" button in the plugin to copy the command
 6. **Launch your game** - frame generation will activate automatically using your plugin configuration
 
+### Updating the experimental plugin
+
+Install a newer experimental ZIP **in place**; do not uninstall this plugin first.
+
+1. Quit any game currently using `~/.local/bin/lsfg-vk-experimental`.
+2. Download the newer ZIP from [this fork's releases](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/releases).
+3. In Game Mode, open Decky Loader's settings, then choose **Developer** → **Install Plugin from Zip** and select it.
+4. Reload the plugin from Decky, or restart Game Mode if it does not reload automatically.
+
+Your experimental profiles, private layer files, and existing Steam launch options are retained. Keep the public/original
+plugin installed if you use it; it is separate. Do not use both plugins' wrappers for the same game.
+
 ### Coexisting with the public plugin
 
 For native Steam/Proton games, both plugins can stay installed and active. Select exactly one launcher per game:

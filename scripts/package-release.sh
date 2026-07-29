@@ -186,6 +186,14 @@ if [[ "$publish_release" == true ]]; then
     '3. Choose **Developer** → **Install Plugin from Zip**, then select the downloaded ZIP.' \
     '4. In the plugin, select **Install Experimental LSFG-VK (developer build)** and add `~/.local/bin/lsfg-vk-experimental %command%` to the game’s Steam launch options.' \
     '' \
+    '## Updating an existing experimental installation' \
+    '' \
+    '1. Quit games currently launched with `~/.local/bin/lsfg-vk-experimental`.' \
+    '2. In Game Mode, choose **Developer** → **Install Plugin from Zip** and select this newer ZIP. Do not uninstall the experimental plugin first.' \
+    '3. Reload the plugin from Decky, or restart Game Mode if it does not reload automatically.' \
+    '' \
+    'Existing experimental profiles, private layer files, and Steam launch options are retained. The public/original plugin may remain installed, but use exactly one plugin wrapper per game.' \
+    '' \
     '## Important' \
     '' \
     '- This is an experimental build; test it per game.' \
