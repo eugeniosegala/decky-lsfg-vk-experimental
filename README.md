@@ -85,42 +85,6 @@ This is why it is called *per-game isolation*: the launch option chooses which a
 game sees. It does not duplicate the Vulkan layer or Lossless Scaling files per game, and it does not make a persistent
 system-wide Vulkan change. Closing the game removes the temporary environment settings automatically.
 
-## Create a local install archive
-
-Install pnpm and the JavaScript dependencies once, then run the local packager. If you use Volta, install pnpm with
-`volta install pnpm`; otherwise, enable it with your preferred Node.js package-manager setup.
-
-```bash
-pnpm install --frozen-lockfile
-pnpm run package
-```
-
-This creates `out/Decky.LSFG-VK.Experimental.zip`. The script regenerates configuration bindings, builds the frontend,
-downloads the engine archive declared in `package.json`, verifies its SHA-256 checksum, and packages the files Decky
-needs. Pass a path directly to use a different output location:
-
-```bash
-scripts/package-release.sh /path/to/Decky.LSFG-VK.Experimental.zip
-```
-
-## Publish a GitHub pre-release
-
-After committing the version and release changes on a clean checkout, authenticate the GitHub CLI once with
-`gh auth login -h github.com`, then run:
-
-```bash
-pnpm run publish-release
-```
-
-This verifies and builds the ZIP, creates or verifies the matching `v<package-version>` tag, pushes the current branch
-and tag, generates Deck installation notes, and creates or updates the matching GitHub pre-release with the ZIP
-attached. Publishing is opt-in; `pnpm run package` never pushes or changes GitHub. `./scripts/package.sh`,
-`./scripts/publish.sh`, and the short `just package` / `just publish` recipes are equivalent alternatives. The
-underlying command remains `scripts/package-release.sh`, with `--publish` enabling GitHub operations.
-
-The release version must be committed first. The script creates a new matching tag, or accepts an existing tag only
-when it already points to the current commit; it never moves a published tag to newer code.
-
 ## Configuration Options
 
 The plugin provides several configuration options to optimize frame generation for your games:
@@ -194,6 +158,42 @@ The plugin:
   runtime extensions remain shared system resources, so configure a given Flatpak app through only one plugin
 - Removes its private layer, manifest, CLI, and launcher on uninstall while preserving the private configuration for a
   later reinstall; shared Flatpak extensions are not removed automatically
+
+## Create a local install archive
+
+Install pnpm and the JavaScript dependencies once, then run the local packager. If you use Volta, install pnpm with
+`volta install pnpm`; otherwise, enable it with your preferred Node.js package-manager setup.
+
+```bash
+pnpm install --frozen-lockfile
+pnpm run package
+```
+
+This creates `out/Decky.LSFG-VK.Experimental.zip`. The script regenerates configuration bindings, builds the frontend,
+downloads the engine archive declared in `package.json`, verifies its SHA-256 checksum, and packages the files Decky
+needs. Pass a path directly to use a different output location:
+
+```bash
+scripts/package-release.sh /path/to/Decky.LSFG-VK.Experimental.zip
+```
+
+## Publish a GitHub pre-release
+
+After committing the version and release changes on a clean checkout, authenticate the GitHub CLI once with
+`gh auth login -h github.com`, then run:
+
+```bash
+pnpm run publish-release
+```
+
+This verifies and builds the ZIP, creates or verifies the matching `v<package-version>` tag, pushes the current branch
+and tag, generates Deck installation notes, and creates or updates the matching GitHub pre-release with the ZIP
+attached. Publishing is opt-in; `pnpm run package` never pushes or changes GitHub. `./scripts/package.sh`,
+`./scripts/publish.sh`, and the short `just package` / `just publish` recipes are equivalent alternatives. The
+underlying command remains `scripts/package-release.sh`, with `--publish` enabling GitHub operations.
+
+The release version must be committed first. The script creates a new matching tag, or accepts an existing tag only
+when it already points to the current commit; it never moves a published tag to newer code.
 
 ## Credits
 
