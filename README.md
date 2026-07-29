@@ -2,17 +2,6 @@
 
 > **Experimental fork:** This is a fork of the original [Decky LSFG-VK](https://github.com/xXJSONDeruloXx/decky-lsfg-vk) plugin. It carries experimental features and tracks the latest reviewed `develop` release of [lsfg-vk](https://github.com/PancakeTAS/lsfg-vk). It is independently developed and not officially supported by the creators of Lossless Scaling or lsfg-vk.
 
-
-<p align="center">
-   <img src="assets/decky-lossless-logo.png" alt="decky-lsfg-vk Logo" width="200"/>
-</p>
-<p align="center">
-   <a href="https://ko-fi.com/B0B71HZTAX" target="_blank" rel="noopener noreferrer">
-      <img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support on Ko-fi"/>
-   </a>
-</p>
-
-
 ## What is this?
 
 A Decky plugin that installs and configures the current [lsfg-vk](https://github.com/PancakeTAS/lsfg-vk) frame-generation layer on Steam Deck. It provides a controller-friendly interface for SteamOS, Bazzite, and other Decky Loader-compatible Linux systems.
