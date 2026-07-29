@@ -445,11 +445,15 @@ export function ProfileManagement({ currentProfile, onProfileChange }: ProfileMa
                   justifyContent: "center",
                   padding: "10px",
                   minWidth: "0",
+                  color: "#fff8ed",
+                  background: "linear-gradient(135deg, #9d4a00 0%, #d97116 55%, #f7a743 100%)",
+                  border: "1px solid rgba(255, 212, 154, 0.9)",
+                  borderRadius: "4px",
                 }}
                 onClick={handleRenameProfile}
                 disabled={isLoading || selectedProfile === "decky-lsfg-vk" || !!mainRunningApp}
               >
-                <RiEditLine size={20} />
+                <RiEditLine size={20} style={{ color: "#fff8ed" }} />
               </DialogButton>
               
               <DialogButton
@@ -461,11 +465,15 @@ export function ProfileManagement({ currentProfile, onProfileChange }: ProfileMa
                   justifyContent: "center",
                   padding: "10px",
                   minWidth: "0",
+                  color: "#fff5f5",
+                  background: "linear-gradient(135deg, #8d1f2d 0%, #c43a47 55%, #ed6b63 100%)",
+                  border: "1px solid rgba(255, 183, 178, 0.9)",
+                  borderRadius: "4px",
                 }}
                 onClick={handleDeleteProfile}
                 disabled={isLoading || selectedProfile === "decky-lsfg-vk" || !!mainRunningApp}
               >
-                <RiDeleteBinLine size={20} />
+                <RiDeleteBinLine size={20} style={{ color: "#fff5f5" }} />
               </DialogButton>
             </Focusable>
           </PanelSectionRow>
