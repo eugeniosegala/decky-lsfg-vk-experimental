@@ -55,7 +55,7 @@ export const CONFIG_SCHEMA: Record<string, ConfigField> = {
   flow_scale: {
     name: "flow_scale",
     fieldType: ConfigFieldType.FLOAT,
-    default: 1.0,
+    default: 0.9,
     description: "change the flow scale"
   },
   performance_mode: {
@@ -155,7 +155,7 @@ export function getDefaults(): ConfigurationData {
     dll: "",
     allow_fp16: true,
     multiplier: 2,
-    flow_scale: 1.0,
+    flow_scale: 0.9,
     performance_mode: false,
     pacing: "none",
     active_in: "",

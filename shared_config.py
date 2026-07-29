@@ -46,7 +46,7 @@ CONFIG_SCHEMA_DEF = {
     "flow_scale": {
         "name": "flow_scale",
         "fieldType": ConfigFieldType.FLOAT,
-        "default": 1.0,
+        "default": 0.9,
         "description": "change the flow scale",
         "location": "toml"
     },
