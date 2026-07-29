@@ -1,5 +1,7 @@
 default:
-    echo "Available recipes: build, package-release, publish-release, test, clean, generate-schema"
+    echo "Available recipes: package, publish, build, test, clean, generate-schema"
+    echo "  just package  Build the Decky ZIP locally"
+    echo "  just publish  Build, tag, push, and publish the GitHub prerelease"
 
 generate-schema:
     python3 scripts/generate_ts_schema.py
@@ -12,6 +14,11 @@ package-release:
 
 publish-release:
     scripts/package-release.sh --publish
+
+# Short, day-to-day release commands. The longer names remain as compatibility aliases.
+package: package-release
+
+publish: publish-release
 
 test:
     scp "out/Decky.LSFG-VK.Experimental.zip" deck@192.168.0.6:~/Desktop

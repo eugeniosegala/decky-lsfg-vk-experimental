@@ -8,7 +8,7 @@
 ## What is this?
 
 A Decky plugin that installs and configures the current [lsfg-vk](https://github.com/PancakeTAS/lsfg-vk)
-frame-generation layer on Steam Deck. It provides a controller-friendly interface for SteamOS, Bazzite, and other Decky
+frame-generation layer on Steam OS. It provides a controller-friendly interface for SteamOS, Bazzite, and other Decky
 Loader-compatible Linux systems.
 
 This experimental build pins upstream release `v2.0.0-dev28`. It installs into a private experimental directory and
@@ -19,7 +19,7 @@ Test it per game before relying on it.
 
 1. **Download the plugin**
    from [this fork's releases](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/releases)
-    - Download the `Decky.LSFG-VK.Experimental.zip` file to your Steam Deck
+    - Download the `Decky.LSFG-VK.Experimental.zip` file to your Steam OS
 2. **Install manually through Decky**:
     - In Game Mode, go to the settings cog in the top right of the Decky Loader tab
     - Enable "Developer Mode"
@@ -40,7 +40,7 @@ Install the JavaScript dependencies once, then run the local packager:
 
 ```bash
 corepack pnpm install --frozen-lockfile
-just package-release
+./scripts/package.sh
 ```
 
 This creates `out/Decky.LSFG-VK.Experimental.zip`. The script regenerates configuration bindings, builds the frontend,
@@ -57,12 +57,14 @@ After committing the version and release changes on a clean checkout, authentica
 `gh auth login -h github.com`, then run:
 
 ```bash
-scripts/package-release.sh --publish
+./scripts/publish.sh
 ```
 
 This verifies and builds the ZIP, creates or verifies the matching `v<package-version>` tag, pushes the current branch
 and tag, generates Deck installation notes, and creates or updates the matching GitHub pre-release with the ZIP
-attached. Publishing is opt-in; a normal packaging command never pushes or changes GitHub.
+attached. Publishing is opt-in; `./scripts/package.sh` never pushes or changes GitHub. The short `just package` and
+`just publish` recipes are available too. The underlying command remains `scripts/package-release.sh`, with
+`--publish` enabling the GitHub operations.
 
 ## How to Use
 
