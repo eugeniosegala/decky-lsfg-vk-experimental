@@ -1,5 +1,5 @@
 default:
-    echo "Available recipes: build, test, clean, generate-schema"
+    echo "Available recipes: build, package-release, test, clean, generate-schema"
 
 generate-schema:
     python3 scripts/generate_ts_schema.py
@@ -7,8 +7,11 @@ generate-schema:
 build:
     python3 scripts/generate_ts_schema.py && sudo rm -rf node_modules && .vscode/build.sh
 
+package-release:
+    scripts/package-release.sh
+
 test:
-    scp "out/Decky LSFG-VK Experimental.zip" deck@192.168.0.6:~/Desktop
+    scp "out/Decky.LSFG-VK.Experimental.zip" deck@192.168.0.6:~/Desktop
 
 watch:
     ssh deck@192.168.0.6 "journalctl -f"

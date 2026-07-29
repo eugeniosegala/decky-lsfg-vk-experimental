@@ -11,7 +11,7 @@ This experimental build pins upstream release `v2.0.0-dev28`. Test it per game b
 ## Installation
 
 1. **Download the plugin** from [this fork's releases](https://github.com/eugeniosegala/decky-lsfg-vk/releases)
-   - Download the `Decky LSFG-VK Experimental.zip` file to your Steam Deck
+   - Download the `Decky.LSFG-VK.Experimental.zip` file to your Steam Deck
 2. **Install manually through Decky**:
    - In Game Mode, go to the settings cog in the top right of the Decky Loader tab
    - Enable "Developer Mode"
@@ -19,6 +19,21 @@ This experimental build pins upstream release `v2.0.0-dev28`. Test it per game b
    - Select the downloaded `Decky LSFG-VK Experimental.zip` file
 
 > **Coexistence:** Decky will show this as a separate plugin from the public release. Both plugins manage the same system-wide lsfg-vk Vulkan layer, however, so use only one lsfg-vk version at a time.
+
+## Create a local install archive
+
+Install the JavaScript dependencies once, then run the local packager:
+
+```bash
+corepack pnpm install --frozen-lockfile
+just package-release
+```
+
+This creates `out/Decky.LSFG-VK.Experimental.zip`. The script regenerates configuration bindings, builds the frontend, downloads the engine archive declared in `package.json`, verifies its SHA-256 checksum, and packages the files Decky needs. Pass a path directly to use a different output location:
+
+```bash
+scripts/package-release.sh /path/to/Decky.LSFG-VK.Experimental.zip
+```
 
 ## How to Use
 
