@@ -40,7 +40,7 @@ Install the JavaScript dependencies once, then run the local packager:
 
 ```bash
 corepack pnpm install --frozen-lockfile
-./scripts/package.sh
+pnpm run package
 ```
 
 This creates `out/Decky.LSFG-VK.Experimental.zip`. The script regenerates configuration bindings, builds the frontend,
@@ -57,14 +57,14 @@ After committing the version and release changes on a clean checkout, authentica
 `gh auth login -h github.com`, then run:
 
 ```bash
-./scripts/publish.sh
+pnpm run publish-release
 ```
 
 This verifies and builds the ZIP, creates or verifies the matching `v<package-version>` tag, pushes the current branch
 and tag, generates Deck installation notes, and creates or updates the matching GitHub pre-release with the ZIP
-attached. Publishing is opt-in; `./scripts/package.sh` never pushes or changes GitHub. The short `just package` and
-`just publish` recipes are available too. The underlying command remains `scripts/package-release.sh`, with
-`--publish` enabling the GitHub operations.
+attached. Publishing is opt-in; `pnpm run package` never pushes or changes GitHub. `./scripts/package.sh`,
+`./scripts/publish.sh`, and the short `just package` / `just publish` recipes are equivalent alternatives. The
+underlying command remains `scripts/package-release.sh`, with `--publish` enabling GitHub operations.
 
 ## How to Use
 
