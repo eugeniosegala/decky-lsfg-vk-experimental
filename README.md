@@ -81,6 +81,32 @@ not use it for a game that needs vkBasalt or another global implicit layer.
 Flatpak runtime extensions are shared by design. The experimental plugin uses its own config for Flatpak overrides,
 but configure a particular Flatpak app through only one LSFG-VK plugin at a time.
 
+### Switching a game between plugins
+
+The choice is made entirely in that game's **Steam Properties → Launch Options**. Quit the game, then replace the
+LSFG-VK launcher command with the other one; do not combine them.
+
+| To use | Steam launch option |
+| --- | --- |
+| Public/original Decky LSFG-VK plugin | `~/lsfg %command%` |
+| This experimental plugin | `~/.local/bin/lsfg-vk-experimental %command%` |
+
+For example, to move a game from the experimental plugin back to the public plugin, replace
+`~/.local/bin/lsfg-vk-experimental %command%` with `~/lsfg %command%`, then launch the game normally. Switch back by
+replacing it in the opposite direction. Configure FPS multiplier, flow scale, and other settings in the Decky plugin
+you selected; each plugin keeps its own configuration.
+
+### What the isolated per-game launcher does
+
+`~/.local/bin/lsfg-vk-experimental` is a small launcher script installed **once**, not a separate lsfg-vk installation
+for every game. When Steam starts a game through it, the script temporarily points that game process at this plugin's
+single private lsfg-vk library, Vulkan manifest, and configuration, then starts `%command%` (Steam's placeholder for
+the real game command). The same private installation is reused by every game that has the experimental launch option.
+
+This is why it is called *per-game isolation*: the launch option chooses which already-installed plugin a particular
+game sees. It does not duplicate the Vulkan layer or Lossless Scaling files per game, and it does not make a persistent
+system-wide Vulkan change. Closing the game removes the temporary environment settings automatically.
+
 ## Configuration Options
 
 The plugin provides several configuration options to optimize frame generation for your games:
