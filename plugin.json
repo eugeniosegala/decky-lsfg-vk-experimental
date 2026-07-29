@@ -1,11 +1,11 @@
 {
-  "name": "Decky LSFG-VK V2 Preview",
+  "name": "Decky LSFG-VK Experimental",
   "author": "Eugenio Segala",
   "flags": [],
   "api_version": 1,
   "publish": {
     "tags": ["installer", "vulkan", "lsfg", "framegen", "lossless", "scaling"],
-    "description": "Preview the lsfg-vk v2 compatibility layer on Steam Deck.",
+    "description": "Experimental lsfg-vk compatibility-layer features for Steam Deck.",
     "image": "https://raw.githubusercontent.com/eugeniosegala/decky-lsfg-vk/refs/heads/main/assets/Decky_LSFG-VK_Master_1.png"
   }
 }

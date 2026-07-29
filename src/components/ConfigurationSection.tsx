@@ -13,8 +13,8 @@ interface ConfigurationSectionProps {
   onConfigChange: (fieldName: keyof ConfigurationData, value: boolean | number | string) => Promise<void>;
 }
 
-const WORKAROUNDS_COLLAPSED_KEY = "lsfg-v2-preview-workarounds-collapsed";
-const CONFIG_COLLAPSED_KEY = "lsfg-v2-preview-config-collapsed";
+const WORKAROUNDS_COLLAPSED_KEY = "lsfg-experimental-workarounds-collapsed";
+const CONFIG_COLLAPSED_KEY = "lsfg-experimental-config-collapsed";
 
 export function ConfigurationSection({
   config,

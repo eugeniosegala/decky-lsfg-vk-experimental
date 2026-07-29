@@ -417,7 +417,7 @@ class Plugin:
         This method is called by Decky Loader when the plugin is loaded.
         Any initialization code should go here.
         """
-        decky.logger.info("decky-lsfg-vk-v2-preview plugin loaded")
+        decky.logger.info("decky-lsfg-vk-experimental plugin loaded")
 
     async def _unload(self):
         """
@@ -426,7 +426,7 @@ class Plugin:
         This method is called by Decky Loader when the plugin is being unloaded.
         Any cleanup code should go here.
         """
-        decky.logger.info("decky-lsfg-vk-v2-preview plugin unloaded")
+        decky.logger.info("decky-lsfg-vk-experimental plugin unloaded")
 
     async def _uninstall(self):
         """
@@ -435,7 +435,7 @@ class Plugin:
         This method is called by Decky Loader when the plugin is being uninstalled.
         Performs cleanup of plugin files and flatpak extensions.
         """
-        decky.logger.info("decky-lsfg-vk-v2-preview plugin being uninstalled")
+        decky.logger.info("decky-lsfg-vk-experimental plugin being uninstalled")
         
         # Clean up lsfg-vk files when the plugin is uninstalled
         self.installation_service.cleanup_on_uninstall()
@@ -470,7 +470,7 @@ class Plugin:
         except Exception as e:
             decky.logger.error(f"Error during flatpak cleanup: {e}")
         
-        decky.logger.info("decky-lsfg-vk-v2-preview plugin uninstall cleanup completed")
+        decky.logger.info("decky-lsfg-vk-experimental plugin uninstall cleanup completed")
 
     async def _migration(self):
         """
@@ -479,7 +479,7 @@ class Plugin:
         This method is called by Decky Loader for plugin migrations.
         Currently migrates logs, settings, and runtime data from old locations.
         """
-        decky.logger.info("Running decky-lsfg-vk-v2-preview plugin migrations")
+        decky.logger.info("Running decky-lsfg-vk-experimental plugin migrations")
         
         decky.migrate_logs(os.path.join(decky.DECKY_USER_HOME,
                                        ".config", "decky-lossless-scaling-vk", "lossless-scaling-vk.log"))
@@ -492,4 +492,4 @@ class Plugin:
             os.path.join(decky.DECKY_HOME, "lossless-scaling-vk"),
             os.path.join(decky.DECKY_USER_HOME, ".local", "share", "decky-lossless-scaling-vk"))
         
-        decky.logger.info("decky-lsfg-vk-v2-preview plugin migrations completed")
+        decky.logger.info("decky-lsfg-vk-experimental plugin migrations completed")
