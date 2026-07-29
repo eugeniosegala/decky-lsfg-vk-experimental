@@ -186,6 +186,12 @@ if [[ "$publish_release" == true ]]; then
     '3. Choose **Developer** → **Install Plugin from Zip**, then select the downloaded ZIP.' \
     '4. In the plugin, select **Install Experimental LSFG-VK (developer build)** and add `~/.local/bin/lsfg-vk-experimental %command%` to the game’s Steam launch options.' \
     '' \
+    '## SteamOS Game Mode display mode' \
+    '' \
+    'Start with the normal **Fullscreen** mode selected in the game. Steam Deck Game Mode already presents games through Gamescope, so Windows desktop Lossless Scaling advice to force borderless does not automatically apply.' \
+    '' \
+    'Use borderless only as a per-game fallback for a fullscreen-specific problem; it is not required for lsfg-vk to attach. Do not switch display mode, refresh rate, or the Steam performance-menu FPS limit while frame generation is active—restart the game after changing one of those settings.' \
+    '' \
     '## Updating an existing experimental installation' \
     '' \
     '1. Quit games currently launched with `~/.local/bin/lsfg-vk-experimental`.' \

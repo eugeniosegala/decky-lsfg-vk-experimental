@@ -33,6 +33,11 @@ Test it per game before relying on it.
 > public LSFG-VK layer cannot load alongside it. For that game, other globally installed implicit layers (for example
 > vkBasalt) are also not discovered. Use the public plugin's wrapper for games that need those layers.
 
+> **SteamOS display mode:** In Steam Deck Game Mode, start with the game's normal **Fullscreen** mode. Game Mode
+> already presents games through Gamescope, so Windows desktop Lossless Scaling advice to force borderless does not
+> automatically apply here. Borderless is a per-game fallback for a specific fullscreen problem, not a requirement for
+> lsfg-vk to attach.
+
 ## How to Use
 
 1. **Purchase and install** [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) from Steam
@@ -44,6 +49,18 @@ Test it per game before relying on it.
     - Add `~/.local/bin/lsfg-vk-experimental %command%` to your game's launch options in Steam Properties
     - Or use the "Launch Option Clipboard" button in the plugin to copy the command
 6. **Launch your game** - frame generation will activate automatically using your plugin configuration
+
+### SteamOS Game Mode display mode
+
+Start with the game's normal **Fullscreen** mode and leave the display mode unchanged for the session. SteamOS Game
+Mode already uses [Gamescope](https://github.com/ValveSoftware/gamescope) to present the game, even when the game
+selects fullscreen. Do not assume that Windows desktop Lossless Scaling advice to force borderless will improve a
+Steam Deck game.
+
+If a particular game has a fullscreen-specific problem, test borderless as a fallback after fully restarting that game.
+The choice does not control whether lsfg-vk attaches: the game must use Vulkan and have a compatible 64-bit process.
+Avoid switching display mode, refresh rate, or the Steam performance-menu FPS limit while frame generation is active;
+restart the game after changing one of those settings.
 
 ### Updating the experimental plugin
 
