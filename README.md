@@ -6,7 +6,9 @@
 
 A Decky plugin that installs and configures the current [lsfg-vk](https://github.com/PancakeTAS/lsfg-vk) frame-generation layer on Steam Deck. It provides a controller-friendly interface for SteamOS, Bazzite, and other Decky Loader-compatible Linux systems.
 
-This experimental build pins upstream release `v2.0.0-dev28`. Test it per game before relying on it.
+This experimental build pins upstream release `v2.0.0-dev28`. It installs into a private experimental directory and
+activates only games launched through its dedicated wrapper, so it can coexist with the public Decky LSFG-VK plugin.
+Test it per game before relying on it.
 
 ## Installation
 
@@ -18,7 +20,13 @@ This experimental build pins upstream release `v2.0.0-dev28`. Test it per game b
    - Go to "Developer" tab and select "Install Plugin from Zip"
    - Select the downloaded `Decky LSFG-VK Experimental.zip` file
 
-> **Coexistence:** Decky will show this as a separate plugin from the public release. Both plugins manage the same system-wide lsfg-vk Vulkan layer, however, so use only one lsfg-vk version at a time.
+> **Coexistence:** This build does not register its layer in Vulkan's global user directory. Keep both Decky plugins
+> installed if you wish, then choose the implementation per game with that plugin's launch wrapper. Do not use both
+> wrappers in the same launch option.
+
+> **Isolation tradeoff:** The experimental wrapper intentionally overrides Vulkan's implicit-layer search path so the
+> public LSFG-VK layer cannot load alongside it. For that game, other globally installed implicit layers (for example
+> vkBasalt) are also not discovered. Use the public plugin's wrapper for games that need those layers.
 
 ## Create a local install archive
 
@@ -55,9 +63,23 @@ ZIP attached. Publishing is opt-in; a normal packaging command never pushes or c
 3. **Click "Install lsfg-vk"** to automatically set up the lsfg-vk vulkan layer
 4. **Configure settings** using the plugin's UI — choose an FPS multiplier, flow scale, performance mode, FP16 behavior, and optional executable/GPU matching rules
 5. **Apply launch option** to games you want to use frame generation with:
-   - Add `~/lsfg %command%` to your game's launch options in Steam Properties
+   - Add `~/.local/bin/lsfg-vk-experimental %command%` to your game's launch options in Steam Properties
    - Or use the "Launch Option Clipboard" button in the plugin to copy the command
 6. **Launch your game** - frame generation will activate automatically using your plugin configuration
+
+### Coexisting with the public plugin
+
+For native Steam/Proton games, both plugins can stay installed and active. Select exactly one launcher per game:
+
+- Public plugin: its existing `~/lsfg %command%` launch option
+- Experimental plugin: `~/.local/bin/lsfg-vk-experimental %command%`
+
+The experimental launcher uses a private manifest and config, so its configuration changes and uninstall operation do
+not overwrite the public plugin's layer files. Its isolation mode bypasses the usual implicit-layer directories, so do
+not use it for a game that needs vkBasalt or another global implicit layer.
+
+Flatpak runtime extensions are shared by design. The experimental plugin uses its own config for Flatpak overrides,
+but configure a particular Flatpak app through only one LSFG-VK plugin at a time.
 
 ## Configuration Options
 
@@ -82,7 +104,7 @@ For per-game feedback and community support, please join the [decky-lsfg-vk Disc
 ## Troubleshooting
 
 **Frame generation not working?**
-- Ensure you've added `~/lsfg %command%` to your game's launch options
+- Ensure you've added `~/.local/bin/lsfg-vk-experimental %command%` to your game's launch options
 - Check that the Lossless Scaling DLL was detected correctly in the plugin
 - Try enabling Performance Mode if you're experiencing crashes
 - Make sure your game is using a supported Vulkan presentation path
@@ -97,9 +119,9 @@ For per-game feedback and community support, please join the [decky-lsfg-vk Disc
 ## What it does
 
 The plugin:
-- Automatically downloads and installs the latest lsfg-vk Vulkan layer to `~/.local/lib/`
-- Configures the Vulkan layer in `~/.local/share/vulkan/implicit_layer.d/`
-- Creates a TOML configuration file in `~/.config/lsfg-vk/conf.toml` with your settings
+- Automatically downloads and installs its lsfg-vk layer to `~/.local/share/decky-lsfg-vk-experimental/`
+- Keeps its manifest out of Vulkan's global implicit-layer directory and exports `VK_IMPLICIT_LAYER_PATH` only from its wrapper
+- Creates a TOML configuration file in `~/.config/decky-lsfg-vk-experimental/conf.toml` with your settings
 - Automatically detects your Lossless Scaling DLL installation
 - Provides an easy-to-use interface to configure frame generation settings:
   - **FPS Multiplier**: Choose 2x, 3x, or 4x frame generation
@@ -108,7 +130,7 @@ The plugin:
   - **Allow FP16**, executable matching, and optional GPU selection
 - Writes the current lsfg-vk TOML configuration format, including named profiles
 - Uses the upstream `LSFGVK_CONFIG` and `LSFGVK_PROFILE` launch environment variables without overriding `active_in` matching
-- Configures Flatpak applications with the required config and Lossless Scaling filesystem access; extension installation through Flathub is available for Freedesktop runtimes 24.08 and 25.08
+- Configures Flatpak applications with this plugin's private config and Lossless Scaling filesystem access; Flatpak runtime extensions remain shared system resources, so configure a given Flatpak app through only one plugin
 - Easy uninstallation that removes all installed files when no longer needed
 
 ## Credits

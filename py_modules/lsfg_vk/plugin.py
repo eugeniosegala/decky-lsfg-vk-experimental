@@ -256,9 +256,9 @@ class Plugin:
             Dict containing the launch option string and instructions
         """
         return {
-            "launch_option": "~/lsfg %command%",
+            "launch_option": "~/.local/bin/lsfg-vk-experimental %command%",
             "instructions": "Add this to your game's launch options in Steam Properties",
-            "explanation": "The lsfg script is created during installation and sets up the environment for the plugin"
+            "explanation": "The isolated launcher is created during installation and selects this plugin's private Vulkan layer and configuration"
         }
 
     async def get_config_file_content(self) -> Dict[str, Any]:
@@ -433,42 +433,16 @@ class Plugin:
         Called when the plugin is uninstalled.
         
         This method is called by Decky Loader when the plugin is being uninstalled.
-        Performs cleanup of plugin files and flatpak extensions.
+        Performs cleanup of this plugin's private files.
         """
         decky.logger.info("decky-lsfg-vk-experimental plugin being uninstalled")
         
         # Clean up lsfg-vk files when the plugin is uninstalled
         self.installation_service.cleanup_on_uninstall()
         
-        # Also clean up flatpak extensions if they are installed
-        try:
-            decky.logger.info("Checking for flatpak extensions to uninstall")
-            
-            extension_status = self.flatpak_service.get_extension_status()
-            
-            if extension_status.get("success"):
-                if extension_status.get("installed_23_08"):
-                    decky.logger.info("Uninstalling lsfg-vk flatpak runtime 23.08")
-                    result = self.flatpak_service.uninstall_extension("23.08")
-                    if result.get("success"):
-                        decky.logger.info("Successfully uninstalled flatpak runtime 23.08")
-                    else:
-                        decky.logger.warning(f"Failed to uninstall flatpak runtime 23.08: {result.get('error')}")
-                
-                if extension_status.get("installed_24_08"):
-                    decky.logger.info("Uninstalling lsfg-vk flatpak runtime 24.08")
-                    result = self.flatpak_service.uninstall_extension("24.08")
-                    if result.get("success"):
-                        decky.logger.info("Successfully uninstalled flatpak runtime 24.08")
-                    else:
-                        decky.logger.warning(f"Failed to uninstall flatpak runtime 24.08: {result.get('error')}")
-                        
-                decky.logger.info("Flatpak extension cleanup completed")
-            else:
-                decky.logger.info(f"Could not check flatpak status for cleanup: {extension_status.get('error')}")
-                
-        except Exception as e:
-            decky.logger.error(f"Error during flatpak cleanup: {e}")
+        # Flatpak runtime extensions are shared by every lsfg-vk installation.
+        # Never remove them automatically: another plugin may still depend on one.
+        decky.logger.info("Leaving shared Flatpak runtime extensions installed")
         
         decky.logger.info("decky-lsfg-vk-experimental plugin uninstall cleanup completed")
 

@@ -184,12 +184,13 @@ if [[ "$publish_release" == true ]]; then
     "1. Download \`$(basename "$output_path")\` below." \
     "2. On the Steam Deck, open Decky Loader's settings and enable **Developer Mode**." \
     '3. Choose **Developer** → **Install Plugin from Zip**, then select the downloaded ZIP.' \
-    '4. In the plugin, install lsfg-vk and add `~/lsfg %command%` to the game’s Steam launch options.' \
+    '4. In the plugin, install lsfg-vk and add `~/.local/bin/lsfg-vk-experimental %command%` to the game’s Steam launch options.' \
     '' \
     '## Important' \
     '' \
     '- This is an experimental build; test it per game.' \
-    '- Disable or uninstall the public Decky LSFG-VK plugin first. Both plugins manage the same system-wide Vulkan layer and configuration.' \
+    '- The public and experimental plugins can coexist; select exactly one LSFG-VK wrapper per native Steam/Proton game.' \
+    '- The isolated experimental wrapper bypasses other global implicit Vulkan layers (such as vkBasalt) for that game.' \
     '- Confirm the detected `Lossless.dll` path before launching. Leaving it blank permits lsfg-vk automatic discovery.' \
     '' \
     '## Engine payload' \

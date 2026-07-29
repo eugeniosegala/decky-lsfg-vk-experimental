@@ -22,9 +22,9 @@ export function SmartClipboardButton() {
   const getLaunchOptionText = async (): Promise<string> => {
     try {
       const result = await getLaunchOption();
-      return result.launch_option || "~/lsfg %command%";
+      return result.launch_option || "~/.local/bin/lsfg-vk-experimental %command%";
     } catch (error) {
-      return "~/lsfg %command%";
+      return "~/.local/bin/lsfg-vk-experimental %command%";
     }
   };
 

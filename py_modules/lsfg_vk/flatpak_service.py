@@ -9,7 +9,6 @@ from typing import Dict, Any, List, Optional
 
 from .base_service import BaseService
 from .config_schema import ConfigurationManager
-from .constants import CONFIG_DIR
 from .types import BaseResponse
 
 
@@ -59,7 +58,7 @@ class FlatpakService(BaseService):
         DLL's directory instead.
         """
         home_path = os.path.expanduser("~")
-        config_path = f"{home_path}/.config/lsfg-vk"
+        config_path = str(self.config_dir)
         dll_directory = f"{home_path}/.local/share/Steam/steamapps/common"
 
         if not self.config_file_path.exists():

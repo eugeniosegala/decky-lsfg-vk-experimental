@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { PanelSectionRow, ButtonItem } from "@decky/ui";
 import { FaClipboard, FaCheck } from "react-icons/fa";
-import { checkFgmodDirectory } from "../api/lsfgApi";
+import { checkFgmodDirectory, getLaunchOption } from "../api/lsfgApi";
 import { showClipboardErrorToast } from "../utils/toastUtils";
 import { copyWithVerification } from "../utils/clipboardUtils";
 
@@ -44,7 +44,8 @@ export function FgmodClipboardButton() {
     
     setIsLoading(true);
     try {
-      const text = "~/fgmod/fgmod ~/lsfg %command%";
+      const launchOption = await getLaunchOption();
+      const text = `~/fgmod/fgmod ${launchOption.launch_option || "~/.local/bin/lsfg-vk-experimental %command%"}`;
       const { success, verified } = await copyWithVerification(text);
       
       if (success) {

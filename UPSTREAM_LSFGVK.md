@@ -16,7 +16,7 @@ that updates the bundled upstream payload.
 | Release asset              | `lsfg-vk-2.0.0-dev28-linux.tar.xz`                                                                    |
 | Asset SHA-256              | `bb2b691939fc6c51888b10349345a3c0ae9ad0b5c3892fd7859d0cdf697b734e`                                    |
 | Asset URL                  | `https://github.com/PancakeTAS/lsfg-vk/releases/download/v2.0.0-dev/lsfg-vk-2.0.0-dev28-linux.tar.xz` |
-| Decky plugin version       | `0.13.0-experimental.2`                                                                               |
+| Decky plugin version       | `0.13.0-experimental.3`                                                                               |
 | Decky plugin package ID    | `decky-lsfg-vk-experimental`                                                                          |
 
 At this baseline, the `v2.0.0-dev` tag resolves to the same commit as `develop`.

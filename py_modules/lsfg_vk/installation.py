@@ -12,7 +12,7 @@ from typing import Dict, Any
 
 from .base_service import BaseService
 from .constants import (
-    LIB_FILENAME, JSON_FILENAME, ARCHIVE_FILENAME, CLI_FILENAME, BIN_DIR,
+    LIB_FILENAME, JSON_FILENAME, ARCHIVE_FILENAME, CLI_FILENAME, CLI_DIR, BIN_DIR,
 )
 from .config_schema import ConfigurationManager
 from .types import InstallationResponse, UninstallationResponse, InstallationCheckResponse
@@ -26,10 +26,10 @@ class InstallationService(BaseService):
         
         self.lib_file = self.local_lib_dir / LIB_FILENAME
         self.json_file = self.local_share_dir / JSON_FILENAME
-        self.cli_file = self.user_home / ".local" / "bin" / CLI_FILENAME
+        self.cli_file = self.user_home / CLI_DIR / CLI_FILENAME
     
     def install(self) -> InstallationResponse:
-        """Install the bundled lsfg-vk archive to ~/.local.
+        """Install the bundled lsfg-vk archive into this plugin's private storage.
         
         Returns:
             InstallationResponse with success status and message/error
@@ -120,9 +120,10 @@ class InstallationService(BaseService):
             with open(src_file, 'r') as f:
                 json_data = json.load(f)
             
-            # The manifest lives under ~/.local/share/vulkan/implicit_layer.d.
+            # The private manifest lives at <plugin-root>/vulkan/implicit_layer.d,
+            # so the bundled library is two levels up at <plugin-root>/lib.
             if 'layer' in json_data and 'library_path' in json_data['layer']:
-                json_data['layer']['library_path'] = "../../../lib/liblsfg-vk-layer.so"
+                json_data['layer']['library_path'] = "../../lib/liblsfg-vk-layer.so"
             
             # Write the modified JSON file
             with open(dst_file, 'w') as f:
@@ -134,7 +135,7 @@ class InstallationService(BaseService):
             shutil.copy2(src_file, dst_file)
     
     def _create_config_file(self) -> None:
-        """Create or update the TOML config file in ~/.config/lsfg-vk with default configuration and detected DLL path
+        """Create or update this plugin's private TOML config with detected DLL path.
         
         If a config file already exists, preserve existing profiles and only update global settings like DLL path.
         """
@@ -186,7 +187,7 @@ class InstallationService(BaseService):
             self.log.debug(f"Could not log DLL path: {e}")
     
     def _create_lsfg_launch_script(self) -> None:
-        """Create the ~/lsfg launch script for easier game setup"""
+        """Create the isolated per-game launch script for easier game setup."""
         # Use the default configuration for the initial script
         from .config_schema import ConfigurationManager
         default_config = ConfigurationManager.get_defaults()

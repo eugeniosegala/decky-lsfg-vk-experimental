@@ -130,17 +130,17 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
     {
       id: 'try-first',
       title: 'Try first:',
-      command: '~/lsfg'
+      command: '~/.local/bin/lsfg-vk-experimental'
     },
     {
       id: 'try-full-path',
       title: "If that doesn't work, try full path:",
-      command: '/home/(username)/lsfg'
+      command: '/home/(username)/.local/bin/lsfg-vk-experimental'
     },
     {
       id: 'final-result',
       title: 'Final result should look like:',
-      command: '~/lsfg "usr/bin/flatpak"'
+      command: '~/.local/bin/lsfg-vk-experimental "usr/bin/flatpak"'
     }
   ];
 

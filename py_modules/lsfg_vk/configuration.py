@@ -102,7 +102,7 @@ class ConfigurationService(BaseService):
             return self._error_response(ConfigurationResponse, str(e), config=None)
     
     def update_lsfg_script(self, config: ConfigurationData) -> ConfigurationResponse:
-        """Update the ~/lsfg launch script with current configuration
+        """Update the isolated per-game launch script with current configuration
         
         Args:
             config: Configuration data to apply to the script
@@ -127,7 +127,7 @@ class ConfigurationService(BaseService):
             return self._error_response(ConfigurationResponse, str(e), config=None)
     
     def _generate_script_content(self, config: ConfigurationData) -> str:
-        """Generate the content for the ~/lsfg launch script
+        """Generate the content for the isolated per-game launch script
         
         Args:
             config: Configuration data to apply to the script
@@ -145,6 +145,7 @@ class ConfigurationService(BaseService):
         lines.extend(generate_script_lines(config))
         
         lines.extend([
+            f"export VK_IMPLICIT_LAYER_PATH={shlex.quote(str(self.local_share_dir))}",
             f"export LSFGVK_CONFIG={shlex.quote(str(self.config_file_path))}",
         ])
         lines.extend(self._profile_selection_lines(DEFAULT_PROFILE_NAME, config))
@@ -153,7 +154,7 @@ class ConfigurationService(BaseService):
         return "\n".join(lines) + "\n"
     
     def _generate_script_content_for_profile(self, profile_data: ProfileData) -> str:
-        """Generate the content for the ~/lsfg launch script with profile support
+        """Generate the isolated per-game launch script with profile support
         
         Args:
             profile_data: Profile data containing current profile and configurations
@@ -177,6 +178,7 @@ class ConfigurationService(BaseService):
         lines.extend(generate_script_lines(merged_config))
         
         lines.extend([
+            f"export VK_IMPLICIT_LAYER_PATH={shlex.quote(str(self.local_share_dir))}",
             f"export LSFGVK_CONFIG={shlex.quote(str(self.config_file_path))}",
         ])
         lines.extend(self._profile_selection_lines(current_profile, merged_config))
@@ -425,7 +427,7 @@ class ConfigurationService(BaseService):
             return self._error_response(ConfigurationResponse, str(e), config=None)
     
     def update_lsfg_script_from_profile_data(self, profile_data: ProfileData) -> ConfigurationResponse:
-        """Update the ~/lsfg launch script from profile data
+        """Update the isolated per-game launch script from profile data
         
         Args:
             profile_data: Profile data to apply to the script

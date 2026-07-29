@@ -47,7 +47,7 @@ export function UsageInstructions() {
         textAlign: "center"
           }}
         >
-          <strong>~/lsfg %command%</strong>
+          <strong>~/.local/bin/lsfg-vk-experimental %command%</strong>
         </div>
       </PanelSectionRow>
 
@@ -60,7 +60,20 @@ export function UsageInstructions() {
             marginTop: "8px"
           }}
         >
-The configuration is stored in ~/.config/lsfg-vk/conf.toml and hot-reloads while games are running.
+This experimental plugin uses its own layer and configuration at ~/.config/decky-lsfg-vk-experimental/conf.toml. It is selected only for games launched through this command.
+        </div>
+      </PanelSectionRow>
+
+      <PanelSectionRow>
+        <div
+          style={{
+            fontSize: "11px",
+            lineHeight: "1.3",
+            opacity: "0.6",
+            marginTop: "4px"
+          }}
+        >
+          Isolation bypasses other global implicit Vulkan layers for this game, such as vkBasalt. Use only one LSFG-VK wrapper per game.
         </div>
       </PanelSectionRow>
     </>
