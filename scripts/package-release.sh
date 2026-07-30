@@ -190,6 +190,8 @@ if [[ "$publish_release" == true ]]; then
     '' \
     '- **Display mode:** Use the game’s native **Fullscreen** mode where possible. Windowed or borderless mode does not normally improve lsfg-vk compatibility or attachment; use it only when a specific game requires it.' \
     '' \
+    '- **Steam menu / Game Mode:** With frame generation enabled, opening and closing the Steam menu can occasionally leave a game presenting at its base rate (often 60 fps on a 120 Hz display). It may recover after a few seconds; if it does not, quit and relaunch the game. This is a current lsfg-vk v2/Gamescope presentation limitation, not a failed Decky installation.' \
+    '' \
     '- **HDR:** HDR remains problematic with this payload. Disable HDR in the game or SteamOS before launching. The plugin has no general HDR control, so a game-specific HDR workaround must be applied outside the plugin.' \
     '' \
     '- **Changing multiplier:** Changing the FPS multiplier while a game is running can cause persistent performance degradation. Restart the game after changing the multiplier before judging performance.' \
