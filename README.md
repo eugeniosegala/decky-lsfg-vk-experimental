@@ -20,6 +20,31 @@ Test it per game before relying on it.
 > **Version-specific notes:** Check the [latest experimental release notes](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/releases)
 > for known issues and compatibility guidance for the bundled lsfg-vk build.
 
+## How v2 differs from the older layer
+
+This plugin packages `lsfg-vk 2.0.0-dev28`, a developer prerelease from upstream's v2 line. It is a substantial
+evolution of the Linux/Vulkan layer, rather than a separate Lossless Scaling algorithm: both old and new layers use the
+normal `Lossless.dll` installed by the Lossless Scaling Steam application.
+
+- **Reworked Vulkan backend:** Upstream has reworked synchronization, resource reuse, VRAM handling, pipeline caching,
+  and multi-instance/device handling. This is intended to improve robustness and efficiency, but game compatibility is
+  still build-specific.
+- **Per-game configuration:** Named profiles, automatic executable matching (`active_in`), and optional GPU/device
+  selection make it easier to use different settings for different games.
+- **Additional tooling:** v2 includes configuration validation and a frame-generation benchmark through `lsfg-vk-cli`,
+  alongside an updated configuration UI.
+- **Compatibility and runtime work:** The v2 line includes frame-pacing work and broader packaging/runtime support,
+  including newer Flatpak runtimes and x86 compatibility fixes.
+- **FP16:** v2 supports half-precision processing on compatible hardware, which can improve performance. The public
+  Decky plugin's older `fp16-test-2` payload already contains an early FP16 build, so this is not unique to this fork.
+
+**Image-quality note:** In our testing, the v2 full-quality path with **Performance Mode disabled** can show
+substantially less ghosting than the older build. Performance Mode remains useful when lower GPU overhead matters more
+than image quality. This is an observed result, not a guarantee: test each game and use the public/original plugin if it
+works better for that title.
+
+For the upstream change history, see [v1.0.0 compared with the current development line](https://github.com/PancakeTAS/lsfg-vk/compare/v1.0.0...develop).
+
 ## Installation
 
 1. **Download the plugin**
