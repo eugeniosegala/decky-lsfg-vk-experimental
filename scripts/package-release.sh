@@ -194,6 +194,13 @@ if [[ "$publish_release" == true ]]; then
     '' \
     '- **Changing multiplier:** Changing the FPS multiplier while a game is running can cause persistent performance degradation. Restart the game after changing the multiplier before judging performance.' \
     '' \
+    '## v2 improvements' \
+    '' \
+    '- **Reworked Vulkan layer:** The v2 line includes a rewritten backend with synchronization, resource-reuse, VRAM, pipeline-cache, and multi-device/instance improvements.' \
+    '- **More flexible configuration:** Named profiles, automatic executable matching, optional GPU selection, frame-pacing work, and CLI validation/benchmark tools are available.' \
+    '- **Quality/performance choice:** In testing, v2 with **Performance Mode disabled** can produce less ghosting than the older build. Performance Mode remains available when lower GPU overhead matters more than image quality.' \
+    '- **FP16:** Half-precision processing is available on compatible hardware and can improve performance. Results vary by game and GPU.' \
+    '' \
     '## Updating an existing experimental installation' \
     '' \
     '1. Quit games currently launched with `~/.local/bin/lsfg-vk-experimental`.' \

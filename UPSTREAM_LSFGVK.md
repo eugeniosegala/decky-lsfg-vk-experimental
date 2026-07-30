@@ -16,7 +16,7 @@ that updates the bundled upstream payload.
 | Release asset              | `lsfg-vk-2.0.0-dev28-linux.tar.xz`                                                                    |
 | Asset SHA-256              | `bb2b691939fc6c51888b10349345a3c0ae9ad0b5c3892fd7859d0cdf697b734e`                                    |
 | Asset URL                  | `https://github.com/PancakeTAS/lsfg-vk/releases/download/v2.0.0-dev/lsfg-vk-2.0.0-dev28-linux.tar.xz` |
-| Decky plugin version       | `0.13.0-experimental.11`                                                                              |
+| Decky plugin version       | `0.13.0-experimental.12`                                                                              |
 | Decky plugin package ID    | `decky-lsfg-vk-experimental`                                                                          |
 
 The package is pinned to this release asset and SHA-256. The `develop` branch may advance independently; do not treat
