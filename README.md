@@ -37,6 +37,9 @@ layers use the normal `Lossless.dll` installed by the Lossless Scaling Steam app
   alongside an updated configuration UI.
 - **Compatibility and runtime work:** The v2 line includes frame-pacing work and broader packaging/runtime support,
   including newer Flatpak runtimes and x86 compatibility fixes.
+- **Emulator startup crash fix:** This payload includes the mip-extent clamp and defensive null-memory handling from
+  upstream [PR #544](https://github.com/PancakeTAS/lsfg-vk/pull/544). It addresses a known crash when affected Switch
+  emulators create a small transient Vulkan swapchain during startup. Test each emulator and game individually.
 - **FP16:** v2 supports half-precision processing on compatible hardware, which can improve performance. The public
   Decky plugin's older `fp16-test-2` payload already contains an early FP16 build, so this is not unique to this fork.
 - **Armada launch handling:** On Armada hosts, the generated launcher preserves the required game-launch wrapper used

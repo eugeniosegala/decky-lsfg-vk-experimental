@@ -92,6 +92,19 @@ read -r archive_name engine_version package_version github_repository < <(
   ' "$project_dir/package.json"
 )
 
+engine_highlights="$(
+  node -e '
+    const manifest = require(process.argv[1]);
+    const [binary] = manifest.remote_binary ?? [];
+    const highlights = binary?.release_highlights ?? [];
+    if (!Array.isArray(highlights) || highlights.some((highlight) => typeof highlight !== "string" || !highlight.trim())) {
+      process.exitCode = 1;
+      throw new Error("remote_binary release_highlights must be an array of non-empty strings");
+    }
+    process.stdout.write(highlights.map((highlight) => `- ${highlight}`).join("\n"));
+  ' "$project_dir/package.json"
+)"
+
 if [[ "$output_path_set" == false ]]; then
   output_path="$project_dir/out/Decky.LSFG-VK.Experimental-$package_version.zip"
 elif [[ "$output_path" != /* ]]; then
@@ -169,6 +182,12 @@ printf '%s\n' \
   '' \
   "- Bundles checksum-verified \`$archive_name\`." \
   > "$notes_file"
+
+if [[ -n "$engine_highlights" ]]; then
+  printf '\n## Engine-specific changes — lsfg-vk %s\n\n%s\n\nThanks to PacificSilent / BugExciting6625 for reporting, diagnosing, and contributing this fix.\n' \
+    "$engine_version" "$engine_highlights" \
+    >> "$notes_file"
+fi
 
 echo "Publishing $release_tag to $github_repository..."
 git -C "$project_dir" push origin "$current_branch"

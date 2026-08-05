@@ -53,6 +53,9 @@
       "source_repository": "https://github.com/eugeniosegala/lsfg-vk-experimental",
       "release_tag": "v2.0.0-dev28-experimental.1",
       "source_commit": "82e0d49976db8bce5e472fa154526e971529e091",
+      "release_highlights": [
+        "Includes the mip-extent clamp and defensive null-memory handling from upstream PR #544. This addresses a known startup crash with affected Switch emulators (including Eden, Ryujinx, and Yuzu forks) when they create a small transient Vulkan swapchain. Test each emulator and game individually."
+      ],
       "url": "https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.1/lsfg-vk-2.0.0-dev28-experimental.1-linux.tar.xz",
       "sha256hash": "d447f6e821d76cffbcb003cfabdd81e1c7ea35c30d9c92c11ec498d4be28e9b2"
     }

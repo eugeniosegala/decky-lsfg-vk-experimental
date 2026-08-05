@@ -25,6 +25,16 @@ The package is pinned to this release asset and SHA-256. The experimental fork's
 independently; do not treat newer commits as integrated until an immutable release asset, its checksum, and the
 configuration changes have been reviewed.
 
+## Release-specific compatibility changes
+
+- Includes the two commits from the still-open upstream [PR #544](https://github.com/PancakeTAS/lsfg-vk/pull/544):
+  `fix: backend: clamp mip extents to at least 1` and `fix: common: reject null memory handles from vkAllocateMemory`.
+- The clamp addresses a known startup crash in affected Switch emulators when a temporary small Vulkan swapchain could
+  create a zero-sized mip level. The defensive check makes the same class of invalid allocation fail through lsfg-vk's
+  normal error path rather than dereferencing a null handle in the driver.
+- The fix is present in this fork release, but upstream PR #544 was still open when the payload was reviewed. Treat it
+  as an emulator-compatibility improvement, not a guarantee for every emulator or game.
+
 ## Decky integration commits
 
 - `b846c9aa4834213122533bea4134904f9081fc7b` — core installer, configuration, launcher, UI, and documentation update.
