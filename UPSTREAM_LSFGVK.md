@@ -6,20 +6,20 @@ Update both in the same commit.
 
 ## Current baseline
 
-| Item                         | Value                                                                                                                              |
-|------------------------------|------------------------------------------------------------------------------------------------------------------------------------|
-| Release repository           | [`eugeniosegala/lsfg-vk-experimental`](https://github.com/eugeniosegala/lsfg-vk-experimental)                                    |
-| Tracked branch               | `develop`                                                                                                                          |
-| Last checked                 | 2026-08-05                                                                                                                         |
-| Integrated source commit     | `82e0d49976db8bce5e472fa154526e971529e091`                                                                                         |
-| Commit date and subject      | 2026-08-05 — `docs: include v2 limits in release notes`                                                                            |
-| Experimental prerelease tag  | `v2.0.0-dev28-experimental.1`                                                                                                      |
-| Upstream lineage             | [`PancakeTAS/lsfg-vk`](https://github.com/PancakeTAS/lsfg-vk) `2.0.0-dev28`                                                        |
-| Release asset                | `lsfg-vk-2.0.0-dev28-experimental.1-linux.tar.xz`                                                                                   |
-| Asset SHA-256                | `d447f6e821d76cffbcb003cfabdd81e1c7ea35c30d9c92c11ec498d4be28e9b2`                                                                 |
-| Asset URL                    | `https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.1/lsfg-vk-2.0.0-dev28-experimental.1-linux.tar.xz` |
-| Decky plugin version         | `0.13.0-experimental.13`                                                                                                            |
-| Decky plugin package ID      | `decky-lsfg-vk-experimental`                                                                                                        |
+| Item                        | Value                                                                                                                                                 |
+|-----------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Release repository          | [`eugeniosegala/lsfg-vk-experimental`](https://github.com/eugeniosegala/lsfg-vk-experimental)                                                         |
+| Tracked branch              | `develop`                                                                                                                                             |
+| Last checked                | 2026-08-05                                                                                                                                            |
+| Integrated source commit    | `82e0d49976db8bce5e472fa154526e971529e091`                                                                                                            |
+| Commit date and subject     | 2026-08-05 — `docs: include v2 limits in release notes`                                                                                               |
+| Experimental prerelease tag | `v2.0.0-dev28-experimental.1`                                                                                                                         |
+| Upstream lineage            | [`PancakeTAS/lsfg-vk`](https://github.com/PancakeTAS/lsfg-vk) `2.0.0-dev28`                                                                           |
+| Release asset               | `lsfg-vk-2.0.0-dev28-experimental.1-linux.tar.xz`                                                                                                     |
+| Asset SHA-256               | `d447f6e821d76cffbcb003cfabdd81e1c7ea35c30d9c92c11ec498d4be28e9b2`                                                                                    |
+| Asset URL                   | `https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.1/lsfg-vk-2.0.0-dev28-experimental.1-linux.tar.xz` |
+| Decky plugin version        | `0.13.0-experimental.13`                                                                                                                              |
+| Decky plugin package ID     | `decky-lsfg-vk-experimental`                                                                                                                          |
 
 The package is pinned to this release asset and SHA-256. The experimental fork's `develop` branch may advance
 independently; do not treat newer commits as integrated until an immutable release asset, its checksum, and the
