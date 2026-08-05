@@ -8,11 +8,6 @@ include this directory in the distributable ZIP. The runtime payload included
 in a release ZIP remains the single archive declared and checksum-pinned in
 `package.json`.
 
-The current experimental archive carries the two changes documented in
-[`UPSTREAM_LSFGVK.md`](../../UPSTREAM_LSFGVK.md): the mip-extent clamp and defensive null-memory handling from
-[PancakeTAS/lsfg-vk PR #544](https://github.com/PancakeTAS/lsfg-vk/pull/544). The matching unmodified upstream archive
-is retained under `v2.0.0-dev28/` for comparison and recovery.
-
 ## v2.0.0-dev28-experimental.1
 
 - Source repository: `https://github.com/eugeniosegala/lsfg-vk-experimental`
