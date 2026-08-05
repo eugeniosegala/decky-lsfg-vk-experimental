@@ -133,15 +133,15 @@ printf '%s\n' \
   '3. Choose **Developer** > **Install Plugin from Zip**, then select the downloaded ZIP.' \
   '4. In the plugin, select **Install Experimental LSFG-VK (developer build)** and add `~/.local/bin/lsfg-vk-experimental %command%` to the game’s Steam launch options.' \
   '' \
-  "## Known limitations — lsfg-vk $engine_version" \
-  '' \
-  '- **Display mode:** Use the game’s native **Fullscreen** mode where possible. Windowed or borderless mode does not normally improve lsfg-vk compatibility or attachment; use it only when a specific game requires it.' \
+  "## Known limitations of lsfg-vk $engine_version" \
   '' \
   '- **Steam menu / Game Mode:** With frame generation enabled, opening and closing the Steam menu can occasionally leave a game presenting at its base rate (often 60 fps on a 120 Hz display). It may recover after a few seconds; if it does not, quit and relaunch the game. This is a current lsfg-vk v2/Gamescope presentation limitation, not a failed Decky installation.' \
   '' \
-  '- **HDR:** HDR remains problematic with this payload. Disable HDR in the game or SteamOS before launching. The plugin has no general HDR control, so a game-specific HDR workaround must be applied outside the plugin.' \
+  '- **HDR:** HDR remains problematic with this payload. Disable HDR in the game before playing; it can remain enabled in SteamOS. The plugin has no general HDR control, and the v1 HDR toggle was also non-functional.' \
   '' \
-  '- **Changing multiplier:** Changing the FPS multiplier while a game is running can cause persistent performance degradation. Restart the game after changing the multiplier before judging performance.' \
+  '- **No 0x multiplier:** lsfg-vk v2 supports only 2x, 3x, or 4x. Unlike v1, there is no 0x multiplier. To run a game without frame generation, use the dedicated **Disable Frame Generation** setting and restart the game.' \
+  '' \
+  '- **Isolation trade-offs:** The public and experimental plugins can coexist, but a game launched with the experimental wrapper cannot use vkBasalt or other globally installed Vulkan layers, such as overlay or post-processing layers. This affects only that game. If it needs those layers, switch its launch option back to the public plugin’s `~/lsfg %command%` wrapper.' \
   '' \
   '## This release: emulator startup compatibility' \
   '' \
