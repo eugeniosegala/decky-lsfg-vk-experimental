@@ -73,7 +73,7 @@ For the upstream change history, see [v1.0.0 compared with the current developme
 1. **Purchase and install** [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) from Steam
 2. **Open the plugin** from the Decky menu
 3. **Click "Install Experimental LSFG-VK (developer build)"** to set up this fork's private lsfg-vk Vulkan layer
-4. **Configure settings** using the plugin's UI — choose an FPS multiplier, flow scale, performance mode, FP16 behavior,
+4. **Configure settings** using the plugin's UI; choose an FPS multiplier, flow scale, performance mode, FP16 behavior,
    and optional executable/GPU matching rules
 5. **Apply launch option** to games you want to use frame generation with:
     - Add `~/.local/bin/lsfg-vk-experimental %command%` to your game's launch options in Steam Properties
@@ -86,7 +86,7 @@ Install a newer experimental ZIP **in place**; do not uninstall this plugin firs
 
 1. Quit any game currently using `~/.local/bin/lsfg-vk-experimental`.
 2. Download the newer ZIP from [this fork's releases](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/releases).
-3. In Game Mode, open Decky Loader's settings, then choose **Developer** → **Install Plugin from Zip** and select it.
+3. In Game Mode, open Decky Loader's settings, then choose **Developer** > **Install Plugin from Zip** and select it.
 4. Reload the plugin from Decky, or restart Game Mode if it does not reload automatically.
 
 Your experimental profiles, private layer files, and existing Steam launch options are retained. Keep the public/original
@@ -108,7 +108,7 @@ configure a particular Flatpak app through only one LSFG-VK plugin at a time.
 
 ### Switching a game between plugins
 
-The choice is made entirely in that game's **Steam Properties → Launch Options**. Quit the game, then replace the
+The choice is made entirely in that game's **Steam Properties > Launch Options**. Quit the game, then replace the
 LSFG-VK launcher command with the other one; do not combine them.
 
 | To use                               | Steam launch option                           |
@@ -121,16 +121,11 @@ For example, to move a game from the experimental plugin back to the public plug
 replacing it in the opposite direction. Configure FPS multiplier, flow scale, and other settings in the Decky plugin you
 selected; each plugin keeps its own configuration.
 
-### What the isolated per-game launcher does
+### Isolation: coexistence and trade-offs
 
-`~/.local/bin/lsfg-vk-experimental` is a small launcher script installed **once**, not a separate lsfg-vk installation
-for every game. When Steam starts a game through it, the script temporarily points that game process at this plugin's
-single private lsfg-vk library, Vulkan manifest, and configuration, then starts `%command%` (Steam's placeholder for the
-real game command). The same private installation is reused by every game that has the experimental launch option.
-
-This is why it is called *per-game isolation*: the launch option chooses which already-installed plugin a particular
-game sees. It does not duplicate the Vulkan layer or Lossless Scaling files per game, and it does not make a persistent
-system-wide Vulkan change. Closing the game removes the temporary environment settings automatically.
+The public and experimental plugins can coexist, but games launched with the experimental wrapper cannot use vkBasalt
+or other globally installed Vulkan layers (such as overlay or post-processing layers). This affects only that game;
+switch its launch option back to the public plugin's `~/lsfg %command%` wrapper if it needs those layers.
 
 ## Configuration Options
 
@@ -138,7 +133,9 @@ The plugin provides several configuration options to optimize frame generation f
 
 ### Core Settings
 
-- **FPS Multiplier**: Choose 2x, 3x, or 4x frame generation. The minimum is 2x.
+- **FPS Multiplier**: Choose 2x, 3x, or 4x frame generation. The minimum is 2x. The 0x/disabled choice
+  available in the older v1 integration is not supported by lsfg-vk v2, so this plugin cannot restore it. Use
+  **Disable Frame Generation** instead when you need to launch a game without frame generation.
 - **Flow Scale**: Choose a value from 0.25 to 1.0 (lower generally favors performance; higher favors optical-flow
   quality).
 - **Performance Mode**: Uses a lighter frame-generation model to reduce GPU overhead, at the cost of more visual artifacts.
@@ -149,7 +146,7 @@ The plugin provides several configuration options to optimize frame generation f
   selection to lsfg-vk's native automatic matching; otherwise it uses the profile selected in Decky.
 - **GPU**: Optionally select the GPU identifier that lsfg-vk should use.
 
-### Launch compatibility settings
+### Optional launch settings
 
 - **Base FPS Cap**: Optionally caps the base framerate for DirectX games before the frame multiplier is applied.
 - **WoW64**: Enables `PROTON_USE_WOW64=1` for compatible 32-bit games, primarily as a ProtonGE crash workaround.
@@ -161,61 +158,14 @@ This plugin currently writes only `pacing = 'none'` and does not expose HDR or d
 [latest experimental release notes](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/releases) for
 build-specific compatibility notes.
 
-## Feedback and Support
-
-For per-game feedback and community support, please join
-the [decky-lsfg-vk Discord Channel](https://discord.gg/TwvHdVucC3)
-
-## Troubleshooting
-
-**Frame generation not working?**
-
-- Ensure you've added `~/.local/bin/lsfg-vk-experimental %command%` to your game's launch options
-- Check that the Lossless Scaling DLL was detected correctly in the plugin
-- Try enabling Performance Mode when frame generation has too much GPU overhead; expect more visual artifacts
-- Make sure your game is using a supported Vulkan presentation path
-- Check the [latest experimental release notes](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/releases)
-  for build-specific known issues
-
-**Performance issues?**
-
-- Lower the Flow Scale setting for better performance
-- Enable Performance Mode when lower GPU overhead matters more than image quality
-- Try reducing the FPS multiplier from 4x to 2x or 3x
-- Try **Base FPS Cap** for DirectX games when the game needs a lower base framerate before frame generation
-
-## What it does
-
-The plugin:
-
-- Extracts the bundled, checksum-verified lsfg-vk payload to `~/.local/share/decky-lsfg-vk-experimental/`
-- Keeps its manifest out of Vulkan's global implicit-layer directory and exports `VK_IMPLICIT_LAYER_PATH` only from its
-  wrapper
-- Creates a TOML configuration file in `~/.config/decky-lsfg-vk-experimental/conf.toml` with your settings
-- Automatically detects your Lossless Scaling DLL installation
-- Provides an easy-to-use interface to configure frame generation settings:
-    - **FPS Multiplier**: Choose 2x, 3x, or 4x frame generation
-    - **Flow Scale**: Adjust motion estimation quality vs performance
-    - **Performance Mode**: Lower GPU overhead with more visual artifacts
-    - **Allow FP16**, executable matching, and optional GPU selection
-- Provides launch compatibility controls for DirectX base FPS caps, WoW64, Steam Deck mode, MangoHud, Gamescope WSI,
-  and Zink
-- Writes the current lsfg-vk TOML configuration format, including named profiles
-- Uses the upstream `LSFGVK_CONFIG` and `LSFGVK_PROFILE` launch environment variables without overriding `active_in`
-  matching
-- Configures Flatpak applications with this plugin's private config and Lossless Scaling filesystem access; Flatpak
-  runtime extensions remain shared system resources, so configure a given Flatpak app through only one plugin
-- Removes its private layer, manifest, CLI, and launcher on uninstall while preserving the private configuration for a
-  later reinstall; shared Flatpak extensions are not removed automatically
-
-## Create a local install archive
+## Create a local installation archive
 
 Install pnpm and the JavaScript dependencies once, then run the local packager. If you use Volta, install pnpm with
 `volta install pnpm`; otherwise, enable it with your preferred Node.js package-manager setup.
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm run package
+pnpm run package:local
 ```
 
 This creates `out/Decky.LSFG-VK.Experimental.zip`. The script regenerates configuration bindings, builds the frontend,
@@ -223,7 +173,7 @@ downloads the engine archive declared in `package.json`, verifies its SHA-256 ch
 needs. Pass a path directly to use a different output location:
 
 ```bash
-scripts/package-release.sh /path/to/Decky.LSFG-VK.Experimental.zip
+pnpm run package:local -- /path/to/Decky.LSFG-VK.Experimental.zip
 ```
 
 ## Publish a GitHub pre-release
@@ -232,20 +182,20 @@ After committing the version and release changes on a clean checkout, authentica
 `gh auth login -h github.com`, then run:
 
 ```bash
-pnpm run publish-release
+pnpm run package:publish
 ```
 
 This verifies and builds the ZIP, creates or verifies the matching `v<package-version>` tag, pushes the current branch
 and tag, generates Deck installation notes, and creates or updates the matching GitHub pre-release with the ZIP
-attached. Publishing is opt-in; `pnpm run package` never pushes or changes GitHub. `./scripts/package.sh`,
-`./scripts/publish.sh`, and the short `just package` / `just publish` recipes are equivalent alternatives. The
-underlying command remains `scripts/package-release.sh`, with `--publish` enabling GitHub operations.
+attached. Publishing is opt-in; `pnpm run package:local` never pushes or changes GitHub.
 
 The release version must be committed first. The script creates a new matching tag, or accepts an existing tag only
 when it already points to the current commit; it never moves a published tag to newer code.
 
 ## Credits
 
+- **[Kurt Himebauch / xXJSONDeruloXx](https://github.com/xXJSONDeruloXx/decky-lsfg-vk)** for creating the original
+  Decky LSFG-VK plugin on which this experimental fork is based
 - **[PancakeTAS](https://github.com/PancakeTAS/lsfg-vk)** for creating the lsfg-vk Vulkan compatibility layer
 - **[Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/)** developers for the original frame
   generation technology

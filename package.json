@@ -6,8 +6,8 @@
   "scripts": {
     "build": "rollup -c",
     "watch": "rollup -c -w",
-    "package": "./scripts/package.sh",
-    "publish-release": "./scripts/publish.sh",
+    "package:local": "./scripts/package-local.sh",
+    "package:publish": "./scripts/publish-package.sh",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
