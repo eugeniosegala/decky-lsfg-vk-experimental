@@ -1,5 +1,6 @@
 import { ButtonItem, PanelSectionRow } from "@decky/ui";
 import { FaDownload, FaTrash } from "react-icons/fa";
+import t from "../i18n/i18n";
 
 interface InstallationButtonProps {
   isInstalled: boolean;
@@ -22,7 +23,7 @@ export function InstallationButton({
     if (isInstalling) {
       return (
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <div>Installing experimental LSFG-VK...</div>
+          <div>{t("INSTALL_INSTALLING", "Installing experimental LSFG-VK...")}</div>
         </div>
       );
     }
@@ -30,7 +31,7 @@ export function InstallationButton({
     if (isUninstalling) {
       return (
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <div>Removing experimental LSFG-VK...</div>
+          <div>{t("INSTALL_UNINSTALLING", "Removing experimental LSFG-VK...")}</div>
         </div>
       );
     }

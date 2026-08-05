@@ -1,4 +1,5 @@
 import { PanelSectionRow } from "@decky/ui";
+import t from "../i18n/i18n";
 
 export function UsageInstructions() {
   return (
@@ -13,7 +14,7 @@ export function UsageInstructions() {
             color: "white"
           }}
         >
-          Usage Instructions
+          {t("USAGE_TITLE", "Usage Instructions")}
         </div>
       </PanelSectionRow>
 
@@ -26,7 +27,7 @@ export function UsageInstructions() {
             whiteSpace: "pre-wrap"
           }}
         >
-          Click "Copy Launch Option" button, then paste it into your Steam game's launch options to enable frame generation.
+          {t("USAGE_DESC", "Click \"Copy Launch Option\" button, then paste it into your Steam game's launch options to enable frame generation.")}
         </div>
       </PanelSectionRow>
 
