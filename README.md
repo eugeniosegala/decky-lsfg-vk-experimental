@@ -4,10 +4,11 @@
   <img src="assets/decky-lossless-logo-experimental.png" width="256" alt="Decky LSFG-VK Experimental logo" />
 </p>
 
-> **Experimental fork:** This is a fork of the original [Decky LSFG-VK](https://github.com/xXJSONDeruloXx/decky-lsfg-vk)
-> plugin. It packages the reviewed `v2.0.0-dev28-experimental.1` prerelease from
-> [lsfg-vk Experimental](https://github.com/eugeniosegala/lsfg-vk-experimental), based on the lsfg-vk v2 dev28 line.
-> It is independently developed and not officially supported by the creators of Lossless Scaling or lsfg-vk.
+> **Experimental fork:** This independently developed fork of the original
+> [Decky LSFG-VK](https://github.com/xXJSONDeruloXx/decky-lsfg-vk) plugin packages experimental changes from
+> [lsfg-vk Experimental](https://github.com/eugeniosegala/lsfg-vk-experimental), built on top of the lsfg-vk v2 dev28
+> line with the explicit goal of pushing the library to its limits. It is not officially supported by the creators of
+> Lossless Scaling or lsfg-vk.
 
 ## What is this?
 
