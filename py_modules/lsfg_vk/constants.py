@@ -11,10 +11,10 @@ CONFIG_DIR = ".config/decky-lsfg-vk-experimental"
 
 SCRIPT_NAME = ".local/bin/lsfg-vk-experimental"
 CONFIG_FILENAME = "conf.toml"
-# Bundled upstream payload names
+# Bundled upstream payload filenames. The archive name is read from the packaged
+# package.json remote_binary record so the release pin has one source of truth.
 LIB_FILENAME = "liblsfg-vk-layer.so"
 JSON_FILENAME = "VkLayer_LSFGVK_frame_generation.json"
-ARCHIVE_FILENAME = "lsfg-vk-2.0.0-dev28-linux.tar.xz"
 CLI_FILENAME = "lsfg-vk-cli"
 CLI_DIR = f"{EXPERIMENTAL_ROOT}/bin"
 

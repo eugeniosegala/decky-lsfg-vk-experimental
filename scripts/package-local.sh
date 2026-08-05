@@ -73,15 +73,15 @@ else
   exit 1
 fi
 
-read -r archive_name archive_url archive_checksum < <(
+read -r archive_name archive_version archive_url archive_checksum < <(
   node -e '
     const manifest = require(process.argv[1]);
     const [binary] = manifest.remote_binary ?? [];
-    if (!binary?.name || !binary?.url || !binary?.sha256hash) {
+    if (!binary?.name || !binary?.version || !binary?.url || !binary?.sha256hash) {
       process.exitCode = 1;
-      throw new Error("package.json must define one verified remote_binary entry");
+      throw new Error("package.json must define one versioned, verified remote_binary entry");
     }
-    process.stdout.write(`${binary.name}\t${binary.url}\t${binary.sha256hash}\n`);
+    process.stdout.write(`${binary.name}\t${binary.version}\t${binary.url}\t${binary.sha256hash}\n`);
   ' "$project_dir/package.json"
 )
 
@@ -112,7 +112,7 @@ echo "Building frontend..."
   npm run build
 )
 
-echo "Downloading verified engine payload..."
+echo "Downloading verified lsfg-vk $archive_version payload..."
 mkdir -p "$package_dir/bin" "$package_dir/dist" "$package_dir/py_modules"
 curl --fail --location --silent --show-error "$archive_url" \
   --output "$package_dir/bin/$archive_name"

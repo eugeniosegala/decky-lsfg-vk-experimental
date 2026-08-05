@@ -12,7 +12,7 @@ from typing import Dict, Any
 
 from .base_service import BaseService
 from .constants import (
-    LIB_FILENAME, JSON_FILENAME, ARCHIVE_FILENAME, CLI_FILENAME, CLI_DIR, BIN_DIR,
+    LIB_FILENAME, JSON_FILENAME, CLI_FILENAME, CLI_DIR, BIN_DIR,
 )
 from .config_schema import ConfigurationManager
 from .types import InstallationResponse, UninstallationResponse, InstallationCheckResponse
@@ -36,10 +36,10 @@ class InstallationService(BaseService):
         """
         try:
             plugin_dir = Path(__file__).parent.parent.parent
-            archive_path = plugin_dir / BIN_DIR / ARCHIVE_FILENAME
+            archive_path = self._bundled_archive_path(plugin_dir)
             
             if not archive_path.exists():
-                error_msg = f"{ARCHIVE_FILENAME} not found at {archive_path}"
+                error_msg = f"Bundled lsfg-vk archive not found at {archive_path}"
                 self.log.error(error_msg)
                 return self._error_response(InstallationResponse, error_msg, message="")
             
@@ -62,6 +62,21 @@ class InstallationService(BaseService):
             error_msg = f"Unexpected error installing lsfg-vk: {str(e)}"
             self.log.error(error_msg)
             return self._error_response(InstallationResponse, str(e), message="")
+
+    def _bundled_archive_path(self, plugin_dir: Path) -> Path:
+        """Return the archive named by this plugin's canonical package metadata."""
+        manifest_path = plugin_dir / "package.json"
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            binaries = manifest.get("remote_binary")
+            if not isinstance(binaries, list) or len(binaries) != 1:
+                raise ValueError("package.json must define exactly one remote_binary entry")
+            archive_name = binaries[0].get("name")
+            if not isinstance(archive_name, str) or Path(archive_name).name != archive_name:
+                raise ValueError("remote_binary name must be a filename")
+            return plugin_dir / BIN_DIR / archive_name
+        except (OSError, json.JSONDecodeError, TypeError, ValueError, KeyError) as exc:
+            raise OSError(f"Could not read bundled lsfg-vk metadata from {manifest_path}: {exc}") from exc
     
     def _extract_and_install_files(self, archive_path: Path) -> None:
         """Install the layer, manifest, and optional CLI from an upstream tar.xz.

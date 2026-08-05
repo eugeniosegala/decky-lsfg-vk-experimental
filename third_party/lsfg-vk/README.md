@@ -8,7 +8,11 @@ include this directory in the distributable ZIP. The runtime payload included
 in a release ZIP remains the single archive declared and checksum-pinned in
 `package.json`.
 
-## v2.0.0-dev28
+## v2.0.0-dev28-experimental.1
 
-- Source: `https://github.com/PancakeTAS/lsfg-vk/releases/download/v2.0.0-dev/lsfg-vk-2.0.0-dev28-linux.tar.xz`
-- SHA-256: `bb2b691939fc6c51888b10349345a3c0ae9ad0b5c3892fd7859d0cdf697b734e`
+- Source repository: `https://github.com/eugeniosegala/lsfg-vk-experimental`
+- Release tag: `v2.0.0-dev28-experimental.1`
+- Source commit: `82e0d49976db8bce5e472fa154526e971529e091`
+- Upstream lineage: `lsfg-vk 2.0.0-dev28`
+- Source: `https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.1/lsfg-vk-2.0.0-dev28-experimental.1-linux.tar.xz`
+- SHA-256: `d447f6e821d76cffbcb003cfabdd81e1c7ea35c30d9c92c11ec498d4be28e9b2`

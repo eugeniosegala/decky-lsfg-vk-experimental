@@ -76,7 +76,7 @@ if [[ -n "$(git -C "$project_dir" status --porcelain --untracked-files=normal)" 
   exit 1
 fi
 
-read -r archive_name package_version github_repository < <(
+read -r archive_name engine_version package_version github_repository < <(
   node -e '
     const manifest = require(process.argv[1]);
     const [binary] = manifest.remote_binary ?? [];
@@ -84,11 +84,11 @@ read -r archive_name package_version github_repository < <(
     const githubRepository = repositoryUrl
       ?.replace(/^git\+https:\/\/github\.com\//, "")
       .replace(/\.git$/, "");
-    if (!binary?.name || !manifest.version || !githubRepository) {
+    if (!binary?.name || !binary?.version || !manifest.version || !githubRepository) {
       process.exitCode = 1;
-      throw new Error("package.json must define version, GitHub repository, and one remote_binary entry");
+      throw new Error("package.json must define version, GitHub repository, and one versioned remote_binary entry");
     }
-    process.stdout.write(`${binary.name}\t${manifest.version}\t${githubRepository}\n`);
+    process.stdout.write(`${binary.name}\t${binary.version}\t${manifest.version}\t${githubRepository}\n`);
   ' "$project_dir/package.json"
 )
 
@@ -133,7 +133,7 @@ printf '%s\n' \
   '3. Choose **Developer** > **Install Plugin from Zip**, then select the downloaded ZIP.' \
   '4. In the plugin, select **Install Experimental LSFG-VK (developer build)** and add `~/.local/bin/lsfg-vk-experimental %command%` to the game’s Steam launch options.' \
   '' \
-  '## Known limitations — lsfg-vk v2.0.0-dev28' \
+  "## Known limitations — lsfg-vk $engine_version" \
   '' \
   '- **Display mode:** Use the game’s native **Fullscreen** mode where possible. Windowed or borderless mode does not normally improve lsfg-vk compatibility or attachment; use it only when a specific game requires it.' \
   '' \

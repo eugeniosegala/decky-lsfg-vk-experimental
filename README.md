@@ -5,26 +5,28 @@
 </p>
 
 > **Experimental fork:** This is a fork of the original [Decky LSFG-VK](https://github.com/xXJSONDeruloXx/decky-lsfg-vk)
-> plugin. It packages the reviewed `v2.0.0-dev28` prerelease of [lsfg-vk](https://github.com/PancakeTAS/lsfg-vk). It is
-> independently developed and not officially supported by the creators of Lossless Scaling or lsfg-vk.
+> plugin. It packages the reviewed `v2.0.0-dev28-experimental.1` prerelease from
+> [lsfg-vk Experimental](https://github.com/eugeniosegala/lsfg-vk-experimental), based on the lsfg-vk v2 dev28 line.
+> It is independently developed and not officially supported by the creators of Lossless Scaling or lsfg-vk.
 
 ## What is this?
 
-A Decky plugin that installs and configures a pinned experimental [lsfg-vk](https://github.com/PancakeTAS/lsfg-vk)
+A Decky plugin that installs and configures a pinned experimental [lsfg-vk build](https://github.com/eugeniosegala/lsfg-vk-experimental)
 frame-generation layer on SteamOS, Bazzite, and other Decky Loader-compatible Linux systems.
 
-This experimental build pins upstream release `v2.0.0-dev28`. It installs into a private experimental directory and
-activates only games launched through its dedicated wrapper, so it can coexist with the public Decky LSFG-VK plugin.
-Test it per game before relying on it.
+This experimental build pins `v2.0.0-dev28-experimental.1`, an immutable release from the experimental lsfg-vk fork.
+Its upstream lineage is `v2.0.0-dev28`. It installs into a private experimental directory and activates only games
+launched through its dedicated wrapper, so it can coexist with the public Decky LSFG-VK plugin. Test it per game before
+relying on it.
 
 > **Version-specific notes:** Check the [latest experimental release notes](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/releases)
 > for known issues and compatibility guidance for the bundled lsfg-vk build.
 
 ## How v2 differs from the older layer
 
-This plugin packages `lsfg-vk 2.0.0-dev28`, a developer prerelease from upstream's v2 line. It is a substantial
-evolution of the Linux/Vulkan layer, rather than a separate Lossless Scaling algorithm: both old and new layers use the
-normal `Lossless.dll` installed by the Lossless Scaling Steam application.
+This plugin packages `lsfg-vk 2.0.0-dev28-experimental.1`, a fork release based on upstream's dev28 v2 line. It is a
+substantial evolution of the Linux/Vulkan layer, rather than a separate Lossless Scaling algorithm: both old and new
+layers use the normal `Lossless.dll` installed by the Lossless Scaling Steam application.
 
 - **Reworked Vulkan backend:** Upstream has reworked synchronization, resource reuse, VRAM handling, pipeline caching,
   and multi-instance/device handling. This is intended to improve robustness and efficiency, but game compatibility is

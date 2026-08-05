@@ -1,6 +1,6 @@
 {
   "name": "decky-lsfg-vk-experimental",
-  "version": "0.13.0-experimental.12",
+  "version": "0.13.0-experimental.13",
   "description": "Experimental lsfg-vk features for Lossless Scaling on Steam OS",
   "type": "module",
   "scripts": {
@@ -44,12 +44,17 @@
     "react-icons": "^5.3.0",
     "tslib": "^2.7.0"
   },
-  "remote_binary_bundling" : true,
+  "remote_binary_bundling": true,
   "remote_binary": [
     {
-      "name": "lsfg-vk-2.0.0-dev28-linux.tar.xz",
-      "url": "https://github.com/PancakeTAS/lsfg-vk/releases/download/v2.0.0-dev/lsfg-vk-2.0.0-dev28-linux.tar.xz",
-      "sha256hash": "bb2b691939fc6c51888b10349345a3c0ae9ad0b5c3892fd7859d0cdf697b734e"
+      "name": "lsfg-vk-2.0.0-dev28-experimental.1-linux.tar.xz",
+      "version": "2.0.0-dev28-experimental.1",
+      "lineage_version": "2.0.0-dev28",
+      "source_repository": "https://github.com/eugeniosegala/lsfg-vk-experimental",
+      "release_tag": "v2.0.0-dev28-experimental.1",
+      "source_commit": "82e0d49976db8bce5e472fa154526e971529e091",
+      "url": "https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.1/lsfg-vk-2.0.0-dev28-experimental.1-linux.tar.xz",
+      "sha256hash": "d447f6e821d76cffbcb003cfabdd81e1c7ea35c30d9c92c11ec498d4be28e9b2"
     }
   ],
   "pnpm": {
