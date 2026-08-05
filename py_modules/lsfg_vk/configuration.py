@@ -9,6 +9,7 @@ from typing import Dict, Any
 from .base_service import BaseService
 from .config_schema import ConfigurationManager, CONFIG_SCHEMA, ProfileData, DEFAULT_PROFILE_NAME
 from .config_schema_generated import ConfigurationData, get_script_generation_logic
+from .constants import ARMADA_DEVICE_ENV, ARMADA_GAME_LAUNCH
 from .types import ConfigurationResponse, ProfilesResponse, ProfileResponse
 
 
@@ -178,7 +179,7 @@ class ConfigurationService(BaseService):
             f"export LSFGVK_CONFIG={shlex.quote(str(self.config_file_path))}",
         ])
         lines.extend(self._profile_selection_lines(DEFAULT_PROFILE_NAME, config))
-        lines.append('exec "$@"')
+        lines.extend(self._generate_game_launch_lines())
         
         return "\n".join(lines) + "\n"
     
@@ -211,9 +212,32 @@ class ConfigurationService(BaseService):
             f"export LSFGVK_CONFIG={shlex.quote(str(self.config_file_path))}",
         ])
         lines.extend(self._profile_selection_lines(current_profile, merged_config))
-        lines.append('exec "$@"')
+        lines.extend(self._generate_game_launch_lines())
         
         return "\n".join(lines) + "\n"
+
+    @staticmethod
+    def _generate_game_launch_lines() -> list[str]:
+        """Preserve Armada's required host launcher when running under FEX.
+
+        This is intentionally host-gated, so ordinary SteamOS installs retain
+        the normal direct ``exec`` path.  The argument scan also avoids adding
+        the wrapper twice when a user already has it in Steam launch options.
+        """
+        device_env = ARMADA_DEVICE_ENV.as_posix()
+        game_launch = ARMADA_GAME_LAUNCH.as_posix()
+        return [
+            f'armada_game_launch="{game_launch}"',
+            'for argument in "$@"; do',
+            '    if [ "$argument" = "$armada_game_launch" ]; then',
+            '        exec "$@"',
+            "    fi",
+            "done",
+            f'if [ -f "{device_env}" ] && [ -x "$armada_game_launch" ]; then',
+            '    exec "$armada_game_launch" "$@"',
+            "fi",
+            'exec "$@"',
+        ]
     
     def _get_profile_data(self) -> ProfileData:
         """Get current profile data from config file"""

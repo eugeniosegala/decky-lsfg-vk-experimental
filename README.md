@@ -37,6 +37,9 @@ normal `Lossless.dll` installed by the Lossless Scaling Steam application.
   including newer Flatpak runtimes and x86 compatibility fixes.
 - **FP16:** v2 supports half-precision processing on compatible hardware, which can improve performance. The public
   Decky plugin's older `fp16-test-2` payload already contains an early FP16 build, so this is not unique to this fork.
+- **Armada launch handling:** On Armada hosts, the generated launcher preserves the required game-launch wrapper used
+  for FEX, controller, and runtime setup. This does not substitute an older ARM-only LSFG build for this fork's pinned
+  v2 developer payload.
 
 **Image-quality note:** In our testing, the v2 full-quality path with **Performance Mode disabled** can show
 substantially less ghosting than the older build. Performance Mode remains useful when lower GPU overhead matters more

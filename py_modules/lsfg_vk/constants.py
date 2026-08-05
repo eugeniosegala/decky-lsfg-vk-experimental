@@ -20,6 +20,11 @@ CLI_DIR = f"{EXPERIMENTAL_ROOT}/bin"
 
 BIN_DIR = "bin"
 
+# Armada runs Steam through FEX and requires its host launcher to apply the
+# game-specific runtime and controller configuration.
+ARMADA_DEVICE_ENV = Path("/usr/libexec/armada/device-env")
+ARMADA_GAME_LAUNCH = Path("/usr/libexec/armada/armada-game-launch")
+
 STEAM_COMMON_PATH = Path("steamapps/common/Lossless Scaling")
 LOSSLESS_DLL_NAME = "Lossless.dll"
 
