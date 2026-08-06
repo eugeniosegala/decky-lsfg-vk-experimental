@@ -17,7 +17,8 @@ frame-generation layer on SteamOS, Bazzite, and other Decky Loader-compatible Li
 This experimental build pins `v2.0.0-dev28-experimental.1`, an immutable release from the experimental lsfg-vk fork.
 Its upstream lineage is `v2.0.0-dev28`. It installs into a private experimental directory and activates only games
 launched through its dedicated wrapper, so it can coexist with the public Decky LSFG-VK plugin. Test it per game before
-relying on it.
+relying on it. The exact release asset, checksum, and integration record are documented in
+[UPSTREAM_LSFGVK.md](UPSTREAM_LSFGVK.md).
 
 > **Version-specific notes:** Check the [latest experimental release notes](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/releases)
 > for known issues and compatibility guidance for the bundled lsfg-vk build.
