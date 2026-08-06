@@ -128,6 +128,8 @@ notes_file="$notes_dir/release-notes.md"
 printf '%s\n' \
   '## Installation' \
   '' \
+  'New to Decky or installing this plugin for the first time? See the [full Install and use guide](https://github.com/eugeniosegala/decky-lsfg-vk-experimental#install-and-use) for Decky Loader setup and prerequisites.' \
+  '' \
   "1. Download \`$(basename "$output_path")\` below." \
   "2. On the Steam OS, open Decky Loader's settings and enable **Developer Mode**." \
   '3. Choose **Developer** > **Install Plugin from Zip**, then select the downloaded ZIP.' \

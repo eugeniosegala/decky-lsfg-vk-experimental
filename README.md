@@ -50,17 +50,23 @@ works better for that title.
 
 For the upstream change history, see [v1.0.0 compared with the current development line](https://github.com/PancakeTAS/lsfg-vk/compare/v1.0.0...develop).
 
-## Installation
+## Install and use
 
-1. **Download the plugin**
-   from [this fork's releases](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/releases)
-   - Download the release asset ending in `.zip` to your Steam Deck, for example
-     `Decky.LSFG-VK.Experimental-<version>.zip`
-2. **Install manually through Decky**:
-    - In Game Mode, go to the settings cog in the top right of the Decky Loader tab
-    - Enable "Developer Mode"
-    - Go to "Developer" tab and select "Install Plugin from Zip"
-   - Select the downloaded experimental plugin ZIP
+1. **Install Decky Loader** if it is not already installed. In Game Mode, choose **Steam** > **Power** >
+   **Switch to Desktop**, then follow the [official Decky Loader installation guide](https://github.com/SteamDeckHomebrew/decky-loader#-installation).
+   Choose **Latest Release** in the installer, then return to Game Mode.
+2. **Install [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) from Steam.**
+3. **Download this plugin** from [the releases page](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/releases).
+   Choose the asset ending in `.zip`, for example `Decky.LSFG-VK.Experimental-<version>.zip`.
+4. **Install the ZIP through Decky.** In Game Mode, open the settings cog in the Decky Loader tab, enable
+   **Developer Mode**, then choose **Developer** > **Install Plugin from Zip** and select the downloaded ZIP.
+5. **Open the plugin** and select **Install Experimental LSFG-VK (developer build)** to set up this fork's private
+   lsfg-vk Vulkan layer.
+6. **Configure the plugin**: choose an FPS multiplier, flow scale, performance mode, FP16 behaviour, and any optional
+   executable or GPU matching rules.
+7. **Add the launch option** `~/.local/bin/lsfg-vk-experimental %command%` in the game's Steam Properties, or use the
+   plugin's **Launch Option Clipboard** button.
+8. **Launch the game.** Frame generation will activate using the plugin configuration.
 
 > **Coexistence:** This build does not register its layer in Vulkan's global user directory. Keep both Decky plugins
 > installed if you wish, then choose the implementation per game with that plugin's launch wrapper. Do not use both
@@ -69,18 +75,6 @@ For the upstream change history, see [v1.0.0 compared with the current developme
 > **Isolation tradeoff:** The experimental wrapper intentionally overrides Vulkan's implicit-layer search path so the
 > public LSFG-VK layer cannot load alongside it. For that game, other globally installed implicit layers (for example
 > vkBasalt) are also not discovered. Use the public plugin's wrapper for games that need those layers.
-
-## How to Use
-
-1. **Purchase and install** [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) from Steam
-2. **Open the plugin** from the Decky menu
-3. **Click "Install Experimental LSFG-VK (developer build)"** to set up this fork's private lsfg-vk Vulkan layer
-4. **Configure settings** using the plugin's UI; choose an FPS multiplier, flow scale, performance mode, FP16 behavior,
-   and optional executable/GPU matching rules
-5. **Apply launch option** to games you want to use frame generation with:
-    - Add `~/.local/bin/lsfg-vk-experimental %command%` to your game's launch options in Steam Properties
-    - Or use the "Launch Option Clipboard" button in the plugin to copy the command
-6. **Launch your game** - frame generation will activate automatically using your plugin configuration
 
 ### Updating the experimental plugin
 
