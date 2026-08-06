@@ -9,6 +9,10 @@
 > [lsfg-vk Experimental](https://github.com/eugeniosegala/lsfg-vk-experimental), with the explicit goal of pushing
 > the library to its limits. It is not officially supported by the creators of Lossless Scaling or lsfg-vk.
 
+> **Optional coexistence:** If you want to keep the original/public Decky LSFG-VK plugin installed, you can. Both
+> plugins can remain installed and enabled. Choose exactly one launch wrapper per game: public `~/lsfg %command%` or
+> experimental `~/.local/bin/lsfg-vk-experimental %command%`; never combine them.
+
 ## What is this?
 
 A Decky plugin that installs and configures a pinned experimental [lsfg-vk build](https://github.com/eugeniosegala/lsfg-vk-experimental)
@@ -16,8 +20,8 @@ frame-generation layer on SteamOS, Bazzite, and other Decky Loader-compatible Li
 
 This experimental build pins `v2.0.0-dev28-experimental.1`, an immutable release from the experimental lsfg-vk fork.
 Its upstream lineage is `v2.0.0-dev28`. It installs into a private experimental directory and activates only games
-launched through its dedicated wrapper, so it can coexist with the public Decky LSFG-VK plugin. Test it per game before
-relying on it. The exact release asset, checksum, and integration record are documented in
+launched through its dedicated wrapper. Test it per game before relying on it. The exact release asset, checksum, and
+integration record are documented in
 [UPSTREAM_LSFGVK.md](UPSTREAM_LSFGVK.md).
 
 > **Version-specific notes:** Check the [latest experimental release notes](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/releases)

@@ -126,6 +126,8 @@ trap cleanup EXIT
 notes_file="$notes_dir/release-notes.md"
 
 printf '%s\n' \
+  '> **Optional coexistence:** If you want to keep the original/public Decky LSFG-VK plugin installed, you can. Both plugins can remain installed and enabled. Choose exactly one launch wrapper per game: public `~/lsfg %command%` or experimental `~/.local/bin/lsfg-vk-experimental %command%`; never combine them.' \
+  '' \
   '## Installation' \
   '' \
   'New to Decky or installing this plugin for the first time? See the [full Install and use guide](https://github.com/eugeniosegala/decky-lsfg-vk-experimental#install-and-use) for Decky Loader setup and prerequisites.' \
