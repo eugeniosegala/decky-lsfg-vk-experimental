@@ -63,8 +63,8 @@ For the upstream change history, see [v1.0.0 compared with the current developme
    **Developer Mode**, then choose **Developer** > **Install Plugin from Zip** and select the downloaded ZIP.
 5. **Open the plugin** and select **Install Experimental LSFG-VK (developer build)** to set up this fork's private
    lsfg-vk Vulkan layer.
-6. **Configure the plugin**: choose an FPS multiplier, flow scale, performance mode, FP16 behaviour, and any optional
-   executable or GPU matching rules.
+6. **Optionally adjust settings.** The defaults suit most setups; change the FPS multiplier, flow scale, performance
+   mode, FP16 behaviour, or executable/GPU matching rules only when a game needs it.
 7. **Add the launch option** `~/.local/bin/lsfg-vk-experimental %command%` in the game's Steam Properties, or use the
    plugin's **Launch Option Clipboard** button.
 8. **Launch the game.** Frame generation will activate using the plugin configuration.
@@ -86,43 +86,25 @@ Install a newer experimental ZIP **in place**; do not uninstall this plugin firs
 3. In Game Mode, open Decky Loader's settings, then choose **Developer** > **Install Plugin from Zip** and select it.
 4. Reload the plugin from Decky, or restart Game Mode if it does not reload automatically.
 
-Your experimental profiles, private layer files, and existing Steam launch options are retained. Keep the public/original
-plugin installed if you use it; it is separate. Do not use both plugins' wrappers for the same game.
+Your experimental profiles, private layer files, and existing Steam launch options are retained.
 
-### Coexisting with the public plugin
+### Use alongside the public plugin
 
-For native Steam/Proton games, both plugins can stay installed and active. Select exactly one launcher per game:
-
-- Public plugin: its existing `~/lsfg %command%` launch option
-- Experimental plugin: `~/.local/bin/lsfg-vk-experimental %command%`
-
-The experimental launcher uses a private manifest and config, so its configuration changes and uninstall operation do
-not overwrite the public plugin's layer files. Its isolation mode bypasses the usual implicit-layer directories, so do
-not use it for a game that needs vkBasalt or another global implicit layer.
-
-Flatpak runtime extensions are shared by design. The experimental plugin uses its own config for Flatpak overrides, but
-configure a particular Flatpak app through only one LSFG-VK plugin at a time.
-
-### Switching a game between plugins
-
-The choice is made entirely in that game's **Steam Properties > Launch Options**. Quit the game, then replace the
-LSFG-VK launcher command with the other one; do not combine them.
+Both plugins can remain installed. For each native Steam/Proton game, use exactly one launch option:
 
 | To use                               | Steam launch option                           |
 |--------------------------------------|-----------------------------------------------|
 | Public/original Decky LSFG-VK plugin | `~/lsfg %command%`                            |
 | This experimental plugin             | `~/.local/bin/lsfg-vk-experimental %command%` |
 
-For example, to move a game from the experimental plugin back to the public plugin, replace
-`~/.local/bin/lsfg-vk-experimental %command%` with `~/lsfg %command%`, then launch the game normally. Switch back by
-replacing it in the opposite direction. Configure FPS multiplier, flow scale, and other settings in the Decky plugin you
-selected; each plugin keeps its own configuration.
+To switch a game, quit it and replace the command in **Steam Properties > Launch Options**. Do not combine both
+wrappers.
 
-### Isolation: coexistence and trade-offs
+The experimental plugin uses its own private manifest and configuration, so it does not overwrite the public plugin's
+files. Its isolated launcher cannot discover vkBasalt or other globally installed implicit Vulkan layers, including
+some overlay and post-processing layers. This affects only that game; use the public wrapper if it needs those layers.
 
-The public and experimental plugins can coexist, but games launched with the experimental wrapper cannot use vkBasalt
-or other globally installed Vulkan layers (such as overlay or post-processing layers). This affects only that game;
-switch its launch option back to the public plugin's `~/lsfg %command%` wrapper if it needs those layers.
+Flatpak runtime extensions are shared. Configure a given Flatpak application through only one LSFG-VK plugin at a time.
 
 ## Configuration Options
 
