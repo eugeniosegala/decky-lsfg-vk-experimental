@@ -15,7 +15,6 @@ import {
   ConfirmModal
 } from '@decky/ui';
 import { FaCheck, FaTimes, FaDownload, FaTrash, FaCog } from 'react-icons/fa';
-import flatpakTargetImage from '../../assets/flatpak-target.png';
 import { 
   checkFlatpakExtensionStatus, 
   installFlatpakExtension, 
@@ -28,6 +27,7 @@ import {
   FlatpakAppInfo
 } from '../api/lsfgApi';
 import t from '../i18n/i18n';
+import { showErrorToast, showSuccessToast } from '../utils/toastUtils';
 
 interface FlatpaksModalProps {
   closeModal?: () => void;
@@ -38,6 +38,7 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
   const [flatpakApps, setFlatpakApps] = useState<FlatpakAppInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [operationInProgress, setOperationInProgress] = useState<string | null>(null);
+  const [appErrors, setAppErrors] = useState<Record<string, string>>({});
 
   const loadData = async () => {
     setLoading(true);
@@ -73,9 +74,13 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
         // Reload status after operation
         const newStatus = await checkFlatpakExtensionStatus();
         setExtensionStatus(newStatus);
+        showSuccessToast('Flatpak extension updated', result.message || `${version} runtime extension updated`);
+      } else {
+        showErrorToast('Flatpak extension failed', result.error || result.message || `Could not ${operation} the ${version} runtime extension`);
       }
     } catch (error) {
       console.error(`Error ${operation}ing extension:`, error);
+      showErrorToast('Flatpak extension failed', String(error));
     } finally {
       setOperationInProgress(null);
     }
@@ -85,6 +90,11 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
     const hasOverrides = app.has_filesystem_override && app.has_wrapper_override;
     const operationId = `app-${app.app_id}`;
     setOperationInProgress(operationId);
+    setAppErrors((current) => {
+      const next = { ...current };
+      delete next[app.app_id];
+      return next;
+    });
 
     try {
       const result = hasOverrides 
@@ -95,9 +105,16 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
         // Reload apps data after operation
         const newApps = await getFlatpakApps();
         setFlatpakApps(newApps);
+        showSuccessToast('Flatpak application updated', result.message || `${app.app_name || app.app_id} updated`);
+      } else {
+        setAppErrors((current) => ({
+          ...current,
+          [app.app_id]: result.error || result.message || `Could not update ${app.app_name || app.app_id}`
+        }));
       }
     } catch (error) {
       console.error('Error toggling app override:', error);
+      setAppErrors((current) => ({ ...current, [app.app_id]: String(error) }));
     } finally {
       setOperationInProgress(null);
     }
@@ -330,20 +347,38 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
                     statusText = t('FLATPAK_STATUS_PARTIAL', 'Partial');
                   }
 
+                  const appError = appErrors[app.app_id];
+
                   return (
                     <PanelSectionRow key={app.app_id}>
                       <Field 
                         label={app.app_name || app.app_id}
                         description={app.app_id === 'com.heroicgameslauncher.hgl'
-                          ? `${app.app_id} - ${statusText}. Per game: Settings > Advanced > Wrapper command: ${app.wrapper_path}`
+                          ? `${app.app_id} - ${statusText}. Per game: Settings > Advanced > enter this in Heroic's first Wrapper field: ${app.wrapper_path}; leave Arguments empty.`
                           : `${app.app_id} - ${statusText}`}
-                        icon={<FaCog style={{color: statusColor}} />}
+                        icon={<FaCog style={{color: appError ? '#f44336' : statusColor}} />}
                       >
-                        <Toggle
-                          value={hasOverrides}
-                          onChange={() => handleAppOverrideToggle(app)}
-                          disabled={operationInProgress === `app-${app.app_id}`}
-                        />
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px', maxWidth: '100%' }}>
+                          {appError && (
+                            <div
+                              style={{
+                                color: '#ff9b9b',
+                                fontSize: '0.82em',
+                                lineHeight: '1.35',
+                                maxWidth: '260px',
+                                overflowWrap: 'anywhere',
+                                textAlign: 'left'
+                              }}
+                            >
+                              {appError}
+                            </div>
+                          )}
+                          <Toggle
+                            value={hasOverrides}
+                            onChange={() => handleAppOverrideToggle(app)}
+                            disabled={operationInProgress === `app-${app.app_id}`}
+                          />
+                        </div>
                       </Field>
                     </PanelSectionRow>
                   );
@@ -402,24 +437,6 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
                 </Focusable>
               ))}
 
-              <Focusable
-                focusWithinClassName="gpfocuswithin"
-                onActivate={() => {}}
-                style={{ marginTop: '4px' }}
-              >
-                <div style={{ textAlign: 'center' }}>
-                  <img
-                    src={flatpakTargetImage.replace(/ /g, '%20')}
-                    alt="Steam Properties Target Field Example"
-                    style={{
-                      maxWidth: '100%',
-                      height: 'auto',
-                      border: '1px solid rgba(255, 255, 255, 0.2)',
-                      borderRadius: '4px'
-                    }}
-                  />
-                </div>
-              </Focusable>
             </div>
           </DialogControlsSection>
 

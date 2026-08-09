@@ -114,7 +114,8 @@ export function Content() {
               Experimental LSFG-VK update required
             </div>
             <div style={{ fontSize: "13px", marginBottom: "10px" }}>
-              Installed: {installedEngineVersion || "unknown"}. This plugin expects: {expectedEngineVersion || "the bundled version"}.
+              Installed: {installedEngineVersion || "not recorded"}. This plugin expects: {expectedEngineVersion || "the bundled version"}.
+              {!installedEngineVersion && " The installed payload predates version tracking."}{" "}
               Reinstall the private engine to apply this plugin release's pinned payload. If you use Heroic, refresh its matching runtime extension in Flatpak Extensions afterwards.
             </div>
             <ButtonItem

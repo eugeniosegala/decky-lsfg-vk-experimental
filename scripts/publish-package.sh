@@ -157,6 +157,11 @@ printf '%s\n' \
   '- Includes the mip-extent clamp and defensive null-memory handling from upstream PR #544. This addresses a known startup crash with affected Switch emulators (including Eden, Ryujinx, and Yuzu forks) when they create a small transient Vulkan swapchain. Test each emulator and game individually.' \
   '- Thanks to PacificSilent / BugExciting6625 for reporting, diagnosing, and contributing this fix.' \
   '' \
+  '## This release: Flatpak layer hotfix' \
+  '' \
+  '- Fixes the experimental Flatpak runtime extensions so Heroic and other Flatpak applications can load the bundled LSFG-VK layer. This corrects a packaging path only; it does not change the engine’s frame-generation behaviour.' \
+  '- After installing this plugin ZIP, select **Install Experimental LSFG-VK (developer build)**. If you use Heroic or another Flatpak app, open **Flatpak Setup** and install its matching experimental runtime extension again.' \
+  '' \
   '## v2 improvements' \
   '' \
   '- **Reworked Vulkan layer:** The v2 line includes a rewritten backend with synchronization, resource-reuse, VRAM, pipeline-cache, and multi-device/instance improvements.' \
@@ -170,7 +175,7 @@ printf '%s\n' \
   '2. In Game Mode, choose **Developer** > **Install Plugin from Zip** and select this newer ZIP. Do not uninstall the experimental plugin first.' \
   '3. Reload the plugin from Decky, or restart Game Mode if it does not reload automatically.' \
   '4. Open this plugin and select **Install Experimental LSFG-VK (developer build)** to replace its private LSFG-VK layer with the version bundled in this ZIP.' \
-  '5. If you use Heroic, open **Flatpak Extensions** and install the matching experimental runtime extension again.' \
+  '5. If you use Heroic, select **Flatpak Setup**, then install the matching experimental runtime extension again.' \
   '' \
   'Existing experimental profiles, Steam launch options, and Heroic per-game Wrapper command settings are retained. The engine files are deliberately replaced, not stacked. Prepare Heroic again only after changing the configured `Lossless.dll` location or disabling its Flatpak preparation. The public/original plugin may remain installed, but use exactly one plugin wrapper per game.' \
   '' \
@@ -193,23 +198,26 @@ if [[ "$has_flatpak_bundle" == "true" ]]; then
 
 > **First-time Heroic setup:** Read the [Heroic and other Flatpak applications guide](https://github.com/eugeniosegala/decky-lsfg-vk-experimental#heroic-and-other-flatpak-applications) in the README before continuing.
 
-1. Open **Flatpak Extensions** in the plugin.
+1. In the plugin, select **Flatpak Setup**. This opens the **Flatpak Extensions** screen.
 2. Install the experimental runtime extension matching Heroic's runtime (normally 24.08). To check it in Desktop Mode:
 
    ```bash
    flatpak info --show-runtime com.heroicgameslauncher.hgl
    ```
 
-3. Under **Flatpak Applications**, prepare **Heroic Games Launcher**. This does not enable frame generation globally.
-4. For each Heroic game you want to enable, open **Settings > Advanced** and set **Wrapper command** to:
+3. Under **Flatpak Applications**, prepare **Heroic**. This does not enable frame generation globally.
+4. For each Heroic game you want to enable, open **Settings > Advanced** and add a wrapper. In Heroic's first
+   **Wrapper** field, enter:
 
-   ```text
-   /home/deck/.local/bin/lsfg-vk-experimental
-   ```
+     ```text
+     /home/deck/.local/bin/lsfg-vk-experimental
+     ```
+
+   Leave **Arguments** empty.
 
    This is the standard Steam Deck path; use the full path shown for Heroic in **Flatpak Applications** on other
-   systems. Leave wrapper arguments empty. Heroic supplies the real game command; `%command%` and `~` are not used
-   in Heroic's wrapper field. It is the same experimental wrapper used for Steam games.
+   systems. Do not use `%command%` in Heroic; it is only for Steam launch options. Heroic supplies the real game
+   command automatically.
 5. Launch the game normally from Heroic or its Steam shortcut.
 
 The wrapper applies the isolated experimental layer only to the selected game, bypassing vkBasalt and other global

@@ -27,3 +27,15 @@ in a release ZIP remains the single archive declared and checksum-pinned in
 - Host SHA-256: `a7f0056c873bc325f55c58acb7ca4e632957472b39575c6553482420cfa1ed48`
 - Flatpak archive: `lsfg-vk-2.0.0-dev28-experimental.2-flatpaks.tar.xz`
 - Flatpak SHA-256: `15d3286c880afb14fe683e7b76baf40805028380a86fc56b43ea708296fc7fd4`
+
+## v2.0.0-dev28-experimental.3
+
+- Source repository: `https://github.com/eugeniosegala/lsfg-vk-experimental`
+- Release tag: `v2.0.0-dev28-experimental.3`
+- Source commit: `431c2f9395885ed9891443d7b1fc5dc4f4e15b14`
+- Upstream lineage: `lsfg-vk 2.0.0-dev28`
+- Host archive: `lsfg-vk-2.0.0-dev28-experimental.3-linux.tar.xz`
+- Host SHA-256: `6b0667b6118c935d0642b312e80d7573b43084e44dbf195f765bd7ecf6471bb8`
+- Flatpak archive: `lsfg-vk-2.0.0-dev28-experimental.3-flatpaks.tar.xz`
+- Flatpak SHA-256: `cf8cfb1a43fecf789a0d3c08529a97524d63545a7e8ba1210b3d289297195748`
+- Notes: Flatpak extension packaging hotfix. The manifest now points to the installed `lib64` layer path.

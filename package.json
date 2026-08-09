@@ -1,6 +1,6 @@
 {
   "name": "decky-lsfg-vk-experimental",
-  "version": "0.13.0-experimental.14",
+  "version": "0.13.0-experimental.15",
   "description": "Experimental lsfg-vk features for Lossless Scaling on Steam OS",
   "type": "module",
   "scripts": {
@@ -47,18 +47,18 @@
   "remote_binary_bundling": true,
   "remote_binary": [
     {
-      "name": "lsfg-vk-2.0.0-dev28-experimental.2-linux.tar.xz",
-      "version": "2.0.0-dev28-experimental.2",
+      "name": "lsfg-vk-2.0.0-dev28-experimental.3-linux.tar.xz",
+      "version": "2.0.0-dev28-experimental.3",
       "lineage_version": "2.0.0-dev28",
       "source_repository": "https://github.com/eugeniosegala/lsfg-vk-experimental",
-      "release_tag": "v2.0.0-dev28-experimental.2",
-      "source_commit": "a05160d8ae97430ab5f77a2cfa7d3ea8aa4df854",
-      "url": "https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.2/lsfg-vk-2.0.0-dev28-experimental.2-linux.tar.xz",
-      "sha256hash": "a7f0056c873bc325f55c58acb7ca4e632957472b39575c6553482420cfa1ed48",
+      "release_tag": "v2.0.0-dev28-experimental.3",
+      "source_commit": "431c2f9395885ed9891443d7b1fc5dc4f4e15b14",
+      "url": "https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.3/lsfg-vk-2.0.0-dev28-experimental.3-linux.tar.xz",
+      "sha256hash": "6b0667b6118c935d0642b312e80d7573b43084e44dbf195f765bd7ecf6471bb8",
       "flatpak_bundle": {
-        "name": "lsfg-vk-2.0.0-dev28-experimental.2-flatpaks.tar.xz",
-        "url": "https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.2/lsfg-vk-2.0.0-dev28-experimental.2-flatpaks.tar.xz",
-        "sha256hash": "15d3286c880afb14fe683e7b76baf40805028380a86fc56b43ea708296fc7fd4"
+        "name": "lsfg-vk-2.0.0-dev28-experimental.3-flatpaks.tar.xz",
+        "url": "https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.3/lsfg-vk-2.0.0-dev28-experimental.3-flatpaks.tar.xz",
+        "sha256hash": "cf8cfb1a43fecf789a0d3c08529a97524d63545a7e8ba1210b3d289297195748"
       }
     }
   ],

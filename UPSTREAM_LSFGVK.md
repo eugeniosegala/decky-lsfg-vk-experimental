@@ -10,17 +10,17 @@ Update both in the same commit.
 |-----------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Release repository          | [`eugeniosegala/lsfg-vk-experimental`](https://github.com/eugeniosegala/lsfg-vk-experimental)                                                         |
 | Tracked branch              | `develop`                                                                                                                                             |
-| Last checked                | 2026-08-08                                                                                                                                            |
-| Integrated source commit    | `a05160d8ae97430ab5f77a2cfa7d3ea8aa4df854`                                                                                                            |
-| Commit date and subject     | 2026-08-08 — `release: package experimental Flatpak extensions`                                                                                       |
-| Experimental prerelease tag | `v2.0.0-dev28-experimental.2`                                                                                                                         |
+| Last checked                | 2026-08-09                                                                                                                                            |
+| Integrated source commit    | `431c2f9395885ed9891443d7b1fc5dc4f4e15b14`                                                                                                            |
+| Commit date and subject     | 2026-08-09 — `fix: correct Flatpak layer library path`                                                                                                 |
+| Experimental prerelease tag | `v2.0.0-dev28-experimental.3`                                                                                                                         |
 | Upstream lineage            | [`PancakeTAS/lsfg-vk`](https://github.com/PancakeTAS/lsfg-vk) `2.0.0-dev28`                                                                           |
-| Release asset               | `lsfg-vk-2.0.0-dev28-experimental.2-linux.tar.xz`                                                                                                     |
-| Asset SHA-256               | `a7f0056c873bc325f55c58acb7ca4e632957472b39575c6553482420cfa1ed48`                                                                                    |
-| Asset URL                   | `https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.2/lsfg-vk-2.0.0-dev28-experimental.2-linux.tar.xz` |
-| Flatpak archive             | `lsfg-vk-2.0.0-dev28-experimental.2-flatpaks.tar.xz`                                                                                                  |
-| Flatpak SHA-256             | `15d3286c880afb14fe683e7b76baf40805028380a86fc56b43ea708296fc7fd4`                                                                                    |
-| Decky plugin version        | `0.13.0-experimental.14` (prepared locally; not yet released)                                                                                         |
+| Release asset               | `lsfg-vk-2.0.0-dev28-experimental.3-linux.tar.xz`                                                                                                     |
+| Asset SHA-256               | `6b0667b6118c935d0642b312e80d7573b43084e44dbf195f765bd7ecf6471bb8`                                                                                    |
+| Asset URL                   | `https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.3/lsfg-vk-2.0.0-dev28-experimental.3-linux.tar.xz` |
+| Flatpak archive             | `lsfg-vk-2.0.0-dev28-experimental.3-flatpaks.tar.xz`                                                                                                  |
+| Flatpak SHA-256             | `cf8cfb1a43fecf789a0d3c08529a97524d63545a7e8ba1210b3d289297195748`                                                                                    |
+| Decky plugin version        | `0.13.0-experimental.15` (prepared locally; not yet released)                                                                                         |
 | Decky plugin package ID     | `decky-lsfg-vk-experimental`                                                                                                                          |
 
 The package is pinned to this release asset and SHA-256. The experimental fork's `develop` branch may advance
@@ -29,7 +29,7 @@ configuration changes have been reviewed.
 
 ## Integrated Flatpak support
 
-Engine prerelease `v2.0.0-dev28-experimental.2` adds separate experimental Flatpak runtime extensions for 23.08, 24.08,
+Engine prerelease `v2.0.0-dev28-experimental.3` adds separate experimental Flatpak runtime extensions for 23.08, 24.08,
 and 25.08. The Decky pin includes the checksum-verified host and Flatpak release assets. The local package script
 downloads, verifies, and embeds those three extensions. The plugin prepares a Flatpak app to access its private
 configuration, `Lossless.dll`, and wrapper; the wrapper then enables the experimental layer only for Heroic games
@@ -44,6 +44,13 @@ that explicitly select it.
 
 The Decky release remains pending. Do not change the engine URL or checksums without publishing a new immutable engine
 release and repeating package verification.
+
+### Flatpak payload hotfix
+
+`v2.0.0-dev28-experimental.3` corrects the Flatpak layer manifest's library path from `lib/` to the actual `lib64/`
+location. It is a packaging correction only: it enables Heroic and other Flatpak applications to load the experimental
+layer; it does not change lsfg-vk's rendering implementation. The engine release process now verifies the installed
+Flatpak extension layout and manifest path for all three supported runtimes before publishing.
 
 ## Decky integration commits
 
@@ -62,7 +69,7 @@ release and repeating package verification.
 2. Compare from the baseline commit above:
 
    ```bash
-   git -C /path/to/lsfg-vk-experimental log --oneline a05160d8ae97430ab5f77a2cfa7d3ea8aa4df854..origin/develop
+   git -C /path/to/lsfg-vk-experimental log --oneline 431c2f9395885ed9891443d7b1fc5dc4f4e15b14..origin/develop
    ```
 
 3. Review the fork's release notes, `docs/Configuration.md`, `docs/Flatpak-Guide.md`, host release asset, Flatpak

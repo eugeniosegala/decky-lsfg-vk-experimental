@@ -88,7 +88,7 @@ The normal Steam launch wrapper cannot enter a Flatpak sandbox, so Heroic needs 
 this plugin. This uses the same isolated experimental payload and configuration; it does not use the public plugin's
 Flathub layer.
 
-1. In the plugin, open **Flatpak Extensions**.
+1. In the plugin, select **Flatpak Setup** near the bottom. This opens the **Flatpak Extensions** screen.
 2. Install the experimental runtime extension that matches Heroic's Flatpak runtime. Heroic commonly uses **24.08**;
    to confirm, switch to Desktop Mode and run:
 
@@ -97,19 +97,21 @@ Flathub layer.
    ```
 
    Choose the matching `23.08`, `24.08`, or `25.08` button in the plugin.
-3. Under **Flatpak Applications**, prepare **Heroic Games Launcher**. This grants Heroic access to the existing
+3. Under **Flatpak Applications**, prepare **Heroic**. This grants Heroic access to the existing
    experimental wrapper, this plugin's configuration, and `Lossless.dll`; it does **not** enable frame generation for
    every Heroic game.
-4. For each game you want to use LSFG-VK with, open that game's **Settings > Advanced** in Heroic and set
-   **Wrapper command** to the absolute path shown for Heroic under **Flatpak Applications**. On a Steam Deck, this is:
+4. For each game you want to use LSFG-VK with, open that game's **Settings > Advanced** in Heroic and add a wrapper:
 
-   ```text
-   /home/deck/.local/bin/lsfg-vk-experimental
-   ```
+   - In Heroic's first **Wrapper** field, enter the absolute path shown for Heroic under **Flatpak Applications**. On a Steam Deck, use:
 
-   Leave Heroic's wrapper arguments empty. Heroic supplies the real game command automatically. `%command%` and `~`
-   are Steam/shell conveniences, so do not enter either in Heroic's wrapper field. This is the same experimental
-   wrapper used for Steam games, invoked with Heroic's real game command instead.
+     ```text
+     /home/deck/.local/bin/lsfg-vk-experimental
+     ```
+
+   - Leave **Arguments** empty.
+
+   Do not use `%command%` in Heroic; it is only for Steam launch options. Heroic supplies the real game command
+   automatically.
 5. Start the game normally from Heroic or from its Steam shortcut. The wrapper is applied only to games configured in
    Heroic, regardless of where you start them.
 
@@ -136,7 +138,7 @@ Install a newer experimental ZIP **in place**; do not uninstall this plugin firs
 4. Reload the plugin from Decky, or restart Game Mode if it does not reload automatically.
 5. Open this plugin and select **Install Experimental LSFG-VK (developer build)**. This replaces this plugin's private
    LSFG-VK layer with the version bundled in the new ZIP.
-6. If you use Heroic, open **Flatpak Extensions** and install the matching experimental runtime extension again.
+6. If you use Heroic, select **Flatpak Setup**, then install the matching experimental runtime extension again.
 
 Your experimental profiles and existing Steam launch options are retained. The engine files are deliberately replaced,
 not stacked. Existing Heroic per-game Wrapper command settings also remain in place; prepare Heroic again only if you

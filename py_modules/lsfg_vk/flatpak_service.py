@@ -383,9 +383,9 @@ class FlatpakService(BaseService):
                     filesystem_section = line
                     break
             
-            has_config_fs = config_path in filesystem_section
-            has_dll_fs = dll_directory in filesystem_section
-            has_wrapper_fs = wrapper_path in filesystem_section
+            has_config_fs = self._filesystem_override_present(filesystem_section, config_path)
+            has_dll_fs = self._filesystem_override_present(filesystem_section, dll_directory)
+            has_wrapper_fs = self._filesystem_override_present(filesystem_section, wrapper_path)
 
             filesystem_override = has_config_fs and has_dll_fs
 
@@ -427,6 +427,40 @@ class FlatpakService(BaseService):
         except Exception as e:
             self.log.error(f"Error checking override status for {app_id}: {e}")
             return {"filesystem": False, "wrapper": False, "legacy_env": False}
+
+    def _filesystem_override_present(self, filesystem_section: str, host_path: str) -> bool:
+        """Match Flatpak's absolute or home-relative permission representation.
+
+        ``flatpak override --show`` may render a user-home path as ``~/.…``
+        even though the plugin originally set it as an absolute path. Accept
+        both forms so a successfully prepared Heroic app is not shown as off.
+        A leading ``!`` is Flatpak's explicit denial form and must not count as
+        an enabled permission after the user turns the toggle off.
+        """
+        try:
+            relative_path = Path(host_path).relative_to(self.user_home)
+        except ValueError:
+            relative_path = None
+
+        accepted_paths = {host_path}
+        if relative_path is not None:
+            accepted_paths.add(f"~/{relative_path.as_posix()}")
+
+        _, _, raw_entries = filesystem_section.partition("=")
+        enabled = False
+        for entry in raw_entries.split(";"):
+            entry = entry.strip()
+            if not entry:
+                continue
+            denied = entry.startswith("!")
+            permission_path = entry[1:] if denied else entry
+            permission_path = permission_path.split(":", 1)[0]
+            if permission_path in accepted_paths:
+                if denied:
+                    return False
+                enabled = True
+
+        return enabled
 
     def set_app_override(self, app_id: str) -> FlatpakOverrideResponse:
         """Set lsfg-vk overrides for a Flatpak app"""
