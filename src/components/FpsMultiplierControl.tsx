@@ -2,6 +2,7 @@ import { useState } from "react";
 import { PanelSectionRow, DialogButton, Focusable } from "@decky/ui";
 import { ConfigurationData } from "../config/configSchema";
 import { MULTIPLIER } from "../config/generatedConfigSchema";
+import t from "../i18n/i18n";
 
 interface FpsMultiplierControlProps {
   config: ConfigurationData;
@@ -53,10 +54,10 @@ export function FpsMultiplierControl({
             ...multiplierButtonStyle(focusedControl === "decrease"),
             marginLeft: "0px"
           }}
-          onClick={() => onConfigChange(MULTIPLIER, Math.max(2, config.multiplier - 1))}
+          onClick={() => onConfigChange(MULTIPLIER, Math.max(1, config.multiplier - 1))}
           onGamepadFocus={() => setFocusedControl("decrease")}
           onGamepadBlur={() => setFocusedControl((current) => current === "decrease" ? null : current)}
-          disabled={config.multiplier <= 2}
+          disabled={config.multiplier <= 1}
         >
           −
         </DialogButton>
@@ -71,7 +72,9 @@ export function FpsMultiplierControl({
             textAlign: "center"
           }}
         >
-          {`${config.multiplier}X`}
+          {config.multiplier <= 1
+            ? t("FPS_MULTIPLIER_OFF", "Off")
+            : `${config.multiplier}X`}
         </div>
         <DialogButton
           style={{
