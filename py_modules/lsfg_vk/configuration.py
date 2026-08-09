@@ -247,6 +247,16 @@ class ConfigurationService(BaseService):
                 return False
 
             profile_data = self._get_profile_data()
+
+            # Script-location settings are stored in the wrapper and nowhere else, so
+            # rebuilding it from the TOML alone would silently reset them to defaults.
+            # Carry the installed values across the refresh.
+            script_values = ConfigurationManager.parse_script_content(current_content)
+            current_profile = profile_data["current_profile"]
+            profile_data["profiles"][current_profile] = ConfigurationManager.merge_config_with_script(
+                profile_data["profiles"][current_profile], script_values
+            )
+
             result = self.update_lsfg_script_from_profile_data(profile_data)
             if not result["success"]:
                 raise OSError(result.get("error") or "could not refresh launch wrapper")
