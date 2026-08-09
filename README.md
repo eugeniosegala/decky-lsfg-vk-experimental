@@ -89,18 +89,12 @@ this plugin. This uses the same isolated experimental payload and configuration;
 Flathub layer.
 
 1. In the plugin, select **Flatpak Setup** near the bottom. This opens the **Flatpak Extensions** screen.
-2. Install the experimental runtime extension that matches Heroic's current Flatpak runtime. To confirm, switch to
-   Desktop Mode and run:
-
-   ```bash
-   flatpak info --show-runtime com.heroicgameslauncher.hgl
-   ```
-
-   Choose the matching `23.08`, `24.08`, or `25.08` button in the plugin.
-3. Under **Flatpak Applications**, prepare **Heroic**. This grants Heroic access to the existing
+2. Under **Flatpak Applications**, try to prepare **Heroic**. If its matching runtime extension is not installed,
+   the message below Heroic tells you exactly which version to install (for example, `25.08`). Install that version
+   from the runtime buttons above, then prepare Heroic again. This grants Heroic access to the existing
    experimental wrapper, this plugin's configuration, and `Lossless.dll`; it does **not** enable frame generation for
    every Heroic game.
-4. For each game you want to use LSFG-VK with, open that game's **Settings > Advanced** in Heroic and add a wrapper:
+3. For each game you want to use LSFG-VK with, open that game's **Settings > Advanced** in Heroic and add a wrapper:
 
    - In Heroic's first **Wrapper** field, enter the absolute path shown for Heroic under **Flatpak Applications**. On a Steam Deck, use:
 
@@ -112,7 +106,7 @@ Flathub layer.
 
    Do not use `%command%` in Heroic; it is only for Steam launch options. Heroic supplies the real game command
    automatically.
-5. Start the game normally from Heroic or from its Steam shortcut. The wrapper is applied only to games configured in
+4. Start the game normally from Heroic or from its Steam shortcut. The wrapper is applied only to games configured in
    Heroic, regardless of where you start them.
 
 The extension is installed once for that Flatpak runtime, not once per game. The experimental extension can remain

@@ -199,14 +199,10 @@ if [[ "$has_flatpak_bundle" == "true" ]]; then
 > **First-time Heroic setup:** Read the [Heroic and other Flatpak applications guide](https://github.com/eugeniosegala/decky-lsfg-vk-experimental#heroic-and-other-flatpak-applications) in the README before continuing.
 
 1. In the plugin, select **Flatpak Setup**. This opens the **Flatpak Extensions** screen.
-2. Install the experimental runtime extension matching Heroic's current runtime. To check it in Desktop Mode:
-
-   ```bash
-   flatpak info --show-runtime com.heroicgameslauncher.hgl
-   ```
-
-3. Under **Flatpak Applications**, prepare **Heroic**. This does not enable frame generation globally.
-4. For each Heroic game you want to enable, open **Settings > Advanced** and add a wrapper. In Heroic's first
+2. Under **Flatpak Applications**, try to prepare **Heroic**. If its matching runtime extension is missing, the
+   message below Heroic tells you which version to install. Install that runtime from the buttons above, then prepare
+   Heroic again. This does not enable frame generation globally.
+3. For each Heroic game you want to enable, open **Settings > Advanced** and add a wrapper. In Heroic's first
    **Wrapper** field, enter:
 
      ```text
@@ -218,7 +214,7 @@ if [[ "$has_flatpak_bundle" == "true" ]]; then
    This is the standard Steam Deck path; use the full path shown for Heroic in **Flatpak Applications** on other
    systems. Do not use `%command%` in Heroic; it is only for Steam launch options. Heroic supplies the real game
    command automatically.
-5. Launch the game normally from Heroic or its Steam shortcut.
+4. Launch the game normally from Heroic or its Steam shortcut.
 
 The wrapper applies the isolated experimental layer only to the selected game, bypassing vkBasalt and other global
 implicit Vulkan layers for that game. If you change the configured `Lossless.dll` location, prepare Heroic again so
