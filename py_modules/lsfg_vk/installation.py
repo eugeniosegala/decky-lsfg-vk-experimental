@@ -8,7 +8,7 @@ import tarfile
 import tempfile
 import json
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from .base_service import BaseService
 from .constants import (
@@ -27,6 +27,7 @@ class InstallationService(BaseService):
         self.lib_file = self.local_lib_dir / LIB_FILENAME
         self.json_file = self.local_share_dir / JSON_FILENAME
         self.cli_file = self.user_home / CLI_DIR / CLI_FILENAME
+        self.engine_state_file = self.local_lib_dir.parent / "installed-engine.json"
     
     def install(self) -> InstallationResponse:
         """Install the bundled lsfg-vk archive into this plugin's private storage.
@@ -36,7 +37,8 @@ class InstallationService(BaseService):
         """
         try:
             plugin_dir = Path(__file__).parent.parent.parent
-            archive_path = self._bundled_archive_path(plugin_dir)
+            archive_metadata = self._bundled_archive_metadata(plugin_dir)
+            archive_path = plugin_dir / BIN_DIR / archive_metadata["name"]
             
             if not archive_path.exists():
                 error_msg = f"Bundled lsfg-vk archive not found at {archive_path}"
@@ -50,6 +52,8 @@ class InstallationService(BaseService):
             self._create_config_file()
             
             self._create_lsfg_launch_script()
+
+            self._write_engine_state(archive_metadata)
             
             self.log.info("lsfg-vk installed successfully")
             return self._success_response(InstallationResponse, "lsfg-vk installed successfully")
@@ -63,20 +67,48 @@ class InstallationService(BaseService):
             self.log.error(error_msg)
             return self._error_response(InstallationResponse, str(e), message="")
 
-    def _bundled_archive_path(self, plugin_dir: Path) -> Path:
-        """Return the archive named by this plugin's canonical package metadata."""
+    def _bundled_archive_metadata(self, plugin_dir: Path) -> Dict[str, str]:
+        """Return the versioned host payload metadata from package.json."""
         manifest_path = plugin_dir / "package.json"
         try:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             binaries = manifest.get("remote_binary")
             if not isinstance(binaries, list) or len(binaries) != 1:
                 raise ValueError("package.json must define exactly one remote_binary entry")
-            archive_name = binaries[0].get("name")
+            binary = binaries[0]
+            archive_name = binary.get("name")
+            version = binary.get("version")
+            checksum = binary.get("sha256hash")
             if not isinstance(archive_name, str) or Path(archive_name).name != archive_name:
                 raise ValueError("remote_binary name must be a filename")
-            return plugin_dir / BIN_DIR / archive_name
+            if not isinstance(version, str) or not version:
+                raise ValueError("remote_binary version must be a non-empty string")
+            if not isinstance(checksum, str) or len(checksum) != 64:
+                raise ValueError("remote_binary sha256hash must be a SHA-256 checksum")
+            return {"name": archive_name, "version": version, "sha256hash": checksum}
         except (OSError, json.JSONDecodeError, TypeError, ValueError, KeyError) as exc:
             raise OSError(f"Could not read bundled lsfg-vk metadata from {manifest_path}: {exc}") from exc
+
+    def _write_engine_state(self, archive_metadata: Dict[str, str]) -> None:
+        """Record exactly which pinned payload was installed by this plugin."""
+        state = {
+            "archive": archive_metadata["name"],
+            "version": archive_metadata["version"],
+            "sha256hash": archive_metadata["sha256hash"],
+        }
+        self._write_file(self.engine_state_file, json.dumps(state, indent=2) + "\n", 0o644)
+
+    def _read_engine_state(self) -> Optional[Dict[str, str]]:
+        """Return the plugin-managed payload record, if one exists."""
+        try:
+            state = json.loads(self.engine_state_file.read_text(encoding="utf-8"))
+            if not isinstance(state, dict):
+                return None
+            if not all(isinstance(state.get(key), str) and state[key] for key in ("archive", "version", "sha256hash")):
+                return None
+            return state
+        except (OSError, json.JSONDecodeError):
+            return None
     
     def _extract_and_install_files(self, archive_path: Path) -> None:
         """Install the layer, manifest, and optional CLI from an upstream tar.xz.
@@ -202,19 +234,20 @@ class InstallationService(BaseService):
             self.log.debug(f"Could not log DLL path: {e}")
     
     def _create_lsfg_launch_script(self) -> None:
-        """Create the isolated per-game launch script for easier game setup."""
-        # Use the default configuration for the initial script
-        from .config_schema import ConfigurationManager
-        default_config = ConfigurationManager.get_defaults()
-        
-        # Create configuration service to generate the script
+        """Create the isolated per-game launch script using the active profile."""
+        # The configuration file is created or merged immediately before this
+        # method runs. Rebuild from it rather than from defaults so an engine
+        # reinstall does not silently reset the generated wrapper's settings.
         from .configuration import ConfigurationService
         config_service = ConfigurationService(logger=self.log)
         config_service.user_home = self.user_home
+        config_service.local_share_dir = self.local_share_dir
+        config_service.config_dir = self.config_dir
+        config_service.config_file_path = self.config_file_path
         config_service.lsfg_script_path = self.lsfg_launch_script_path
-        
-        # Generate script content with default configuration
-        script_content = config_service._generate_script_content(default_config)
+
+        profile_data = config_service._get_profile_data()
+        script_content = config_service._generate_script_content_for_profile(profile_data)
         
         # Write the script file
         self._write_file(self.lsfg_launch_script_path, script_content, 0o755)
@@ -237,18 +270,32 @@ class InstallationService(BaseService):
         try:
             lib_exists = self.lib_file.exists()
             json_exists = self.json_file.exists()
-            config_exists = self.config_file_path.exists()
+            script_exists = self.lsfg_launch_script_path.exists()
+            installed = lib_exists and json_exists and script_exists
+            expected = self._bundled_archive_metadata(Path(__file__).parent.parent.parent)
+            state = self._read_engine_state()
+            version_known = state is not None
+            installed_version = state["version"] if state else None
+            update_required = installed and (
+                state is None
+                or state["version"] != expected["version"]
+                or state["sha256hash"] != expected["sha256hash"]
+            )
             
-            self.log.info(f"Installation check: lib={lib_exists}, json={json_exists}, config={config_exists}")
+            self.log.info(f"Installation check: lib={lib_exists}, json={json_exists}, script={script_exists}")
             
             return {
-                "installed": lib_exists and json_exists,
+                "installed": installed,
                 "lib_exists": lib_exists,
                 "json_exists": json_exists,
-                "script_exists": config_exists,
+                "script_exists": script_exists,
                 "lib_path": str(self.lib_file),
                 "json_path": str(self.json_file),
-                "script_path": str(self.config_file_path),
+                "script_path": str(self.lsfg_launch_script_path),
+                "installed_engine_version": installed_version,
+                "expected_engine_version": expected["version"],
+                "engine_version_known": version_known,
+                "engine_update_required": update_required,
                 "error": None
             }
             
@@ -262,7 +309,11 @@ class InstallationService(BaseService):
                 "script_exists": False,
                 "lib_path": str(self.lib_file),
                 "json_path": str(self.json_file),
-                "script_path": str(self.config_file_path),
+                "script_path": str(self.lsfg_launch_script_path),
+                "installed_engine_version": None,
+                "expected_engine_version": None,
+                "engine_version_known": False,
+                "engine_update_required": False,
                 "error": str(e)
             }
     
@@ -277,7 +328,7 @@ class InstallationService(BaseService):
         try:
             removed_files = []
             # Remove core lsfg-vk files, but preserve config file to maintain user's custom profiles
-            files_to_remove = [self.lib_file, self.json_file, self.cli_file, self.lsfg_launch_script_path]
+            files_to_remove = [self.lib_file, self.json_file, self.cli_file, self.engine_state_file, self.lsfg_launch_script_path]
             
             for file_path in files_to_remove:
                 if self._remove_if_exists(file_path):
@@ -321,7 +372,7 @@ class InstallationService(BaseService):
             
             removed_files = []
             # Remove core lsfg-vk files, but preserve config file to maintain user's custom profiles
-            files_to_remove = [self.lib_file, self.json_file, self.cli_file, self.lsfg_launch_script_path, self.lsfg_script_path]
+            files_to_remove = [self.lib_file, self.json_file, self.cli_file, self.engine_state_file, self.lsfg_launch_script_path, self.lsfg_script_path]
             
             for file_path in files_to_remove:
                 try:

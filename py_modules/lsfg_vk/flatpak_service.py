@@ -9,6 +9,14 @@ from typing import Dict, Any, List, Optional
 
 from .base_service import BaseService
 from .config_schema import ConfigurationManager
+from .constants import (
+    BIN_DIR,
+    FLATPAK_23_08_FILENAME,
+    FLATPAK_24_08_FILENAME,
+    FLATPAK_25_08_FILENAME,
+    FLATPAK_EXTENSION_NAME,
+    FLATPAK_IMPLICIT_LAYER_DIR,
+)
 from .types import BaseResponse
 
 
@@ -45,9 +53,9 @@ class FlatpakService(BaseService):
 
     def __init__(self, logger=None):
         super().__init__(logger)
-        self.extension_id_23_08 = "org.freedesktop.Platform.VulkanLayer.lsfgvk/x86_64/23.08"
-        self.extension_id_24_08 = "org.freedesktop.Platform.VulkanLayer.lsfgvk/x86_64/24.08"
-        self.extension_id_25_08 = "org.freedesktop.Platform.VulkanLayer.lsfgvk/x86_64/25.08"
+        self.extension_id_23_08 = f"{FLATPAK_EXTENSION_NAME}/x86_64/23.08"
+        self.extension_id_24_08 = f"{FLATPAK_EXTENSION_NAME}/x86_64/24.08"
+        self.extension_id_25_08 = f"{FLATPAK_EXTENSION_NAME}/x86_64/25.08"
         self.flatpak_command = None
 
     def _get_lsfg_paths(self) -> tuple[str, str]:
@@ -94,6 +102,41 @@ class FlatpakService(BaseService):
         env['PATH'] = ':'.join(path_parts)
 
         return env
+
+    def _get_extension_id(self, version: str) -> Optional[str]:
+        """Return the isolated experimental extension reference for a runtime."""
+        extension_ids = {
+            "23.08": self.extension_id_23_08,
+            "24.08": self.extension_id_24_08,
+            "25.08": self.extension_id_25_08,
+        }
+        return extension_ids.get(version)
+
+    def _get_app_runtime_version(self, app_id: str) -> Optional[str]:
+        """Return a supported Flatpak runtime branch for an application."""
+        result = self._run_flatpak_command(
+            ["info", "--show-runtime", app_id],
+            capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            return None
+
+        runtime = result.stdout.strip()
+        for version in ("23.08", "24.08", "25.08"):
+            if runtime.endswith(f"/{version}") or runtime.endswith(f"//{version}"):
+                return version
+        return None
+
+    def _is_extension_installed(self, version: str) -> bool:
+        """Check whether the isolated experimental extension is installed."""
+        extension_id = self._get_extension_id(version)
+        if extension_id is None:
+            return False
+        result = self._run_flatpak_command(
+            ["info", "--user", extension_id],
+            capture_output=True, text=True
+        )
+        return result.returncode == 0
 
     def _run_flatpak_command(self, args: List[str], **kwargs):
         """Run flatpak command with clean environment to avoid library conflicts"""
@@ -155,7 +198,7 @@ class FlatpakService(BaseService):
 
             installed_runtimes = result.stdout
 
-            base_extension_name = "org.freedesktop.Platform.VulkanLayer.lsfgvk"
+            base_extension_name = FLATPAK_EXTENSION_NAME
             installed_23_08 = False
             installed_24_08 = False
             installed_25_08 = False
@@ -178,7 +221,7 @@ class FlatpakService(BaseService):
                 status_msg.append("25.08 runtime extension installed")
 
             if not status_msg:
-                status_msg.append("No lsfg-vk runtime extensions installed")
+                status_msg.append("No experimental lsfg-vk runtime extensions installed")
 
             return self._success_response(FlatpakExtensionStatus,
                                         "; ".join(status_msg),
@@ -201,11 +244,23 @@ class FlatpakService(BaseService):
             if not self.check_flatpak_available():
                 return self._error_response(BaseResponse, "Flatpak is not available on this system")
 
-            if version == "23.08":
-                return self._error_response(BaseResponse, "Decky installs Flatpak extensions from Flathub, which supports runtimes 24.08 and 25.08. Install 23.08 manually using the upstream lsfg-vk guide.")
+            plugin_dir = Path(__file__).parent.parent.parent
+            filenames = {
+                "23.08": FLATPAK_23_08_FILENAME,
+                "24.08": FLATPAK_24_08_FILENAME,
+                "25.08": FLATPAK_25_08_FILENAME,
+            }
+            flatpak_path = plugin_dir / BIN_DIR / filenames[version]
+
+            if not flatpak_path.is_file():
+                return self._error_response(
+                    BaseResponse,
+                    "Experimental Flatpak bundle is missing from this plugin package. "
+                    "Install a release that includes Flatpak support.",
+                )
 
             result = self._run_flatpak_command(
-                ["install", "--user", "--noninteractive", "flathub", f"org.freedesktop.Platform.VulkanLayer.lsfgvk//{version}"],
+                ["install", "--user", "--noninteractive", str(flatpak_path)],
                 capture_output=True, text=True
             )
 
@@ -214,8 +269,8 @@ class FlatpakService(BaseService):
                 self.log.error(error_msg)
                 return self._error_response(BaseResponse, error_msg)
 
-            self.log.info(f"Successfully installed lsfg-vk Flatpak extension {version}")
-            return self._success_response(BaseResponse, f"lsfg-vk {version} runtime extension installed successfully")
+            self.log.info(f"Successfully installed experimental lsfg-vk Flatpak extension {version}")
+            return self._success_response(BaseResponse, f"Experimental lsfg-vk {version} runtime extension installed successfully")
 
         except Exception as e:
             error_msg = f"Error installing Flatpak extension {version}: {str(e)}"
@@ -231,12 +286,9 @@ class FlatpakService(BaseService):
             if not self.check_flatpak_available():
                 return self._error_response(BaseResponse, "Flatpak is not available on this system")
 
-            if version == "23.08":
-                extension_id = self.extension_id_23_08
-            elif version == "24.08":
-                extension_id = self.extension_id_24_08
-            else:
-                extension_id = self.extension_id_25_08
+            extension_id = self._get_extension_id(version)
+            if extension_id is None:
+                return self._error_response(BaseResponse, f"Unsupported Flatpak runtime: {version}")
 
             result = self._run_flatpak_command(
                 ["uninstall", "--user", "--noninteractive", extension_id],
@@ -288,8 +340,10 @@ class FlatpakService(BaseService):
                     apps.append({
                         "app_id": app_id,
                         "app_name": app_name,
+                        "wrapper_path": str(self.lsfg_launch_script_path),
                         "has_filesystem_override": override_status["filesystem"],
-                        "has_env_override": override_status["env"]
+                        "has_wrapper_override": override_status["wrapper"],
+                        "has_env_override": override_status["legacy_env"],
                     })
 
             return self._success_response(FlatpakAppInfo,
@@ -302,7 +356,7 @@ class FlatpakService(BaseService):
             return self._error_response(FlatpakAppInfo, error_msg, apps=[], total_apps=0)
 
     def _check_app_override_status(self, app_id: str) -> Dict[str, bool]:
-        """Check if an app has lsfg-vk overrides set"""
+        """Check whether an app can execute the per-game experimental wrapper."""
         try:
             result = self._run_flatpak_command(
                 ["override", "--user", "--show", app_id],
@@ -310,10 +364,11 @@ class FlatpakService(BaseService):
             )
 
             if result.returncode != 0:
-                return {"filesystem": False, "env": False}
+                return {"filesystem": False, "wrapper": False, "legacy_env": False}
 
             output = result.stdout
             config_path, dll_directory = self._get_lsfg_paths()
+            wrapper_path = str(self.lsfg_launch_script_path)
 
             filesystem_section = ""
             in_context = False
@@ -330,10 +385,12 @@ class FlatpakService(BaseService):
             
             has_config_fs = config_path in filesystem_section
             has_dll_fs = dll_directory in filesystem_section
+            has_wrapper_fs = wrapper_path in filesystem_section
 
             filesystem_override = has_config_fs and has_dll_fs
 
-            env_override = False
+            has_lsfg_config_env = False
+            has_isolated_layer_env = False
             in_environment = False
             
             for line in output.split('\n'):
@@ -343,16 +400,33 @@ class FlatpakService(BaseService):
                 elif line.startswith("[") and line != "[Environment]":
                     in_environment = False
                 elif in_environment and line.startswith(f"LSFGVK_CONFIG={config_path}/conf.toml"):
-                    env_override = True
-                    break
+                    has_lsfg_config_env = True
+                elif in_environment and line.startswith(f"VK_IMPLICIT_LAYER_PATH={FLATPAK_IMPLICIT_LAYER_DIR}"):
+                    has_isolated_layer_env = True
 
-            self.log.debug(f"Override status for {app_id}: filesystem={filesystem_override} ({has_config_fs}/{has_dll_fs}), env={env_override}")
+            legacy_env_override = has_lsfg_config_env or has_isolated_layer_env
+
+            self.log.debug(
+                "Override status for %s: resources=%s (%s/%s), wrapper=%s, legacy_env=%s (%s/%s)",
+                app_id,
+                filesystem_override,
+                has_config_fs,
+                has_dll_fs,
+                has_wrapper_fs,
+                legacy_env_override,
+                has_lsfg_config_env,
+                has_isolated_layer_env,
+            )
             
-            return {"filesystem": filesystem_override, "env": env_override}
+            return {
+                "filesystem": filesystem_override,
+                "wrapper": has_wrapper_fs,
+                "legacy_env": legacy_env_override,
+            }
 
         except Exception as e:
             self.log.error(f"Error checking override status for {app_id}: {e}")
-            return {"filesystem": False, "env": False}
+            return {"filesystem": False, "wrapper": False, "legacy_env": False}
 
     def set_app_override(self, app_id: str) -> FlatpakOverrideResponse:
         """Set lsfg-vk overrides for a Flatpak app"""
@@ -362,11 +436,38 @@ class FlatpakService(BaseService):
                                           "Flatpak is not available on this system",
                                           app_id=app_id, operation="set")
 
+            runtime_version = self._get_app_runtime_version(app_id)
+            if runtime_version is None:
+                return self._error_response(
+                    FlatpakOverrideResponse,
+                    "Could not determine a supported Flatpak runtime for this application. "
+                    "Install the matching experimental runtime extension first.",
+                    app_id=app_id,
+                    operation="set",
+                )
+            if not self._is_extension_installed(runtime_version):
+                return self._error_response(
+                    FlatpakOverrideResponse,
+                    f"Install the experimental {runtime_version} runtime extension before enabling this application.",
+                    app_id=app_id,
+                    operation="set",
+                )
+
+            if not self.lsfg_launch_script_path.is_file():
+                return self._error_response(
+                    FlatpakOverrideResponse,
+                    "Install Experimental LSFG-VK before preparing a Flatpak application.",
+                    app_id=app_id,
+                    operation="set",
+                )
+
             config_path, dll_directory = self._get_lsfg_paths()
+            wrapper_path = str(self.lsfg_launch_script_path)
 
             filesystem_overrides = [
                 f"--filesystem={config_path}:rw",
                 f"--filesystem={dll_directory}:ro",
+                f"--filesystem={wrapper_path}:ro",
             ]
             
             for override in filesystem_overrides:
@@ -379,19 +480,22 @@ class FlatpakService(BaseService):
                     return self._error_response(FlatpakOverrideResponse, error_msg,
                                               app_id=app_id, operation="set")
 
-            result = self._run_flatpak_command(
-                ["override", "--user", f"--env=LSFGVK_CONFIG={config_path}/conf.toml", app_id],
-                capture_output=True, text=True
-            )
+            # Older experimental versions activated the layer globally for the
+            # Flatpak app. Remove those values during upgrade: the mounted
+            # wrapper now applies them only to an individual Heroic game.
+            for variable in ("LSFGVK_CONFIG", "VK_IMPLICIT_LAYER_PATH"):
+                result = self._run_flatpak_command(
+                    ["override", "--user", f"--unset-env={variable}", app_id],
+                    capture_output=True, text=True
+                )
+                if result.returncode != 0:
+                    error_msg = f"Failed to clear legacy environment override {variable}: {result.stderr}"
+                    return self._error_response(FlatpakOverrideResponse, error_msg,
+                                              app_id=app_id, operation="set")
 
-            if result.returncode != 0:
-                error_msg = f"Failed to set environment override: {result.stderr}"
-                return self._error_response(FlatpakOverrideResponse, error_msg,
-                                          app_id=app_id, operation="set")
-
-            self.log.info(f"Successfully set lsfg-vk overrides for {app_id}")
+            self.log.info(f"Prepared per-game lsfg-vk wrapper access for {app_id}")
             return self._success_response(FlatpakOverrideResponse,
-                                        f"lsfg-vk overrides set for {app_id}",
+                                        f"lsfg-vk per-game wrapper access prepared for {app_id}",
                                         app_id=app_id, operation="set")
 
         except Exception as e:
@@ -409,10 +513,12 @@ class FlatpakService(BaseService):
                                           app_id=app_id, operation="remove")
 
             config_path, dll_directory = self._get_lsfg_paths()
+            wrapper_path = str(self.lsfg_launch_script_path)
             
             filesystem_overrides = [
                 f"--nofilesystem={dll_directory}",
                 f"--nofilesystem={config_path}",
+                f"--nofilesystem={wrapper_path}",
             ]
             
             removal_errors = []
@@ -426,13 +532,14 @@ class FlatpakService(BaseService):
                 if result.returncode != 0:
                     removal_errors.append(f"{override}: {result.stderr}")
 
-            result = self._run_flatpak_command(
-                ["override", "--user", "--unset-env=LSFGVK_CONFIG", app_id],
-                capture_output=True, text=True
-            )
+            for variable in ("LSFGVK_CONFIG", "VK_IMPLICIT_LAYER_PATH"):
+                result = self._run_flatpak_command(
+                    ["override", "--user", f"--unset-env={variable}", app_id],
+                    capture_output=True, text=True
+                )
 
-            if result.returncode != 0:
-                removal_errors.append(f"unset-env: {result.stderr}")
+                if result.returncode != 0:
+                    removal_errors.append(f"unset-env {variable}: {result.stderr}")
 
             if removal_errors:
                 self.log.warning(f"Some override removals had issues for {app_id}: {'; '.join(removal_errors)}")

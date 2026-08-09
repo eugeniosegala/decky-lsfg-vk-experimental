@@ -20,8 +20,12 @@ export function Content() {
   const {
     isInstalled,
     installationStatus,
+    engineUpdateRequired,
+    installedEngineVersion,
+    expectedEngineVersion,
     setIsInstalled,
-    setInstallationStatus
+    setInstallationStatus,
+    checkInstallation
   } = useInstallationStatus();
 
   const { dllDetected, dllDetectionStatus } = useDllDetection();
@@ -58,8 +62,9 @@ export function Content() {
     }
   };
 
-  const onInstall = () => {
-    handleInstall(setIsInstalled, setInstallationStatus, loadLsfgConfig);
+  const onInstall = async () => {
+    await handleInstall(setIsInstalled, setInstallationStatus, loadLsfgConfig);
+    await checkInstallation();
   };
 
   const onUninstall = () => {
@@ -93,6 +98,35 @@ export function Content() {
   return (
     <div onFocusCapture={keepFocusedControlVisible}>
       <PanelSection>
+      {isInstalled && engineUpdateRequired && (
+        <PanelSectionRow>
+          <div
+            style={{
+              marginTop: "8px",
+              padding: "12px",
+              borderRadius: "8px",
+              background: "rgba(255, 152, 0, 0.16)",
+              border: "1px solid rgba(255, 152, 0, 0.7)",
+              color: "#ffd08a"
+            }}
+          >
+            <div style={{ fontWeight: "bold", marginBottom: "4px" }}>
+              Experimental LSFG-VK update required
+            </div>
+            <div style={{ fontSize: "13px", marginBottom: "10px" }}>
+              Installed: {installedEngineVersion || "unknown"}. This plugin expects: {expectedEngineVersion || "the bundled version"}.
+              Reinstall the private engine to apply this plugin release's pinned payload. If you use Heroic, refresh its matching runtime extension in Flatpak Extensions afterwards.
+            </div>
+            <ButtonItem
+              layout="below"
+              onClick={onInstall}
+              disabled={isInstalling || isUninstalling}
+            >
+              Reinstall Experimental LSFG-VK
+            </ButtonItem>
+          </div>
+        </PanelSectionRow>
+      )}
       {!isInstalled && (
         <>
           <InstallationButton

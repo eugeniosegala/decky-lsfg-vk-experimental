@@ -1,6 +1,6 @@
 {
   "name": "decky-lsfg-vk-experimental",
-  "version": "0.13.0-experimental.13",
+  "version": "0.13.0-experimental.14",
   "description": "Experimental lsfg-vk features for Lossless Scaling on Steam OS",
   "type": "module",
   "scripts": {
@@ -47,14 +47,19 @@
   "remote_binary_bundling": true,
   "remote_binary": [
     {
-      "name": "lsfg-vk-2.0.0-dev28-experimental.1-linux.tar.xz",
-      "version": "2.0.0-dev28-experimental.1",
+      "name": "lsfg-vk-2.0.0-dev28-experimental.2-linux.tar.xz",
+      "version": "2.0.0-dev28-experimental.2",
       "lineage_version": "2.0.0-dev28",
       "source_repository": "https://github.com/eugeniosegala/lsfg-vk-experimental",
-      "release_tag": "v2.0.0-dev28-experimental.1",
-      "source_commit": "82e0d49976db8bce5e472fa154526e971529e091",
-      "url": "https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.1/lsfg-vk-2.0.0-dev28-experimental.1-linux.tar.xz",
-      "sha256hash": "d447f6e821d76cffbcb003cfabdd81e1c7ea35c30d9c92c11ec498d4be28e9b2"
+      "release_tag": "v2.0.0-dev28-experimental.2",
+      "source_commit": "a05160d8ae97430ab5f77a2cfa7d3ea8aa4df854",
+      "url": "https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.2/lsfg-vk-2.0.0-dev28-experimental.2-linux.tar.xz",
+      "sha256hash": "a7f0056c873bc325f55c58acb7ca4e632957472b39575c6553482420cfa1ed48",
+      "flatpak_bundle": {
+        "name": "lsfg-vk-2.0.0-dev28-experimental.2-flatpaks.tar.xz",
+        "url": "https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.2/lsfg-vk-2.0.0-dev28-experimental.2-flatpaks.tar.xz",
+        "sha256hash": "15d3286c880afb14fe683e7b76baf40805028380a86fc56b43ea708296fc7fd4"
+      }
     }
   ],
   "pnpm": {

@@ -20,6 +20,16 @@ CLI_DIR = f"{EXPERIMENTAL_ROOT}/bin"
 
 BIN_DIR = "bin"
 
+# Flatpak must load an extension built from this experimental payload rather
+# than the public Flathub layer. A distinct extension ID and mount point keep
+# both plugins installable without one overwriting the other.
+FLATPAK_EXTENSION_NAME = "org.freedesktop.Platform.VulkanLayer.lsfgvkexperimental"
+FLATPAK_EXTENSION_PREFIX = "/usr/lib/extensions/vulkan/lsfgvkexperimental"
+FLATPAK_IMPLICIT_LAYER_DIR = f"{FLATPAK_EXTENSION_PREFIX}/share/vulkan/implicit_layer.d"
+FLATPAK_23_08_FILENAME = f"{FLATPAK_EXTENSION_NAME}-23.08.flatpak"
+FLATPAK_24_08_FILENAME = f"{FLATPAK_EXTENSION_NAME}-24.08.flatpak"
+FLATPAK_25_08_FILENAME = f"{FLATPAK_EXTENSION_NAME}-25.08.flatpak"
+
 # Armada runs Steam through FEX and requires its host launcher to apply the
 # game-specific runtime and controller configuration.
 ARMADA_DEVICE_ENV = Path("/usr/libexec/armada/device-env")

@@ -43,6 +43,10 @@ class InstallationCheckResponse(TypedDict):
     lib_path: str
     json_path: str
     script_path: str
+    installed_engine_version: Optional[str]
+    expected_engine_version: Optional[str]
+    engine_version_known: bool
+    engine_update_required: bool
     error: Optional[str]
 
 

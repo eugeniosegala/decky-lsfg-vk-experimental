@@ -424,6 +424,12 @@ class Plugin:
         except OSError as error:
             decky.logger.warning("Could not remove obsolete vkBasalt exports: %s", error)
 
+        try:
+            if self.configuration_service.migrate_launch_script_if_needed():
+                decky.logger.info("Upgraded installed experimental launch wrapper for per-game Flatpak use")
+        except OSError as error:
+            decky.logger.warning("Could not upgrade experimental launch wrapper: %s", error)
+
     async def _unload(self):
         """
         Cleanup tasks when the plugin is unloaded.

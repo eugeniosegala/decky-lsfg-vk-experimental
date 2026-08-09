@@ -57,7 +57,7 @@ while (($#)); do
   shift
 done
 
-for command in curl node npm python3 zip unzip; do
+for command in curl node npm python3 tar zip unzip; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "Required command not found: $command" >&2
     exit 1
@@ -73,7 +73,7 @@ else
   exit 1
 fi
 
-read -r archive_name archive_version archive_url archive_checksum < <(
+read -r archive_name archive_version archive_url archive_checksum flatpak_archive_name flatpak_archive_url flatpak_archive_checksum < <(
   node -e '
     const manifest = require(process.argv[1]);
     const [binary] = manifest.remote_binary ?? [];
@@ -81,7 +81,20 @@ read -r archive_name archive_version archive_url archive_checksum < <(
       process.exitCode = 1;
       throw new Error("package.json must define one versioned, verified remote_binary entry");
     }
-    process.stdout.write(`${binary.name}\t${binary.version}\t${binary.url}\t${binary.sha256hash}\n`);
+    const flatpak = binary.flatpak_bundle;
+    if (flatpak && (!flatpak.name || !flatpak.url || !flatpak.sha256hash)) {
+      process.exitCode = 1;
+      throw new Error("flatpak_bundle must define name, url, and sha256hash when present");
+    }
+    process.stdout.write([
+      binary.name,
+      binary.version,
+      binary.url,
+      binary.sha256hash,
+      flatpak?.name ?? "",
+      flatpak?.url ?? "",
+      flatpak?.sha256hash ?? "",
+    ].join("\t") + "\n");
   ' "$project_dir/package.json"
 )
 
@@ -123,6 +136,33 @@ if [[ "$actual_checksum" != "$archive_checksum" ]]; then
   echo "Expected: $archive_checksum" >&2
   echo "Actual:   $actual_checksum" >&2
   exit 1
+fi
+
+if [[ -n "$flatpak_archive_name" ]]; then
+  echo "Downloading verified experimental Flatpak extensions..."
+  curl --fail --location --silent --show-error "$flatpak_archive_url" \
+    --output "$package_dir/bin/$flatpak_archive_name"
+
+  actual_flatpak_checksum="$(${checksum_command[@]} "$package_dir/bin/$flatpak_archive_name" | awk '{print $1}')"
+  if [[ "$actual_flatpak_checksum" != "$flatpak_archive_checksum" ]]; then
+    echo "Checksum mismatch for $flatpak_archive_name" >&2
+    echo "Expected: $flatpak_archive_checksum" >&2
+    echo "Actual:   $actual_flatpak_checksum" >&2
+    exit 1
+  fi
+
+  tar -xJf "$package_dir/bin/$flatpak_archive_name" -C "$package_dir/bin"
+  rm -f "$package_dir/bin/$flatpak_archive_name"
+
+  for flatpak_bundle in \
+    org.freedesktop.Platform.VulkanLayer.lsfgvkexperimental-23.08.flatpak \
+    org.freedesktop.Platform.VulkanLayer.lsfgvkexperimental-24.08.flatpak \
+    org.freedesktop.Platform.VulkanLayer.lsfgvkexperimental-25.08.flatpak; do
+    if [[ ! -s "$package_dir/bin/$flatpak_bundle" ]]; then
+      echo "Flatpak bundle archive is missing $flatpak_bundle" >&2
+      exit 1
+    fi
+  done
 fi
 
 echo "Assembling Decky archive..."

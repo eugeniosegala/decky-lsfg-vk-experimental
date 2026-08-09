@@ -76,7 +76,7 @@ if [[ -n "$(git -C "$project_dir" status --porcelain --untracked-files=normal)" 
   exit 1
 fi
 
-read -r archive_name engine_version package_version github_repository < <(
+read -r archive_name engine_version package_version github_repository has_flatpak_bundle < <(
   node -e '
     const manifest = require(process.argv[1]);
     const [binary] = manifest.remote_binary ?? [];
@@ -84,11 +84,16 @@ read -r archive_name engine_version package_version github_repository < <(
     const githubRepository = repositoryUrl
       ?.replace(/^git\+https:\/\/github\.com\//, "")
       .replace(/\.git$/, "");
+    const flatpak = binary?.flatpak_bundle;
     if (!binary?.name || !binary?.version || !manifest.version || !githubRepository) {
       process.exitCode = 1;
       throw new Error("package.json must define version, GitHub repository, and one versioned remote_binary entry");
     }
-    process.stdout.write(`${binary.name}\t${binary.version}\t${manifest.version}\t${githubRepository}\n`);
+    if (flatpak && (!flatpak.name || !flatpak.url || !flatpak.sha256hash)) {
+      process.exitCode = 1;
+      throw new Error("flatpak_bundle must define name, url, and sha256hash when present");
+    }
+    process.stdout.write(`${binary.name}\t${binary.version}\t${manifest.version}\t${githubRepository}\t${flatpak ? "true" : "false"}\n`);
   ' "$project_dir/package.json"
 )
 
@@ -126,7 +131,7 @@ trap cleanup EXIT
 notes_file="$notes_dir/release-notes.md"
 
 printf '%s\n' \
-  '> **Optional coexistence:** If you want to keep the original/public Decky LSFG-VK plugin installed, you can. Both plugins can remain installed and enabled. Choose exactly one launch wrapper per game: public `~/lsfg %command%` or experimental `~/.local/bin/lsfg-vk-experimental %command%`; never combine them.' \
+  '> **Optional coexistence:** If you want to keep the original/public Decky LSFG-VK plugin installed, you can. Both plugins can remain installed and enabled. For native Steam/Proton games, choose exactly one launch wrapper: public `~/lsfg %command%` or experimental `~/.local/bin/lsfg-vk-experimental %command%`; never combine them. Flatpak apps, including Heroic, are selected through Flatpak setup instead.' \
   '' \
   '## Installation' \
   '' \
@@ -135,7 +140,7 @@ printf '%s\n' \
   "1. Download \`$(basename "$output_path")\` below." \
   "2. On the Steam OS, open Decky Loader's settings and enable **Developer Mode**." \
   '3. Choose **Developer** > **Install Plugin from Zip**, then select the downloaded ZIP.' \
-  '4. In the plugin, select **Install Experimental LSFG-VK (developer build)** and add `~/.local/bin/lsfg-vk-experimental %command%` to the game’s Steam launch options.' \
+  '4. In the plugin, select **Install Experimental LSFG-VK (developer build)**. For native Steam/Proton games, add `~/.local/bin/lsfg-vk-experimental %command%` to the game’s Steam launch options.' \
   '' \
   "## Known limitations of lsfg-vk $engine_version" \
   '' \
@@ -164,8 +169,10 @@ printf '%s\n' \
   '1. Quit games currently launched with `~/.local/bin/lsfg-vk-experimental`.' \
   '2. In Game Mode, choose **Developer** > **Install Plugin from Zip** and select this newer ZIP. Do not uninstall the experimental plugin first.' \
   '3. Reload the plugin from Decky, or restart Game Mode if it does not reload automatically.' \
+  '4. Open this plugin and select **Install Experimental LSFG-VK (developer build)** to replace its private LSFG-VK layer with the version bundled in this ZIP.' \
+  '5. If you use Heroic, open **Flatpak Extensions** and install the matching experimental runtime extension again.' \
   '' \
-  'Existing experimental profiles, private layer files, and Steam launch options are retained. The public/original plugin may remain installed, but use exactly one plugin wrapper per game.' \
+  'Existing experimental profiles, Steam launch options, and Heroic per-game Wrapper command settings are retained. The engine files are deliberately replaced, not stacked. Prepare Heroic again only after changing the configured `Lossless.dll` location or disabling its Flatpak preparation. The public/original plugin may remain installed, but use exactly one plugin wrapper per game.' \
   '' \
   '## Important' \
   '' \
@@ -178,6 +185,38 @@ printf '%s\n' \
   '' \
   "- Bundles checksum-verified \`$archive_name\`." \
   > "$notes_file"
+
+if [[ "$has_flatpak_bundle" == "true" ]]; then
+  cat >> "$notes_file" <<'EOF'
+
+## Heroic and other Flatpak applications
+
+> **First-time Heroic setup:** Read the [Heroic and other Flatpak applications guide](https://github.com/eugeniosegala/decky-lsfg-vk-experimental#heroic-and-other-flatpak-applications) in the README before continuing.
+
+1. Open **Flatpak Extensions** in the plugin.
+2. Install the experimental runtime extension matching Heroic's runtime (normally 24.08). To check it in Desktop Mode:
+
+   ```bash
+   flatpak info --show-runtime com.heroicgameslauncher.hgl
+   ```
+
+3. Under **Flatpak Applications**, prepare **Heroic Games Launcher**. This does not enable frame generation globally.
+4. For each Heroic game you want to enable, open **Settings > Advanced** and set **Wrapper command** to:
+
+   ```text
+   /home/deck/.local/bin/lsfg-vk-experimental
+   ```
+
+   This is the standard Steam Deck path; use the full path shown for Heroic in **Flatpak Applications** on other
+   systems. Leave wrapper arguments empty. Heroic supplies the real game command; `%command%` and `~` are not used
+   in Heroic's wrapper field. It is the same experimental wrapper used for Steam games.
+5. Launch the game normally from Heroic or its Steam shortcut.
+
+The wrapper applies the isolated experimental layer only to the selected game, bypassing vkBasalt and other global
+implicit Vulkan layers for that game. If you change the configured `Lossless.dll` location, prepare Heroic again so
+the Flatpak permission matches the new directory.
+EOF
+fi
 
 echo "Publishing $release_tag to $github_repository..."
 git -C "$project_dir" push origin "$current_branch"

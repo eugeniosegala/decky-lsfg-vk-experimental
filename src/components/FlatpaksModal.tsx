@@ -82,7 +82,7 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
   };
 
   const handleAppOverrideToggle = async (app: FlatpakApp) => {
-    const hasOverrides = app.has_filesystem_override && app.has_env_override;
+    const hasOverrides = app.has_filesystem_override && app.has_wrapper_override;
     const operationId = `app-${app.app_id}`;
     setOperationInProgress(operationId);
 
@@ -172,18 +172,42 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
 
             {extensionStatus && extensionStatus.success ? (
               <>
-                {/* This runtime requires manual installation. */}
+                {/* 23.08 Runtime */}
                 <PanelSectionRow>
                   <Field 
                     label={t('FLATPAK_RUNTIME_23', 'Runtime 23.08')}
-                    description="Manual upstream installation required (not on Flathub)"
-                    icon={<FaTimes style={{color: 'red'}} />}
+                    description={extensionStatus.installed_23_08 ? t('FLATPAK_INSTALLED', 'Installed') : t('FLATPAK_NOT_INSTALLED', 'Not installed')}
+                    icon={extensionStatus.installed_23_08 ? <FaCheck style={{color: 'green'}} /> : <FaTimes style={{color: 'red'}} />}
                   >
                     <ButtonItem
                       layout="below"
-                      disabled
+                      onClick={() => {
+                        const operation = extensionStatus.installed_23_08 ? 'uninstall' : 'install';
+                        const action = () => handleExtensionOperation(operation, '23.08');
+
+                        if (operation === 'uninstall') {
+                          confirmOperation(
+                            action,
+                            t('FLATPAK_UNINSTALL_TITLE', 'Uninstall Runtime Extension'),
+                            `${t('FLATPAK_UNINSTALL_CONFIRM_PREFIX', 'Are you sure you want to uninstall the')} 23.08 ${t('FLATPAK_UNINSTALL_CONFIRM_SUFFIX', 'runtime extension?')}`
+                          );
+                        } else {
+                          action();
+                        }
+                      }}
+                      disabled={operationInProgress === 'install-23.08' || operationInProgress === 'uninstall-23.08'}
                     >
-                      Manual install required
+                      {operationInProgress === 'install-23.08' || operationInProgress === 'uninstall-23.08' ? (
+                        <Spinner />
+                      ) : extensionStatus.installed_23_08 ? (
+                        <>
+                          <FaTrash /> {t('FLATPAK_UNINSTALL_BTN', 'Uninstall')}
+                        </>
+                      ) : (
+                        <>
+                          <FaDownload /> {t('FLATPAK_INSTALL_BTN', 'Install')}
+                        </>
+                      )}
                     </ButtonItem>
                   </Field>
                 </PanelSectionRow>
@@ -205,7 +229,7 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
                           confirmOperation(
                             action,
                             t('FLATPAK_UNINSTALL_TITLE', 'Uninstall Runtime Extension'),
-                            'Are you sure you want to uninstall the 24.08 runtime extension?'
+                            `${t('FLATPAK_UNINSTALL_CONFIRM_PREFIX', 'Are you sure you want to uninstall the')} 24.08 ${t('FLATPAK_UNINSTALL_CONFIRM_SUFFIX', 'runtime extension?')}`
                           );
                         } else {
                           action();
@@ -245,7 +269,7 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
                           confirmOperation(
                             action,
                             t('FLATPAK_UNINSTALL_TITLE', 'Uninstall Runtime Extension'),
-                            'Are you sure you want to uninstall the 25.08 runtime extension?'
+                            `${t('FLATPAK_UNINSTALL_CONFIRM_PREFIX', 'Are you sure you want to uninstall the')} 25.08 ${t('FLATPAK_UNINSTALL_CONFIRM_SUFFIX', 'runtime extension?')}`
                           );
                         } else {
                           action();
@@ -282,19 +306,25 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
           {/* Flatpak Apps Section */}
           <DialogControlsSection>
             <DialogControlsSectionHeader>{t('FLATPAK_APPS_TITLE', 'Flatpak Applications')}</DialogControlsSectionHeader>
+            <PanelSectionRow>
+              <Field
+                label="Prepare an application"
+                description="Install its matching runtime extension, then prepare only that app here. For Heroic, use the full Wrapper command path shown below in each game you want to enable. Preparing Heroic does not enable frame generation globally."
+              />
+            </PanelSectionRow>
 
             {flatpakApps && flatpakApps.success ? (
               flatpakApps.apps.length > 0 ? (
                 flatpakApps.apps.map((app) => {
-                  const hasOverrides = app.has_filesystem_override && app.has_env_override;
-                  const partialOverrides = app.has_filesystem_override || app.has_env_override;
+                  const hasOverrides = app.has_filesystem_override && app.has_wrapper_override;
+                  const partialOverrides = app.has_filesystem_override || app.has_wrapper_override || app.has_env_override;
 
                   let statusColor = 'red';
                   let statusText = t('FLATPAK_STATUS_NO_OVERRIDES', 'No overrides');
 
                   if (hasOverrides) {
                     statusColor = 'green';
-                    statusText = t('FLATPAK_STATUS_CONFIGURED', 'Configured');
+                    statusText = t('FLATPAK_STATUS_CONFIGURED', 'Prepared');
                   } else if (partialOverrides) {
                     statusColor = 'orange';
                     statusText = t('FLATPAK_STATUS_PARTIAL', 'Partial');
@@ -304,7 +334,9 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
                     <PanelSectionRow key={app.app_id}>
                       <Field 
                         label={app.app_name || app.app_id}
-                        description={`${app.app_id} - ${statusText}`}
+                        description={app.app_id === 'com.heroicgameslauncher.hgl'
+                          ? `${app.app_id} - ${statusText}. Per game: Settings > Advanced > Wrapper command: ${app.wrapper_path}`
+                          : `${app.app_id} - ${statusText}`}
                         icon={<FaCog style={{color: statusColor}} />}
                       >
                         <Toggle
@@ -337,7 +369,7 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
 
           {/* Steam Configuration Instructions */}
           <DialogControlsSection>
-            <DialogControlsSectionHeader>{t('FLATPAK_STEAM_CONFIG_TITLE', 'Steam Configuration')}</DialogControlsSectionHeader>
+            <DialogControlsSectionHeader>{t('FLATPAK_STEAM_CONFIG_TITLE', 'Optional Steam Flatpak shortcuts')}</DialogControlsSectionHeader>
             <div
               style={{
                 padding: '12px',
@@ -352,7 +384,7 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
                 {t('FLATPAK_STEAM_CONFIG_HEADER', 'Configure Steam Flatpak Shortcuts')}
               </div>
               <div style={{ fontSize: '0.9em', lineHeight: '1.4', marginBottom: '8px' }}>
-                {t('FLATPAK_STEAM_CONFIG_DESC', 'In Steam, open your flatpak game and click the cog wheel.')}
+                {t('FLATPAK_STEAM_CONFIG_DESC', 'Only use these target instructions for a Flatpak shortcut inside Steam. Heroic users should prepare Heroic above, then set the existing experimental wrapper in the chosen game’s Advanced settings.')}
               </div>
               <div style={{ fontSize: '0.9em', lineHeight: '1.4', marginBottom: '12px', color: '#ffa500' }}>
                 <strong>IMPORTANT:</strong> {t('FLATPAK_STEAM_CONFIG_IMPORTANT', 'Set this in TARGET (NOT LAUNCH OPTIONS)')}

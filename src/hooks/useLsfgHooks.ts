@@ -12,11 +12,17 @@ import { showErrorToast, ToastMessages } from "../utils/toastUtils";
 export function useInstallationStatus() {
   const [isInstalled, setIsInstalled] = useState<boolean>(false);
   const [installationStatus, setInstallationStatus] = useState<string>("");
+  const [engineUpdateRequired, setEngineUpdateRequired] = useState<boolean>(false);
+  const [installedEngineVersion, setInstalledEngineVersion] = useState<string | undefined>();
+  const [expectedEngineVersion, setExpectedEngineVersion] = useState<string | undefined>();
 
   const checkInstallation = async () => {
     try {
       const status = await checkLsfgVkInstalled();
       setIsInstalled(status.installed);
+      setEngineUpdateRequired(Boolean(status.engine_update_required));
+      setInstalledEngineVersion(status.installed_engine_version);
+      setExpectedEngineVersion(status.expected_engine_version);
       if (status.installed) {
         setInstallationStatus("Experimental lsfg-vk Installed");
       } else {
@@ -25,6 +31,9 @@ export function useInstallationStatus() {
       return status.installed;
     } catch (error) {
       setInstallationStatus("Experimental lsfg-vk Not Installed");
+      setEngineUpdateRequired(false);
+      setInstalledEngineVersion(undefined);
+      setExpectedEngineVersion(undefined);
       return false;
     }
   };
@@ -36,6 +45,9 @@ export function useInstallationStatus() {
   return {
     isInstalled,
     installationStatus,
+    engineUpdateRequired,
+    installedEngineVersion,
+    expectedEngineVersion,
     setIsInstalled,
     setInstallationStatus,
     checkInstallation

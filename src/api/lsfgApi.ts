@@ -17,6 +17,10 @@ export interface InstallationStatus {
   lib_path: string;
   json_path: string;
   script_path: string;
+  installed_engine_version?: string;
+  expected_engine_version?: string;
+  engine_version_known?: boolean;
+  engine_update_required?: boolean;
   error?: string;
 }
 
@@ -92,7 +96,9 @@ export interface FlatpakExtensionStatus {
 export interface FlatpakApp {
   app_id: string;
   app_name: string;
+  wrapper_path: string;
   has_filesystem_override: boolean;
+  has_wrapper_override: boolean;
   has_env_override: boolean;
 }
 

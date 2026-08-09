@@ -10,8 +10,9 @@
 > the library to its limits. It is not officially supported by the creators of Lossless Scaling or lsfg-vk.
 
 > **Optional coexistence:** If you want to keep the original/public Decky LSFG-VK plugin installed, you can. Both
-> plugins can remain installed and enabled. Choose exactly one launch wrapper per game: public `~/lsfg %command%` or
-> experimental `~/.local/bin/lsfg-vk-experimental %command%`; never combine them.
+> plugins can remain installed and enabled. For native Steam/Proton games, choose exactly one launch wrapper: public
+> `~/lsfg %command%` or experimental `~/.local/bin/lsfg-vk-experimental %command%`; never combine them. Flatpak apps,
+> including Heroic, are selected through the plugin's Flatpak setup instead.
 
 ## What is this?
 
@@ -69,8 +70,8 @@ For the upstream change history, see [v1.0.0 compared with the current developme
    lsfg-vk Vulkan layer.
 6. **Optionally adjust settings.** The defaults suit most setups; change the FPS multiplier, flow scale, performance
    mode, FP16 behaviour, or executable/GPU matching rules only when a game needs it.
-7. **Add the launch option** `~/.local/bin/lsfg-vk-experimental %command%` in the game's Steam Properties, or use the
-   plugin's **Launch Option Clipboard** button.
+7. **For native Steam/Proton games, add the launch option** `~/.local/bin/lsfg-vk-experimental %command%` in the
+   game's Steam Properties, or use the plugin's **Launch Option Clipboard** button.
 8. **Launch the game.** Frame generation will activate using the plugin configuration.
 
 > **Coexistence:** This build does not register its layer in Vulkan's global user directory. Keep both Decky plugins
@@ -81,6 +82,50 @@ For the upstream change history, see [v1.0.0 compared with the current developme
 > public LSFG-VK layer cannot load alongside it. For that game, other globally installed implicit layers (for example
 > vkBasalt) are also not discovered. Use the public plugin's wrapper for games that need those layers.
 
+### Heroic and other Flatpak applications
+
+The normal Steam launch wrapper cannot enter a Flatpak sandbox, so Heroic needs the **Flatpak Extensions** setup in
+this plugin. This uses the same isolated experimental payload and configuration; it does not use the public plugin's
+Flathub layer.
+
+1. In the plugin, open **Flatpak Extensions**.
+2. Install the experimental runtime extension that matches Heroic's Flatpak runtime. Heroic commonly uses **24.08**;
+   to confirm, switch to Desktop Mode and run:
+
+   ```bash
+   flatpak info --show-runtime com.heroicgameslauncher.hgl
+   ```
+
+   Choose the matching `23.08`, `24.08`, or `25.08` button in the plugin.
+3. Under **Flatpak Applications**, prepare **Heroic Games Launcher**. This grants Heroic access to the existing
+   experimental wrapper, this plugin's configuration, and `Lossless.dll`; it does **not** enable frame generation for
+   every Heroic game.
+4. For each game you want to use LSFG-VK with, open that game's **Settings > Advanced** in Heroic and set
+   **Wrapper command** to the absolute path shown for Heroic under **Flatpak Applications**. On a Steam Deck, this is:
+
+   ```text
+   /home/deck/.local/bin/lsfg-vk-experimental
+   ```
+
+   Leave Heroic's wrapper arguments empty. Heroic supplies the real game command automatically. `%command%` and `~`
+   are Steam/shell conveniences, so do not enter either in Heroic's wrapper field. This is the same experimental
+   wrapper used for Steam games, invoked with Heroic's real game command instead.
+5. Start the game normally from Heroic or from its Steam shortcut. The wrapper is applied only to games configured in
+   Heroic, regardless of where you start them.
+
+The extension is installed once for that Flatpak runtime, not once per game. The experimental extension can remain
+installed alongside the public one. If you switch Heroic back to the public plugin, remove this Wrapper command from
+the affected game and configure that game through the public plugin instead.
+
+The wrapper sets the experimental layer only for the selected game, keeping it isolated from the public layer and
+other global implicit Vulkan layers.
+
+If you change the configured `Lossless.dll` location, prepare Heroic again so its Flatpak permission is updated for
+the new directory.
+
+> **Flatpak isolation tradeoff:** Like the native experimental wrapper, Heroic launched through this setup does not
+> discover vkBasalt or other global implicit Vulkan layers. This affects Heroic games only, not the rest of SteamOS.
+
 ### Updating the experimental plugin
 
 Install a newer experimental ZIP **in place**; do not uninstall this plugin first.
@@ -89,8 +134,13 @@ Install a newer experimental ZIP **in place**; do not uninstall this plugin firs
 2. Download the newer ZIP from [this fork's releases](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/releases).
 3. In Game Mode, open Decky Loader's settings, then choose **Developer** > **Install Plugin from Zip** and select it.
 4. Reload the plugin from Decky, or restart Game Mode if it does not reload automatically.
+5. Open this plugin and select **Install Experimental LSFG-VK (developer build)**. This replaces this plugin's private
+   LSFG-VK layer with the version bundled in the new ZIP.
+6. If you use Heroic, open **Flatpak Extensions** and install the matching experimental runtime extension again.
 
-Your experimental profiles, private layer files, and existing Steam launch options are retained.
+Your experimental profiles and existing Steam launch options are retained. The engine files are deliberately replaced,
+not stacked. Existing Heroic per-game Wrapper command settings also remain in place; prepare Heroic again only if you
+changed the configured `Lossless.dll` location or disabled its Flatpak preparation.
 
 ### Use alongside the public plugin
 
@@ -108,7 +158,8 @@ The experimental plugin uses its own private manifest and configuration, so it d
 files. Its isolated launcher cannot discover vkBasalt or other globally installed implicit Vulkan layers, including
 some overlay and post-processing layers. This affects only that game; use the public wrapper if it needs those layers.
 
-Flatpak runtime extensions are shared. Configure a given Flatpak application through only one LSFG-VK plugin at a time.
+The public and experimental Flatpak extensions are separate, so either can stay installed. Configure a given Flatpak
+application through only one LSFG-VK plugin at a time.
 
 ## Configuration Options
 
