@@ -199,7 +199,7 @@ if [[ "$has_flatpak_bundle" == "true" ]]; then
 > **First-time Heroic setup:** Read the [Heroic and other Flatpak applications guide](https://github.com/eugeniosegala/decky-lsfg-vk-experimental#heroic-and-other-flatpak-applications) in the README before continuing.
 
 1. In the plugin, select **Flatpak Setup**. This opens the **Flatpak Extensions** screen.
-2. Install the experimental runtime extension matching Heroic's runtime (normally 24.08). To check it in Desktop Mode:
+2. Install the experimental runtime extension matching Heroic's current runtime. To check it in Desktop Mode:
 
    ```bash
    flatpak info --show-runtime com.heroicgameslauncher.hgl

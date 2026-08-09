@@ -89,8 +89,8 @@ this plugin. This uses the same isolated experimental payload and configuration;
 Flathub layer.
 
 1. In the plugin, select **Flatpak Setup** near the bottom. This opens the **Flatpak Extensions** screen.
-2. Install the experimental runtime extension that matches Heroic's Flatpak runtime. Heroic commonly uses **24.08**;
-   to confirm, switch to Desktop Mode and run:
+2. Install the experimental runtime extension that matches Heroic's current Flatpak runtime. To confirm, switch to
+   Desktop Mode and run:
 
    ```bash
    flatpak info --show-runtime com.heroicgameslauncher.hgl
