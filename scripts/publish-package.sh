@@ -174,10 +174,8 @@ printf '%s\n' \
   '1. Quit games currently launched with `~/.local/bin/lsfg-vk-experimental`.' \
   '2. In Game Mode, choose **Developer** > **Install Plugin from Zip** and select this newer ZIP. Do not uninstall the experimental plugin first.' \
   '3. Reload the plugin from Decky, or restart Game Mode if it does not reload automatically.' \
-  '' \
-  '> ⚠️ **Required engine-update step:** Installing the ZIP updates the plugin files, but does **not** by itself replace the private LSFG-VK layer. Open this plugin and select **Install Experimental LSFG-VK (developer build)** to install the version bundled in this ZIP. Do not skip this step.' \
-  '' \
-  '4. If you use Heroic, select **Flatpak Setup**, then install the matching experimental runtime extension again.' \
+  '4. ⚠️ **Required:** Open this plugin and select **Install Experimental LSFG-VK (developer build)** to install the version bundled in this ZIP. Installing the ZIP updates the plugin files, but does **not** by itself replace the private LSFG-VK layer. Do not skip this step.' \
+  '5. If you use Heroic, select **Flatpak Setup**, then install the matching experimental runtime extension again.' \
   '' \
   'Existing experimental profiles, Steam launch options, and Heroic per-game Wrapper command settings are retained. The engine files are deliberately replaced, not stacked. Prepare Heroic again only after changing the configured `Lossless.dll` location or disabling its Flatpak preparation. The public/original plugin may remain installed, but use exactly one plugin wrapper per game.' \
   '' \
