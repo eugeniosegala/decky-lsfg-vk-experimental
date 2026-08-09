@@ -20,7 +20,7 @@ Update both in the same commit.
 | Asset URL                   | `https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.3/lsfg-vk-2.0.0-dev28-experimental.3-linux.tar.xz` |
 | Flatpak archive             | `lsfg-vk-2.0.0-dev28-experimental.3-flatpaks.tar.xz`                                                                                                  |
 | Flatpak SHA-256             | `cf8cfb1a43fecf789a0d3c08529a97524d63545a7e8ba1210b3d289297195748`                                                                                    |
-| Decky plugin version        | `0.13.0-experimental.15` (prepared locally; not yet released)                                                                                         |
+| Decky plugin version        | `0.13.0-experimental.14` (prepared locally; not yet released)                                                                                         |
 | Decky plugin package ID     | `decky-lsfg-vk-experimental`                                                                                                                          |
 
 The package is pinned to this release asset and SHA-256. The experimental fork's `develop` branch may advance
