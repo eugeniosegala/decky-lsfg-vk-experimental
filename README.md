@@ -130,9 +130,12 @@ Install a newer experimental ZIP **in place**; do not uninstall this plugin firs
 2. Download the newer ZIP from [this fork's releases](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/releases).
 3. In Game Mode, open Decky Loader's settings, then choose **Developer** > **Install Plugin from Zip** and select it.
 4. Reload the plugin from Decky, or restart Game Mode if it does not reload automatically.
-5. Open this plugin and select **Install Experimental LSFG-VK (developer build)**. This replaces this plugin's private
-   LSFG-VK layer with the version bundled in the new ZIP.
-6. If you use Heroic, select **Flatpak Setup**, then install the matching experimental runtime extension again.
+
+> ⚠️ **Required engine-update step:** Installing the ZIP updates the plugin files, but does **not** by itself replace
+> the private LSFG-VK layer. Open this plugin and select **Install Experimental LSFG-VK (developer build)** to install
+> the version bundled in the new ZIP. Do not skip this step.
+
+5. If you use Heroic, select **Flatpak Setup**, then install the matching experimental runtime extension again.
 
 Your experimental profiles and existing Steam launch options are retained. The engine files are deliberately replaced,
 not stacked. Existing Heroic per-game Wrapper command settings also remain in place; prepare Heroic again only if you
