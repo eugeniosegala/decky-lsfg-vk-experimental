@@ -63,7 +63,7 @@ CONFIG_SCHEMA_DEF = {
         "name": "adaptive_max_multiplier",
         "fieldType": ConfigFieldType.INTEGER,
         "default": 3,
-        "description": "maximum multiplier adaptive frame generation may use",
+        "description": "ceiling for generated frames in adaptive mode",
         "location": "toml"
     },
 

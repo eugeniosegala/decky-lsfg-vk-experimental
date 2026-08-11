@@ -69,7 +69,7 @@ export function FpsMultiplierControl({
           <PanelSectionRow>
             <SliderField
               label={`Maximum Adaptive Multiplier (${adaptiveMaxMultiplier}x)`}
-              description="Limits interpolation when real FPS falls. 2x prioritizes image quality; 4x prioritizes reaching the target."
+              description="Interpolation ceiling. 3x is balanced; 2x usually looks best, while 4x gives more headroom to reach the target. Test per game."
               value={adaptiveMaxMultiplier}
               min={2}
               max={4}

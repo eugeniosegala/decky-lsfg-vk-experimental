@@ -72,7 +72,7 @@ export const CONFIG_SCHEMA: Record<string, ConfigField> = {
     name: "adaptive_max_multiplier",
     fieldType: ConfigFieldType.INTEGER,
     default: 3,
-    description: "maximum multiplier adaptive frame generation may use"
+    description: "ceiling for generated frames in adaptive mode"
   },
   adaptive_stable_cadence: {
     name: "adaptive_stable_cadence",

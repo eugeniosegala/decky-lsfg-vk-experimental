@@ -19,8 +19,8 @@ instability or fails to attach.
   normal play can continue once it has settled.
 - **Target FPS:** 30–240 FPS. This is a target, not a guarantee: it cannot reduce a game already running above target,
   exceed the selected ceiling, or overcome GPU/model/compositor limits.
-- **Maximum Adaptive Multiplier:** Adaptive ceiling of 2x, 3x, or 4x; 3x is the default. Use 2x to prioritise image
-  quality or 4x where the GPU headroom is available.
+- **Maximum Adaptive Multiplier:** Ceiling for generated frames: 2x, 3x, or 4x. 3x is the balanced default; 2x usually
+  gives the best image quality, while 4x gives Adaptive more headroom to reach the target. Test per game.
 - **Smooth Cadence:** Enabled by default in Adaptive mode. Strict scheduling settles first and constant cadence is
   considered only when the target already needs nearly every matching cadence slot. It can make displayed motion
   smoother and feel more responsive in some games, while others may work better with it off. Results depend on the game,
