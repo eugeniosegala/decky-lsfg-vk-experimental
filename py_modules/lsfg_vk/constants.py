@@ -10,6 +10,16 @@ VULKAN_LAYER_DIR = f"{EXPERIMENTAL_ROOT}/vulkan/implicit_layer.d"
 CONFIG_DIR = ".config/decky-lsfg-vk-experimental"
 
 SCRIPT_NAME = ".local/bin/lsfg-vk-experimental"
+
+# Avoid persistent Gamescope presentation stalls by giving the generated-image
+# acquisition path a bounded first wait. During backoff, the engine probes
+# availability before scheduling inference and periodically reuses this bound
+# to avoid missing the compositor's image-release window indefinitely.
+PRESENT_ACQUIRE_TIMEOUT_MS = 50
+# After Adaptive recovers from a genuine generated-image timeout, ask the
+# application to rebuild its game-owned swapchain. This clears presentation
+# state that cannot be reset by recreating only the internal LSFG context.
+PRESENT_RECOVERY_RECREATE = 1
 CONFIG_FILENAME = "conf.toml"
 # Bundled upstream payload filenames. The archive name is read from the packaged
 # package.json remote_binary record so the release pin has one source of truth.

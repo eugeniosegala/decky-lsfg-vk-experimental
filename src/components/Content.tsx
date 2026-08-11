@@ -1,5 +1,5 @@
-import { useEffect, type FocusEvent } from "react";
-import { PanelSection, showModal, ButtonItem, PanelSectionRow } from "@decky/ui";
+import { useEffect, useState, type FocusEvent } from "react";
+import { AppOverview, ButtonItem, PanelSection, PanelSectionRow, Router, showModal } from "@decky/ui";
 import { useInstallationStatus, useDllDetection, useLsfgConfig } from "../hooks/useLsfgHooks";
 import { useProfileManagement } from "../hooks/useProfileManagement";
 import { useInstallationActions } from "../hooks/useInstallationActions";
@@ -17,6 +17,7 @@ import { ConfigurationData } from "../config/configSchema";
 import t from "../i18n/i18n";
 
 export function Content() {
+  const [mainRunningApp, setMainRunningApp] = useState<AppOverview | undefined>(undefined);
   const {
     isInstalled,
     installationStatus,
@@ -49,6 +50,16 @@ export function Content() {
       loadLsfgConfig();
     }
   }, [isInstalled, loadLsfgConfig]);
+
+  useEffect(() => {
+    const checkRunningApp = () => {
+      setMainRunningApp(Router.MainRunningApp);
+    };
+
+    checkRunningApp();
+    const interval = setInterval(checkRunningApp, 2000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleConfigChange = async (fieldName: keyof ConfigurationData, value: boolean | number | string) => {
     if (currentProfile) {
@@ -98,6 +109,21 @@ export function Content() {
   return (
     <div onFocusCapture={keepFocusedControlVisible}>
       <PanelSection>
+      {isInstalled && mainRunningApp && (
+        <PanelSectionRow>
+          <div
+            style={{
+              padding: "8px 12px",
+              backgroundColor: "rgba(0, 255, 0, 0.1)",
+              borderRadius: "4px",
+              border: "1px solid rgba(0, 255, 0, 0.3)",
+              fontSize: "13px"
+            }}
+          >
+            <strong>{mainRunningApp.display_name}</strong> running. {t('PROFILE_CLOSE_GAME', 'Close game to change profile.')}
+          </div>
+        </PanelSectionRow>
+      )}
       {isInstalled && engineUpdateRequired && (
         <PanelSectionRow>
           <div
@@ -159,7 +185,7 @@ export function Content() {
                 color: "white"
               }}
             >
-              {t("CONTENT_FPS_MULTIPLIER", "FPS Multiplier")}
+              {t("CONTENT_FPS_MULTIPLIER", "Frame Generation Mode")}
             </div>
           </PanelSectionRow>
 
@@ -173,6 +199,7 @@ export function Content() {
       {isInstalled && (
         <ProfileManagement
           currentProfile={currentProfile}
+          mainRunningApp={mainRunningApp}
           onProfileChange={async () => {
             await loadProfiles();
             await loadLsfgConfig();

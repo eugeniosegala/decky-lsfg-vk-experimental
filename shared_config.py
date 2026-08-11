@@ -42,6 +42,38 @@ CONFIG_SCHEMA_DEF = {
         "description": "change the fps multiplier",
         "location": "toml"
     },
+
+    "adaptive": {
+        "name": "adaptive",
+        "fieldType": ConfigFieldType.BOOLEAN,
+        "default": False,
+        "description": "dynamically vary generated frames to approach a target framerate",
+        "location": "toml"
+    },
+
+    "target_fps": {
+        "name": "target_fps",
+        "fieldType": ConfigFieldType.INTEGER,
+        "default": 120,
+        "description": "target displayed framerate for adaptive frame generation",
+        "location": "toml"
+    },
+
+    "adaptive_max_multiplier": {
+        "name": "adaptive_max_multiplier",
+        "fieldType": ConfigFieldType.INTEGER,
+        "default": 3,
+        "description": "maximum multiplier adaptive frame generation may use",
+        "location": "toml"
+    },
+
+    "adaptive_stable_cadence": {
+        "name": "adaptive_stable_cadence",
+        "fieldType": ConfigFieldType.BOOLEAN,
+        "default": False,
+        "description": "prefer smoother constant interpolation at the cost of real-frame cadence and responsiveness",
+        "location": "toml"
+    },
     
     "flow_scale": {
         "name": "flow_scale",

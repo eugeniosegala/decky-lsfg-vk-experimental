@@ -11,8 +11,7 @@ import {
   ModalRoot,
   TextField,
   Focusable,
-  AppOverview,
-  Router
+  AppOverview
 } from "@decky/ui";
 import { RiArrowDownSFill, RiArrowUpSFill, RiEditLine, RiDeleteBinLine } from "react-icons/ri";
 import { 
@@ -104,13 +103,13 @@ function TextInputModal({
 interface ProfileManagementProps {
   currentProfile?: string;
   onProfileChange?: (profileName: string) => void;
+  mainRunningApp?: AppOverview;
 }
 
-export function ProfileManagement({ currentProfile, onProfileChange }: ProfileManagementProps) {
+export function ProfileManagement({ currentProfile, onProfileChange, mainRunningApp }: ProfileManagementProps) {
   const [profiles, setProfiles] = useState<string[]>([]);
   const [selectedProfile, setSelectedProfile] = useState<string>(currentProfile || "decky-lsfg-vk");
   const [isLoading, setIsLoading] = useState(false);
-  const [mainRunningApp, setMainRunningApp] = useState<AppOverview | undefined>(undefined);
   const [focusedAction, setFocusedAction] = useState<"edit" | "delete" | null>(null);
   
   // Initialize with localStorage value, fallback to false (expanded) if not found
@@ -143,22 +142,6 @@ export function ProfileManagement({ currentProfile, onProfileChange }: ProfileMa
       setSelectedProfile(currentProfile);
     }
   }, [currentProfile]);
-
-  // Poll for running app every 2 seconds
-  useEffect(() => {
-    const checkRunningApp = () => {
-      setMainRunningApp(Router.MainRunningApp);
-    };
-
-    // Check immediately
-    checkRunningApp();
-
-    // Set up polling interval
-    const interval = setInterval(checkRunningApp, 2000);
-
-    // Cleanup interval on unmount
-    return () => clearInterval(interval);
-  }, []);
 
   const loadProfiles = async () => {
     try {
@@ -352,21 +335,6 @@ export function ProfileManagement({ currentProfile, onProfileChange }: ProfileMa
         }
         `}
       </style>
-
-      {/* Display currently running game info - always visible */}
-      {mainRunningApp && (
-        <PanelSectionRow>
-          <div style={{ 
-            padding: "8px 12px", 
-            backgroundColor: "rgba(0, 255, 0, 0.1)", 
-            borderRadius: "4px",
-            border: "1px solid rgba(0, 255, 0, 0.3)",
-            fontSize: "13px"
-          }}>
-            <strong>{mainRunningApp.display_name}</strong> running. {t('PROFILE_CLOSE_GAME', 'Close game to change profile.')}
-          </div>
-        </PanelSectionRow>
-      )}
 
       <PanelSectionRow>
         <div

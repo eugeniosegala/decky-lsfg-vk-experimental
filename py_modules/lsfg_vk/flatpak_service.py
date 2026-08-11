@@ -236,7 +236,7 @@ class FlatpakService(BaseService):
                                       installed_23_08=False, installed_24_08=False, installed_25_08=False)
 
     def install_extension(self, version: str) -> BaseResponse:
-        """Install a specific version of the lsfg-vk Flatpak extension"""
+        """Install or refresh a specific lsfg-vk Flatpak runtime extension."""
         try:
             if version not in ["23.08", "24.08", "25.08"]:
                 return self._error_response(BaseResponse, "Invalid version. Must be '23.08', '24.08', or '25.08'")
@@ -259,8 +259,16 @@ class FlatpakService(BaseService):
                     "Install a release that includes Flatpak support.",
                 )
 
+            was_installed = self._is_extension_installed(version)
+            install_args = ["install", "--user", "--noninteractive"]
+            if was_installed:
+                # The plugin ZIP can carry a newer engine with the same Flatpak
+                # extension ID/runtime branch. Reinstall in place so Heroic's
+                # preparation and its per-game wrapper commands remain intact.
+                install_args.append("--reinstall")
+            install_args.append(str(flatpak_path))
             result = self._run_flatpak_command(
-                ["install", "--user", "--noninteractive", str(flatpak_path)],
+                install_args,
                 capture_output=True, text=True
             )
 
@@ -269,8 +277,12 @@ class FlatpakService(BaseService):
                 self.log.error(error_msg)
                 return self._error_response(BaseResponse, error_msg)
 
-            self.log.info(f"Successfully installed experimental lsfg-vk Flatpak extension {version}")
-            return self._success_response(BaseResponse, f"Experimental lsfg-vk {version} runtime extension installed successfully")
+            action = "updated" if was_installed else "installed"
+            self.log.info(f"Successfully {action} experimental lsfg-vk Flatpak extension {version}")
+            return self._success_response(
+                BaseResponse,
+                f"Experimental lsfg-vk {version} runtime extension {action} successfully"
+            )
 
         except Exception as e:
             error_msg = f"Error installing Flatpak extension {version}: {str(e)}"

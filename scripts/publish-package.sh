@@ -133,6 +133,28 @@ notes_file="$notes_dir/release-notes.md"
 printf '%s\n' \
   '> **Optional coexistence:** If you want to keep the original/public Decky LSFG-VK plugin installed, you can. Both plugins can remain installed and enabled. For native Steam/Proton games, choose exactly one launch wrapper: public `~/lsfg %command%` or experimental `~/.local/bin/lsfg-vk-experimental %command%`; never combine them. Flatpak apps, including Heroic, are selected through Flatpak setup instead.' \
   '' \
+  '## This release: Adaptive Frame Generation and SteamOS recovery' \
+  '' \
+  '- **Full-quality image path:** With **Performance Mode disabled**, the v2 engine can show noticeably less ghosting than the older layer in testing. Results are game-dependent; Performance Mode remains useful when lower GPU overhead matters more than image quality.' \
+  '- **Adaptive Frame Generation:** Optional 30–240 FPS targeting with a configurable 2x–4x ceiling; fixed 2x, 3x, and 4x remain the default. Live Adaptive changes briefly reset timing and stability calculations, so allow a few seconds for output to settle before judging it. **Smooth Cadence** remains off by default.' \
+  '- **Adaptive stability:** Adaptive starts and recovers on real frames, keeps the lowest proven multiplier that can already meet the target, and backs off extra generation load when it causes a delayed base-rate collapse. It can also rebase promptly to a sustained gameplay FPS change instead of waiting for an old cadence to return.' \
+  '- **SteamOS / Gamescope recovery:** A bounded image wait prevents stalls from blocking indefinitely. After a Steam-menu cadence interruption, Adaptive presents real frames, preserves the last proven level, waits for healthy game cadence, and resumes without learning from temporary menu-rate samples. A guarded swapchain rebuild remains available only for repeated stalls; Fixed mode is unchanged.' \
+  '- **Heroic runtime updates:** Flatpak Setup now offers **Update** for an installed matching runtime extension, so Heroic can receive the engine bundled with a new plugin ZIP without changing its per-game Wrapper commands.' \
+  '' \
+  'See the [Configuration guide](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/blob/main/docs/CONFIGURATION.md) and [Troubleshooting guide](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/blob/main/docs/TROUBLESHOOTING.md) for the full behaviour and per-game controls.' \
+  '' \
+  '> ⚠️ **Required engine-update step:** Installing the ZIP updates the plugin files, but does **not** by itself replace the private LSFG-VK layer. Open this plugin and select **Install Experimental LSFG-VK (developer build)** to install the version bundled in the new ZIP.' \
+  '' \
+  > "$notes_file"
+
+if [[ "$has_flatpak_bundle" == "true" ]]; then
+  printf '%s\n' \
+    '> **First-time Heroic setup:** Read the [Heroic and other Flatpak applications guide](https://github.com/eugeniosegala/decky-lsfg-vk-experimental#heroic-and-other-flatpak-applications) in the README.' \
+    '' \
+    >> "$notes_file"
+fi
+
+printf '%s\n' \
   '## Installation' \
   '' \
   'New to Decky or installing this plugin for the first time? See the [full Install and use guide](https://github.com/eugeniosegala/decky-lsfg-vk-experimental#install-and-use) for Decky Loader setup and prerequisites.' \
@@ -142,85 +164,38 @@ printf '%s\n' \
   '3. Choose **Developer** > **Install Plugin from Zip**, then select the downloaded ZIP.' \
   '4. In the plugin, select **Install Experimental LSFG-VK (developer build)**. For native Steam/Proton games, add `~/.local/bin/lsfg-vk-experimental %command%` to the game’s Steam launch options.' \
   '' \
-  "## Known limitations of lsfg-vk $engine_version" \
-  '' \
-  '- **Steam menu / Game Mode:** With frame generation enabled, opening and closing the Steam menu can occasionally leave a game presenting at its base rate (often 60 fps on a 120 Hz display). It may recover after a few seconds; if it does not, quit and relaunch the game. This is a current lsfg-vk v2/Gamescope presentation limitation, not a failed Decky installation.' \
-  '' \
-  '- **HDR:** HDR remains problematic with this payload. Disable HDR in the game before playing; it can remain enabled in SteamOS. The plugin has no general HDR control, and the v1 HDR toggle was also non-functional.' \
-  '' \
-  '- **No 0x multiplier:** lsfg-vk v2 supports only 2x, 3x, or 4x. Unlike v1, there is no 0x multiplier. To run a game without frame generation, use the dedicated **Disable Frame Generation** setting and restart the game.' \
-  '' \
-  '- **Isolation trade-offs:** The public and experimental plugins can coexist, but a game launched with the experimental wrapper cannot use vkBasalt or other globally installed Vulkan layers, such as overlay or post-processing layers. This affects only that game. If it needs those layers, switch its launch option back to the public plugin’s `~/lsfg %command%` wrapper.' \
-  '' \
-  '## This release: emulator startup compatibility' \
-  '' \
-  '- Includes the mip-extent clamp and defensive null-memory handling from upstream PR #544. This addresses a known startup crash with affected Switch emulators (including Eden, Ryujinx, and Yuzu forks) when they create a small transient Vulkan swapchain. Test each emulator and game individually.' \
-  '- Thanks to PacificSilent / BugExciting6625 for reporting, diagnosing, and contributing this fix.' \
-  '' \
-  '## This release: Flatpak layer hotfix' \
-  '' \
-  '- Fixes the experimental Flatpak runtime extensions so Heroic and other Flatpak applications can load the bundled LSFG-VK layer. This corrects a packaging path only; it does not change the engine’s frame-generation behaviour.' \
-  '- After installing this plugin ZIP, select **Install Experimental LSFG-VK (developer build)**. If you use Heroic or another Flatpak app, open **Flatpak Setup** and install its matching experimental runtime extension again.' \
-  '' \
-  '## v2 improvements' \
-  '' \
-  '- **Reworked Vulkan layer:** The v2 line includes a rewritten backend with synchronization, resource-reuse, VRAM, pipeline-cache, and multi-device/instance improvements.' \
-  '- **More flexible configuration:** Named profiles, automatic executable matching, optional GPU selection, frame-pacing work, and CLI validation/benchmark tools are available.' \
-  '- **Quality/performance choice:** In testing, v2 with **Performance Mode disabled** can produce less ghosting than the older build. Performance Mode remains available when lower GPU overhead matters more than image quality.' \
-  '- **FP16:** Half-precision processing is available on compatible hardware and can improve performance. Results vary by game and GPU.' \
+  '> [!IMPORTANT]' \
+  '> If Decky does not show or reload the plugin after installing a ZIP, uninstall **this experimental plugin** from Decky, install the ZIP again, then restart your Steam Deck or Steam Machine. Open the plugin afterwards and select **Install Experimental LSFG-VK (developer build)** again.' \
   '' \
   '## Updating an existing experimental installation' \
   '' \
-  '1. Quit games currently launched with `~/.local/bin/lsfg-vk-experimental`.' \
-  '2. In Game Mode, choose **Developer** > **Install Plugin from Zip** and select this newer ZIP. Do not uninstall the experimental plugin first.' \
-  '3. Reload the plugin from Decky, or restart Game Mode if it does not reload automatically.' \
-  '4. ⚠️ **Required:** Open this plugin and select **Install Experimental LSFG-VK (developer build)** to install the version bundled in this ZIP. Installing the ZIP updates the plugin files, but does **not** by itself replace the private LSFG-VK layer. Do not skip this step.' \
-  '5. If you use Heroic, select **Flatpak Setup**, then install the matching experimental runtime extension again.' \
+  '1. Quit any game currently using `~/.local/bin/lsfg-vk-experimental`.' \
+  '2. Download the newer ZIP from [this fork’s releases](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/releases).' \
+  '3. In Game Mode, open Decky Loader’s settings, then choose **Developer** > **Install Plugin from Zip** and select it.' \
+  '4. Reload the plugin from Decky. If it does not reload automatically, restart your Steam Deck or Steam Machine.' \
+  '5. ⚠️ **Required:** Open this plugin and select **Install Experimental LSFG-VK (developer build)** to install the version bundled in the new ZIP. Installing the ZIP updates the plugin files, but does **not** by itself replace the private LSFG-VK layer. Do not skip this step.' \
+  '6. If you use Heroic, select **Flatpak Setup**, then select **Update** for Heroic’s matching runtime extension (usually **25.08**). This replaces its Flatpak layer with the engine bundled in the new ZIP; Heroic preparation and per-game Wrapper commands remain unchanged.' \
+  '7. If Decky does not show or reload the update, use the reinstall-and-restart fallback above, then repeat step 5.' \
   '' \
   'Existing experimental profiles, Steam launch options, and Heroic per-game Wrapper command settings are retained. The engine files are deliberately replaced, not stacked. Prepare Heroic again only after changing the configured `Lossless.dll` location or disabling its Flatpak preparation. The public/original plugin may remain installed, but use exactly one plugin wrapper per game.' \
   '' \
-  '## Important' \
+  "## Known limitations of lsfg-vk $engine_version" \
   '' \
-  '- This is an experimental build; test it per game.' \
-  '- The public and experimental plugins can coexist; select exactly one LSFG-VK wrapper per native Steam/Proton game.' \
-  '- The isolated experimental wrapper bypasses other global implicit Vulkan layers (such as vkBasalt) for that game.' \
-  '- Confirm the detected `Lossless.dll` path before launching. Leaving it blank permits lsfg-vk automatic discovery.' \
+  '- **HDR:** HDR remains problematic with this payload. Disable HDR in the game before playing; it can remain enabled in SteamOS. The plugin has no general HDR control, and the v1 HDR toggle was also non-functional.' \
+  '' \
+  '- **No fixed 0x multiplier:** Unlike v1, the fixed multiplier selector has no 0x choice. To run a game without frame generation, use the dedicated **Disable Frame Generation** setting and restart the game. Adaptive mode may internally schedule zero generated frames for an individual interval; that is not a persistent disable setting.' \
+  '' \
+  '- **Isolation trade-offs:** The public and experimental plugins can coexist, but a game launched with the experimental wrapper cannot use vkBasalt or other globally installed Vulkan layers, such as overlay or post-processing layers. This affects only that game. If it needs those layers, switch its launch option back to the public plugin’s `~/lsfg %command%` wrapper.' \
+  '' \
+  '## Before you play' \
+  '' \
+  '- This is experimental: test each game before relying on it.' \
+  '- Confirm the detected `Lossless.dll` path before launching. Leaving it blank permits upstream discovery.' \
   '' \
   '## Engine payload' \
   '' \
   "- Bundles checksum-verified \`$archive_name\`." \
-  > "$notes_file"
-
-if [[ "$has_flatpak_bundle" == "true" ]]; then
-  cat >> "$notes_file" <<'EOF'
-
-## Heroic and other Flatpak applications
-
-> **First-time Heroic setup:** Read the [Heroic and other Flatpak applications guide](https://github.com/eugeniosegala/decky-lsfg-vk-experimental#heroic-and-other-flatpak-applications) in the README before continuing.
-
-1. In the plugin, select **Flatpak Setup**. This opens the **Flatpak Extensions** screen.
-2. Under **Flatpak Applications**, try to prepare **Heroic**. If its matching runtime extension is missing, the
-   message below Heroic tells you which version to install. Install that runtime from the buttons above, then prepare
-   Heroic again. This does not enable frame generation globally.
-3. For each Heroic game you want to enable, open **Settings > Advanced** and add a wrapper. In Heroic's first
-   **Wrapper** field, enter:
-
-     ```text
-     /home/deck/.local/bin/lsfg-vk-experimental
-     ```
-
-   Leave **Arguments** empty.
-
-   This is the standard Steam Deck path; use the full path shown for Heroic in **Flatpak Applications** on other
-   systems. Do not use `%command%` in Heroic; it is only for Steam launch options. Heroic supplies the real game
-   command automatically.
-4. Launch the game normally from Heroic or its Steam shortcut.
-
-The wrapper applies the isolated experimental layer only to the selected game, bypassing vkBasalt and other global
-implicit Vulkan layers for that game. If you change the configured `Lossless.dll` location, prepare Heroic again so
-the Flatpak permission matches the new directory.
-EOF
-fi
+  >> "$notes_file"
 
 echo "Publishing $release_tag to $github_repository..."
 git -C "$project_dir" push origin "$current_branch"

@@ -426,7 +426,7 @@ class Plugin:
 
         try:
             if self.configuration_service.migrate_launch_script_if_needed():
-                decky.logger.info("Upgraded installed experimental launch wrapper for per-game Flatpak use")
+                decky.logger.info("Upgraded installed experimental launch wrapper to the current format")
         except OSError as error:
             decky.logger.warning("Could not upgrade experimental launch wrapper: %s", error)
 

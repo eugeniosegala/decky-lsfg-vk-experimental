@@ -89,7 +89,11 @@ export function useLsfgConfig() {
     try {
       const result = await getLsfgConfig();
       if (result.success && result.config) {
-        setConfig(result.config);
+        // Older installed configurations (or a backend that has not yet been
+        // reloaded) may not contain fields introduced by a newer frontend.
+        // Preserve the generated defaults for any fields missing from the
+        // response so an in-place plugin update never renders undefined values.
+        setConfig({ ...getDefaults(), ...result.config });
       } else {
         console.log("lsfg config not available, using defaults:", result.error);
         setConfig(getDefaults());
@@ -102,9 +106,10 @@ export function useLsfgConfig() {
 
   const updateConfig = useCallback(async (newConfig: ConfigurationData): Promise<ConfigUpdateResult> => {
     try {
-      const result = await updateLsfgConfigFromObject(newConfig);
+      const normalizedConfig = { ...getDefaults(), ...newConfig };
+      const result = await updateLsfgConfigFromObject(normalizedConfig);
       if (result.success) {
-        setConfig(newConfig);
+        setConfig(normalizedConfig);
       } else {
         showErrorToast(
           ToastMessages.CONFIG_UPDATE_ERROR.title, 

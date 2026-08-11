@@ -16,6 +16,10 @@ from shared_config import CONFIG_SCHEMA_DEF, ConfigFieldType
 DLL = "dll"
 ALLOW_FP16 = "allow_fp16"
 MULTIPLIER = "multiplier"
+ADAPTIVE = "adaptive"
+TARGET_FPS = "target_fps"
+ADAPTIVE_MAX_MULTIPLIER = "adaptive_max_multiplier"
+ADAPTIVE_STABLE_CADENCE = "adaptive_stable_cadence"
 FLOW_SCALE = "flow_scale"
 PERFORMANCE_MODE = "performance_mode"
 PACING = "pacing"
@@ -35,6 +39,10 @@ class ConfigurationData(TypedDict):
     dll: str
     allow_fp16: bool
     multiplier: int
+    adaptive: bool
+    target_fps: int
+    adaptive_max_multiplier: int
+    adaptive_stable_cadence: bool
     flow_scale: float
     performance_mode: bool
     pacing: str
@@ -115,4 +123,4 @@ def get_script_generation_logic():
     return generate_script_lines
 
 
-ALL_FIELDS = ['dll', 'allow_fp16', 'multiplier', 'flow_scale', 'performance_mode', 'pacing', 'active_in', 'gpu', 'disable_lsfgvk', 'dxvk_frame_rate', 'enable_wow64', 'disable_steamdeck_mode', 'mangohud_workaround', 'enable_wsi', 'enable_zink']
+ALL_FIELDS = ['dll', 'allow_fp16', 'multiplier', 'adaptive', 'target_fps', 'adaptive_max_multiplier', 'adaptive_stable_cadence', 'flow_scale', 'performance_mode', 'pacing', 'active_in', 'gpu', 'disable_lsfgvk', 'dxvk_frame_rate', 'enable_wow64', 'disable_steamdeck_mode', 'mangohud_workaround', 'enable_wsi', 'enable_zink']

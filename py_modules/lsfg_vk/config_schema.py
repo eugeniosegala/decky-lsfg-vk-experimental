@@ -36,7 +36,11 @@ SCRIPT_ONLY_FIELDS = {
     name for name, definition in CONFIG_SCHEMA_DEF.items()
     if definition["location"] == "script"
 }
-PROFILE_TOML_FIELDS = {"active_in", "gpu", "multiplier", "flow_scale", "performance_mode", "pacing"}
+PROFILE_TOML_FIELDS = {
+    "active_in", "gpu", "multiplier", "adaptive", "target_fps", "adaptive_max_multiplier",
+    "adaptive_stable_cadence",
+    "flow_scale", "performance_mode", "pacing"
+}
 DEFAULT_PROFILE_NAME = "decky-lsfg-vk"
 CURRENT_PROFILE_COMMENT = re.compile(r'^\s*#\s*decky-current-profile\s*=\s*"([^"]+)"\s*$')
 
@@ -98,6 +102,10 @@ class ConfigurationManager:
 
         if validated["multiplier"] < 2:
             raise ValueError("multiplier must be 2 or greater")
+        if not 30 <= validated["target_fps"] <= 240:
+            raise ValueError("target_fps must be between 30 and 240")
+        if not 2 <= validated["adaptive_max_multiplier"] <= 4:
+            raise ValueError("adaptive_max_multiplier must be between 2 and 4")
         if not 0.25 <= validated["flow_scale"] <= 1.0:
             raise ValueError("flow_scale must be between 0.25 and 1.0")
         if validated["pacing"] != "none":
@@ -153,6 +161,10 @@ class ConfigurationManager:
                 lines.append(f"gpu = {_toml_string(config['gpu'])}")
             lines.extend([
                 f"multiplier = {config['multiplier']}",
+                f"adaptive = {str(config['adaptive']).lower()}",
+                f"target_fps = {config['target_fps']}",
+                f"adaptive_max_multiplier = {config['adaptive_max_multiplier']}",
+                f"adaptive_stable_cadence = {str(config['adaptive_stable_cadence']).lower()}",
                 f"flow_scale = {config['flow_scale']}",
                 f"performance_mode = {str(config['performance_mode']).lower()}",
                 "pacing = 'none'",

@@ -9,14 +9,25 @@ from typing import Dict, Any
 from .base_service import BaseService
 from .config_schema import ConfigurationManager, CONFIG_SCHEMA, ProfileData, DEFAULT_PROFILE_NAME
 from .config_schema_generated import ConfigurationData, get_script_generation_logic
-from .constants import ARMADA_DEVICE_ENV, ARMADA_GAME_LAUNCH, FLATPAK_IMPLICIT_LAYER_DIR
+from .constants import (
+    ARMADA_DEVICE_ENV,
+    ARMADA_GAME_LAUNCH,
+    FLATPAK_IMPLICIT_LAYER_DIR,
+    PRESENT_ACQUIRE_TIMEOUT_MS,
+    PRESENT_RECOVERY_RECREATE,
+)
 from .types import ConfigurationResponse, ProfilesResponse, ProfileResponse
 
 
 class ConfigurationService(BaseService):
     """Service for managing TOML-based lsfg configuration"""
 
-    _WRAPPER_FORMAT_MARKER = "# decky-lsfg-vk-experimental-wrapper-format: 2"
+    _WRAPPER_FORMAT_MARKER = "# decky-lsfg-vk-experimental-wrapper-format: 7"
+    _REQUIRED_WRAPPER_EXPORTS = (
+        "export LSFGVK_PRESENT_ACQUIRE_TIMEOUT_MS=",
+        "export LSFGVK_PRESENT_RECOVERY_RECREATE=",
+        "lsfgvk_diagnostics_default=",
+    )
 
     @staticmethod
     def _profile_selection_lines(profile_name: str, config: ConfigurationData) -> list[str]:
@@ -222,28 +233,50 @@ class ConfigurationService(BaseService):
         manifest, so detect the mounted experimental extension at runtime.
         No Flatpak application-wide Vulkan environment override is needed.
         """
+        diagnostics_log_path = self.config_dir / "present-diagnostics.log"
         return [
+            f'export LSFGVK_PRESENT_ACQUIRE_TIMEOUT_MS="${{LSFGVK_PRESENT_ACQUIRE_TIMEOUT_MS:-{PRESENT_ACQUIRE_TIMEOUT_MS}}}"',
+            f'export LSFGVK_PRESENT_RECOVERY_RECREATE="${{LSFGVK_PRESENT_RECOVERY_RECREATE:-{PRESENT_RECOVERY_RECREATE}}}"',
             f"if [ -d {shlex.quote(FLATPAK_IMPLICIT_LAYER_DIR)} ]; then",
             f"    export VK_IMPLICIT_LAYER_PATH={shlex.quote(FLATPAK_IMPLICIT_LAYER_DIR)}",
             "else",
             f"    export VK_IMPLICIT_LAYER_PATH={shlex.quote(str(self.local_share_dir))}",
             "fi",
             f"export LSFGVK_CONFIG={shlex.quote(str(self.config_file_path))}",
+            "# Heroic can discard a game's stderr. Capture opt-in engine diagnostics here instead.",
+            f"lsfgvk_diagnostics_default={shlex.quote(str(diagnostics_log_path))}",
+            'if [ "${LSFGVK_PRESENT_DIAGNOSTICS:-0}" != "0" ]; then',
+            '    lsfgvk_diagnostics_log="${LSFGVK_PRESENT_DIAGNOSTICS_LOG:-$lsfgvk_diagnostics_default}"',
+            '    if : > "$lsfgvk_diagnostics_log" 2>/dev/null; then',
+            '        exec 2>> "$lsfgvk_diagnostics_log"',
+            "    fi",
+            "fi",
         ]
 
     def migrate_launch_script_if_needed(self) -> bool:
         """Upgrade an installed generated wrapper without touching user data.
 
-        Wrapper format 2 selects the experimental Flatpak manifest when the
-        same wrapper is launched inside Heroic. Existing installations need
-        this one-time refresh before the per-game Flatpak flow can work.
+        Wrapper format 7 writes explicitly enabled engine diagnostics to the
+        plugin-private log file, so Heroic cannot discard them. It retains
+        format 6's Adaptive game-owned swapchain recreation behaviour.
+        It preserves explicit caller overrides, the validated 50 ms acquisition
+        timeout, and the experimental Flatpak manifest selection. Validate the
+        required exports as well as the marker so an intermediate locally
+        generated wrapper cannot be mistaken for the completed format.
         """
         if not self.lsfg_script_path.exists():
             return False
 
         try:
             current_content = self.lsfg_script_path.read_text(encoding="utf-8")
-            if self._WRAPPER_FORMAT_MARKER in current_content:
+            wrapper_is_current = (
+                self._WRAPPER_FORMAT_MARKER in current_content
+                and all(
+                    export in current_content
+                    for export in self._REQUIRED_WRAPPER_EXPORTS
+                )
+            )
+            if wrapper_is_current:
                 return False
 
             profile_data = self._get_profile_data()
@@ -251,7 +284,7 @@ class ConfigurationService(BaseService):
             if not result["success"]:
                 raise OSError(result.get("error") or "could not refresh launch wrapper")
 
-            self.log.info("Upgraded installed lsfg-vk experimental launch wrapper to format 2")
+            self.log.info("Upgraded installed lsfg-vk experimental launch wrapper to format 7")
             return True
         except OSError:
             raise

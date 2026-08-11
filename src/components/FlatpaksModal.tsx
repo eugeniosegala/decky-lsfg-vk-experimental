@@ -131,6 +131,22 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
     );
   };
 
+  const handleRuntimePrimaryAction = (version: string, installed: boolean) => {
+    const operation: 'install' | 'uninstall' = installed ? 'uninstall' : 'install';
+    const action = () => handleExtensionOperation(operation, version);
+
+    if (operation === 'uninstall') {
+      confirmOperation(
+        action,
+        t('FLATPAK_UNINSTALL_TITLE', 'Uninstall Runtime Extension'),
+        `${t('FLATPAK_UNINSTALL_CONFIRM_PREFIX', 'Are you sure you want to uninstall the')} ${version} ${t('FLATPAK_UNINSTALL_CONFIRM_SUFFIX', 'runtime extension?')}`
+      );
+      return;
+    }
+
+    action();
+  };
+
   if (loading) {
     return (
       <ModalRoot closeModal={closeModal}>
@@ -182,132 +198,52 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
     <ModalRoot closeModal={closeModal}>
       <DialogHeader>{t('FLATPAK_MODAL_TITLE', 'Flatpak Extensions')}</DialogHeader>
       <DialogBody>
-        <Focusable>
+        <Focusable flow-children="vertical">
           {/* Extension Status Section */}
           <DialogControlsSection>
             <DialogControlsSectionHeader>{t('FLATPAK_RUNTIME_INSTALLER', 'Runtime Extension Installer')}</DialogControlsSectionHeader>
 
             {extensionStatus && extensionStatus.success ? (
               <>
-                {/* 23.08 Runtime */}
-                <PanelSectionRow>
-                  <Field 
-                    label={t('FLATPAK_RUNTIME_23', 'Runtime 23.08')}
-                    description={extensionStatus.installed_23_08 ? t('FLATPAK_INSTALLED', 'Installed') : t('FLATPAK_NOT_INSTALLED', 'Not installed')}
-                    icon={extensionStatus.installed_23_08 ? <FaCheck style={{color: 'green'}} /> : <FaTimes style={{color: 'red'}} />}
-                  >
-                    <ButtonItem
-                      layout="below"
-                      onClick={() => {
-                        const operation = extensionStatus.installed_23_08 ? 'uninstall' : 'install';
-                        const action = () => handleExtensionOperation(operation, '23.08');
+                {[
+                  { version: '23.08', label: t('FLATPAK_RUNTIME_23', 'Runtime 23.08'), installed: extensionStatus.installed_23_08 },
+                  { version: '24.08', label: t('FLATPAK_RUNTIME_24', 'Runtime 24.08'), installed: extensionStatus.installed_24_08 },
+                  { version: '25.08', label: t('FLATPAK_RUNTIME_25', 'Runtime 25.08'), installed: extensionStatus.installed_25_08 }
+                ].map((runtime) => {
+                  const isBusy = operationInProgress === `install-${runtime.version}` || operationInProgress === `uninstall-${runtime.version}`;
 
-                        if (operation === 'uninstall') {
-                          confirmOperation(
-                            action,
-                            t('FLATPAK_UNINSTALL_TITLE', 'Uninstall Runtime Extension'),
-                            `${t('FLATPAK_UNINSTALL_CONFIRM_PREFIX', 'Are you sure you want to uninstall the')} 23.08 ${t('FLATPAK_UNINSTALL_CONFIRM_SUFFIX', 'runtime extension?')}`
-                          );
-                        } else {
-                          action();
-                        }
-                      }}
-                      disabled={operationInProgress === 'install-23.08' || operationInProgress === 'uninstall-23.08'}
-                    >
-                      {operationInProgress === 'install-23.08' || operationInProgress === 'uninstall-23.08' ? (
-                        <Spinner />
-                      ) : extensionStatus.installed_23_08 ? (
-                        <>
-                          <FaTrash /> {t('FLATPAK_UNINSTALL_BTN', 'Uninstall')}
-                        </>
-                      ) : (
-                        <>
-                          <FaDownload /> {t('FLATPAK_INSTALL_BTN', 'Install')}
-                        </>
+                  return (
+                    <div key={runtime.version}>
+                      <PanelSectionRow>
+                        <Field
+                          label={runtime.label}
+                          description={runtime.installed ? t('FLATPAK_INSTALLED', 'Installed') : t('FLATPAK_NOT_INSTALLED', 'Not installed')}
+                          icon={runtime.installed ? <FaCheck style={{ color: 'green' }} /> : <FaTimes style={{ color: 'red' }} />}
+                        />
+                      </PanelSectionRow>
+                      <PanelSectionRow>
+                        <ButtonItem
+                          layout="below"
+                          onClick={() => handleRuntimePrimaryAction(runtime.version, runtime.installed)}
+                          disabled={isBusy}
+                        >
+                          {isBusy ? <Spinner /> : runtime.installed ? <><FaTrash /> {t('FLATPAK_UNINSTALL_BTN', 'Uninstall')}</> : <><FaDownload /> {t('FLATPAK_INSTALL_BTN', 'Install')}</>}
+                        </ButtonItem>
+                      </PanelSectionRow>
+                      {runtime.installed && (
+                        <PanelSectionRow>
+                          <ButtonItem
+                            layout="below"
+                            onClick={() => handleExtensionOperation('install', runtime.version)}
+                            disabled={isBusy}
+                          >
+                            {operationInProgress === `install-${runtime.version}` ? <Spinner /> : <><FaDownload /> {t('FLATPAK_UPDATE_BTN', 'Update')}</>}
+                          </ButtonItem>
+                        </PanelSectionRow>
                       )}
-                    </ButtonItem>
-                  </Field>
-                </PanelSectionRow>
-
-                {/* 24.08 Runtime */}
-                <PanelSectionRow>
-                  <Field 
-                    label={t('FLATPAK_RUNTIME_24', 'Runtime 24.08')}
-                    description={extensionStatus.installed_24_08 ? t('FLATPAK_INSTALLED', 'Installed') : t('FLATPAK_NOT_INSTALLED', 'Not installed')}
-                    icon={extensionStatus.installed_24_08 ? <FaCheck style={{color: 'green'}} /> : <FaTimes style={{color: 'red'}} />}
-                  >
-                    <ButtonItem
-                      layout="below"
-                      onClick={() => {
-                        const operation = extensionStatus.installed_24_08 ? 'uninstall' : 'install';
-                        const action = () => handleExtensionOperation(operation, '24.08');
-
-                        if (operation === 'uninstall') {
-                          confirmOperation(
-                            action,
-                            t('FLATPAK_UNINSTALL_TITLE', 'Uninstall Runtime Extension'),
-                            `${t('FLATPAK_UNINSTALL_CONFIRM_PREFIX', 'Are you sure you want to uninstall the')} 24.08 ${t('FLATPAK_UNINSTALL_CONFIRM_SUFFIX', 'runtime extension?')}`
-                          );
-                        } else {
-                          action();
-                        }
-                      }}
-                      disabled={operationInProgress === 'install-24.08' || operationInProgress === 'uninstall-24.08'}
-                    >
-                      {operationInProgress === 'install-24.08' || operationInProgress === 'uninstall-24.08' ? (
-                        <Spinner />
-                      ) : extensionStatus.installed_24_08 ? (
-                        <>
-                          <FaTrash /> {t('FLATPAK_UNINSTALL_BTN', 'Uninstall')}
-                        </>
-                      ) : (
-                        <>
-                          <FaDownload /> {t('FLATPAK_INSTALL_BTN', 'Install')}
-                        </>
-                      )}
-                    </ButtonItem>
-                  </Field>
-                </PanelSectionRow>
-
-                {/* 25.08 Runtime */}
-                <PanelSectionRow>
-                  <Field 
-                    label={t('FLATPAK_RUNTIME_25', 'Runtime 25.08')}
-                    description={extensionStatus.installed_25_08 ? t('FLATPAK_INSTALLED', 'Installed') : t('FLATPAK_NOT_INSTALLED', 'Not installed')}
-                    icon={extensionStatus.installed_25_08 ? <FaCheck style={{color: 'green'}} /> : <FaTimes style={{color: 'red'}} />}
-                  >
-                    <ButtonItem
-                      layout="below"
-                      onClick={() => {
-                        const operation = extensionStatus.installed_25_08 ? 'uninstall' : 'install';
-                        const action = () => handleExtensionOperation(operation, '25.08');
-
-                        if (operation === 'uninstall') {
-                          confirmOperation(
-                            action,
-                            t('FLATPAK_UNINSTALL_TITLE', 'Uninstall Runtime Extension'),
-                            `${t('FLATPAK_UNINSTALL_CONFIRM_PREFIX', 'Are you sure you want to uninstall the')} 25.08 ${t('FLATPAK_UNINSTALL_CONFIRM_SUFFIX', 'runtime extension?')}`
-                          );
-                        } else {
-                          action();
-                        }
-                      }}
-                      disabled={operationInProgress === 'install-25.08' || operationInProgress === 'uninstall-25.08'}
-                    >
-                      {operationInProgress === 'install-25.08' || operationInProgress === 'uninstall-25.08' ? (
-                        <Spinner />
-                      ) : extensionStatus.installed_25_08 ? (
-                        <>
-                          <FaTrash /> {t('FLATPAK_UNINSTALL_BTN', 'Uninstall')}
-                        </>
-                      ) : (
-                        <>
-                          <FaDownload /> {t('FLATPAK_INSTALL_BTN', 'Install')}
-                        </>
-                      )}
-                    </ButtonItem>
-                  </Field>
-                </PanelSectionRow>
+                    </div>
+                  );
+                })}
               </>
             ) : (
               <PanelSectionRow>

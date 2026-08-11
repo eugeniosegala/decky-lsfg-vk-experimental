@@ -5,13 +5,20 @@ set -euo pipefail
 project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 output_path=""
 output_path_set=false
+engine_archive_path=""
+flatpak_archive_path=""
 
 usage() {
   cat <<'EOF'
-Usage: scripts/package-local.sh [output-path]
+Usage: scripts/package-local.sh [options] [output-path]
 
 Builds a verified Decky plugin ZIP for local installation. It never creates a
 tag, pushes commits, or changes GitHub.
+
+Options:
+  --engine-archive PATH   Use a local engine archive instead of downloading it.
+  --flatpak-archive PATH  Use a local Flatpak archive instead of downloading it.
+  -h, --help              Show this help.
 EOF
 }
 
@@ -35,6 +42,24 @@ while (($#)); do
       echo "Use scripts/publish-package.sh to publish a GitHub pre-release." >&2
       exit 2
       ;;
+    --engine-archive)
+      if (($# < 2)); then
+        echo "--engine-archive requires a path" >&2
+        exit 2
+      fi
+      engine_archive_path="$2"
+      shift 2
+      continue
+      ;;
+    --flatpak-archive)
+      if (($# < 2)); then
+        echo "--flatpak-archive requires a path" >&2
+        exit 2
+      fi
+      flatpak_archive_path="$2"
+      shift 2
+      continue
+      ;;
     --help|-h)
       usage
       exit 0
@@ -55,6 +80,13 @@ while (($#)); do
       ;;
   esac
   shift
+done
+
+for local_archive in "$engine_archive_path" "$flatpak_archive_path"; do
+  if [[ -n "$local_archive" && ! -f "$local_archive" ]]; then
+    echo "Local archive not found: $local_archive" >&2
+    exit 1
+  fi
 done
 
 for command in curl node npm python3 tar zip unzip; do
@@ -120,15 +152,17 @@ echo "Generating configuration bindings..."
 python3 "$project_dir/scripts/generate_ts_schema.py"
 
 echo "Building frontend..."
-(
-  cd "$project_dir"
-  npm run build
-)
+npm --prefix "$project_dir" run build
 
-echo "Downloading verified lsfg-vk $archive_version payload..."
 mkdir -p "$package_dir/bin" "$package_dir/dist" "$package_dir/py_modules"
-curl --fail --location --silent --show-error "$archive_url" \
-  --output "$package_dir/bin/$archive_name"
+if [[ -n "$engine_archive_path" ]]; then
+  echo "Using local lsfg-vk $archive_version payload..."
+  cp "$engine_archive_path" "$package_dir/bin/$archive_name"
+else
+  echo "Downloading verified lsfg-vk $archive_version payload..."
+  curl --fail --location --silent --show-error "$archive_url" \
+    --output "$package_dir/bin/$archive_name"
+fi
 
 actual_checksum="$(${checksum_command[@]} "$package_dir/bin/$archive_name" | awk '{print $1}')"
 if [[ "$actual_checksum" != "$archive_checksum" ]]; then
@@ -139,9 +173,14 @@ if [[ "$actual_checksum" != "$archive_checksum" ]]; then
 fi
 
 if [[ -n "$flatpak_archive_name" ]]; then
-  echo "Downloading verified experimental Flatpak extensions..."
-  curl --fail --location --silent --show-error "$flatpak_archive_url" \
-    --output "$package_dir/bin/$flatpak_archive_name"
+  if [[ -n "$flatpak_archive_path" ]]; then
+    echo "Using local experimental Flatpak extensions..."
+    cp "$flatpak_archive_path" "$package_dir/bin/$flatpak_archive_name"
+  else
+    echo "Downloading verified experimental Flatpak extensions..."
+    curl --fail --location --silent --show-error "$flatpak_archive_url" \
+      --output "$package_dir/bin/$flatpak_archive_name"
+  fi
 
   actual_flatpak_checksum="$(${checksum_command[@]} "$package_dir/bin/$flatpak_archive_name" | awk '{print $1}')"
   if [[ "$actual_flatpak_checksum" != "$flatpak_archive_checksum" ]]; then

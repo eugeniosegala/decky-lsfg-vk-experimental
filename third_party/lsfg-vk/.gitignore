@@ -1,0 +1,5 @@
+# Experimental artifacts are published by eugeniosegala/lsfg-vk-experimental.
+# Keep only their provenance metadata in this Decky repository.
+lsfg-vk-*-experimental.*-linux.tar.xz
+lsfg-vk-*-experimental.*-flatpaks.tar.xz
+*.flatpak

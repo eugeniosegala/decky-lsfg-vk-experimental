@@ -11,6 +11,10 @@ export enum ConfigFieldType {
 export const DLL = "dll" as const;
 export const ALLOW_FP16 = "allow_fp16" as const;
 export const MULTIPLIER = "multiplier" as const;
+export const ADAPTIVE = "adaptive" as const;
+export const TARGET_FPS = "target_fps" as const;
+export const ADAPTIVE_MAX_MULTIPLIER = "adaptive_max_multiplier" as const;
+export const ADAPTIVE_STABLE_CADENCE = "adaptive_stable_cadence" as const;
 export const FLOW_SCALE = "flow_scale" as const;
 export const PERFORMANCE_MODE = "performance_mode" as const;
 export const PACING = "pacing" as const;
@@ -51,6 +55,30 @@ export const CONFIG_SCHEMA: Record<string, ConfigField> = {
     fieldType: ConfigFieldType.INTEGER,
     default: 2,
     description: "change the fps multiplier"
+  },
+  adaptive: {
+    name: "adaptive",
+    fieldType: ConfigFieldType.BOOLEAN,
+    default: false,
+    description: "dynamically vary generated frames to approach a target framerate"
+  },
+  target_fps: {
+    name: "target_fps",
+    fieldType: ConfigFieldType.INTEGER,
+    default: 120,
+    description: "target displayed framerate for adaptive frame generation"
+  },
+  adaptive_max_multiplier: {
+    name: "adaptive_max_multiplier",
+    fieldType: ConfigFieldType.INTEGER,
+    default: 3,
+    description: "maximum multiplier adaptive frame generation may use"
+  },
+  adaptive_stable_cadence: {
+    name: "adaptive_stable_cadence",
+    fieldType: ConfigFieldType.BOOLEAN,
+    default: false,
+    description: "prefer smoother constant interpolation at the cost of real-frame cadence and responsiveness"
   },
   flow_scale: {
     name: "flow_scale",
@@ -131,6 +159,10 @@ export interface ConfigurationData {
   dll: string;
   allow_fp16: boolean;
   multiplier: number;
+  adaptive: boolean;
+  target_fps: number;
+  adaptive_max_multiplier: number;
+  adaptive_stable_cadence: boolean;
   flow_scale: number;
   performance_mode: boolean;
   pacing: string;
@@ -155,6 +187,10 @@ export function getDefaults(): ConfigurationData {
     dll: "",
     allow_fp16: true,
     multiplier: 2,
+    adaptive: false,
+    target_fps: 120,
+    adaptive_max_multiplier: 3,
+    adaptive_stable_cadence: false,
     flow_scale: 0.9,
     performance_mode: false,
     pacing: "none",
@@ -175,6 +211,10 @@ export function getFieldTypes(): Record<string, ConfigFieldType> {
     dll: ConfigFieldType.STRING,
     allow_fp16: ConfigFieldType.BOOLEAN,
     multiplier: ConfigFieldType.INTEGER,
+    adaptive: ConfigFieldType.BOOLEAN,
+    target_fps: ConfigFieldType.INTEGER,
+    adaptive_max_multiplier: ConfigFieldType.INTEGER,
+    adaptive_stable_cadence: ConfigFieldType.BOOLEAN,
     flow_scale: ConfigFieldType.FLOAT,
     performance_mode: ConfigFieldType.BOOLEAN,
     pacing: ConfigFieldType.STRING,
