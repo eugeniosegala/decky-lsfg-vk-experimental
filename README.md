@@ -17,12 +17,12 @@
 
 ## ✨ Experimental highlights
 
-|    | Highlight | What it brings |
-|:--:|-----------|----------------|
-| 🖼️ | **Improved full-quality image** | In testing, v2 with **Performance Mode disabled** can show noticeably less ghosting than the older layer. Results remain game-dependent; Performance Mode is still useful when lower GPU overhead matters more than image quality. |
-| 🎯 | **Adaptive Frame Generation** | Optionally target 30–240 FPS while the layer varies generated frames up to a selected 2x–4x ceiling. It is disabled by default while it continues to be refined. |
-| 🛡️ | **Gamescope recovery** | Bounded presentation recovery preserves proven Adaptive state, ignores transient Steam-menu cadence, refreshes history, and resumes only after the game cadence is stable again. |
-| 🎮 | **Per-game Heroic support** | Use the experimental layer only for the Heroic games you choose, with the same private configuration and engine as native Steam games. |
+|    | Highlight                       | What it brings                                                                                                                                                                                                                                                                                        |
+|:--:|---------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 🖼️ | **Improved full-quality image** | In testing, v2 with **Performance Mode disabled** can show noticeably less ghosting than the older layer. Results remain game-dependent; Performance Mode is still useful when lower GPU overhead matters more than image quality.                                                                    |
+| 🎯 | **Adaptive Frame Generation**   | Optionally target 30–240 FPS while the layer varies generated frames up to a selected 2x–4x ceiling. It is disabled by default while it continues to be refined.                                                                                                                                      |
+| 🛡️ | **Gamescope recovery**          | Bounded presentation recovery preserves proven Adaptive state, ignores transient Steam-menu cadence, refreshes history, and resumes only after the game cadence is stable again. A validated 2x Adaptive setup also recovers from short gameplay hitches without entering the longer menu/focus path. |
+| 🎮 | **Per-game Heroic support**     | Use the experimental layer only for the Heroic games you choose, with the same private configuration and engine as native Steam games.                                                                                                                                                                |
 
 ## What it is
 
@@ -91,8 +91,8 @@ Install a newer ZIP **in place**; do not normally uninstall the plugin first.
 1. Quit games using the experimental wrapper, then install the newer ZIP through **Developer > Install Plugin from
    Zip**.
 2. Reload the plugin. If it does not reload, restart your Steam Deck or Steam Machine.
-3. **Required:** select **Install Experimental LSFG-VK (developer build)** to replace the private native engine with
-   the version bundled in the ZIP.
+3. **Required:** select **Install Experimental LSFG-VK (developer build)** to replace the private native engine with the
+   version bundled in the ZIP.
 4. If you use Heroic, open **Flatpak Setup** and select **Update** for Heroic's matching runtime extension, usually
    **25.08**. This updates its Flatpak engine without changing Heroic preparation or per-game Wrapper commands.
 
@@ -110,11 +110,11 @@ reinstall-and-restart fallback above, then repeat the required engine-install st
 
 ## Credits
 
-- **[Kurt Himebauch / xXJSONDeruloXx](https://github.com/xXJSONDeruloXx/decky-lsfg-vk)** for the original Decky
-  LSFG-VK plugin on which this experimental fork is based
+- **[Kurt Himebauch / xXJSONDeruloXx](https://github.com/xXJSONDeruloXx/decky-lsfg-vk)** for the original Decky LSFG-VK
+  plugin on which this experimental fork is based
 - **[PancakeTAS](https://github.com/PancakeTAS/lsfg-vk)** for creating the lsfg-vk Vulkan compatibility layer
 - **[Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/)** developers for the original
   frame-generation technology
-- **[Deck Wizard](https://www.youtube.com/@DeckWizard)** for community support, guides, testing, feedback, artwork,
-  and tutorials
+- **[Deck Wizard](https://www.youtube.com/@DeckWizard)** for community support, guides, testing, feedback, artwork, and
+  tutorials
 - The **Decky Loader** team and community contributors and testers

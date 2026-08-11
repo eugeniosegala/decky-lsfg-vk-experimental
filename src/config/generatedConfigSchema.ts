@@ -65,7 +65,7 @@ export const CONFIG_SCHEMA: Record<string, ConfigField> = {
   target_fps: {
     name: "target_fps",
     fieldType: ConfigFieldType.INTEGER,
-    default: 120,
+    default: 90,
     description: "target displayed framerate for adaptive frame generation"
   },
   adaptive_max_multiplier: {
@@ -77,8 +77,8 @@ export const CONFIG_SCHEMA: Record<string, ConfigField> = {
   adaptive_stable_cadence: {
     name: "adaptive_stable_cadence",
     fieldType: ConfigFieldType.BOOLEAN,
-    default: false,
-    description: "prefer smoother constant interpolation at the cost of real-frame cadence and responsiveness"
+    default: true,
+    description: "prefer a steadier interpolation cadence; perceived smoothness and responsiveness vary by game"
   },
   flow_scale: {
     name: "flow_scale",
@@ -188,9 +188,9 @@ export function getDefaults(): ConfigurationData {
     allow_fp16: true,
     multiplier: 2,
     adaptive: false,
-    target_fps: 120,
+    target_fps: 90,
     adaptive_max_multiplier: 3,
-    adaptive_stable_cadence: false,
+    adaptive_stable_cadence: true,
     flow_scale: 0.9,
     performance_mode: false,
     pacing: "none",

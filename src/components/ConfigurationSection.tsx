@@ -176,7 +176,7 @@ export function ConfigurationSection({
           <PanelSectionRow>
             <TextField
               label="Active In"
-              description="Executable/process names, separated by commas. When set, lsfg-vk matches profiles automatically."
+              description="Executable/process names, separated by commas. This automatically matches the lsfg-vk engine profile; wrapper-only compatibility options use the selected Decky profile."
               value={config.active_in}
               onChange={(event) => onConfigChange(ACTIVE_IN, event.currentTarget.value)}
             />

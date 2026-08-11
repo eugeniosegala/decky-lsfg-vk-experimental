@@ -1,13 +1,18 @@
-"""
-Configuration service for TOML-based lsfg configuration management.
-"""
+"""Configuration service for TOML-based lsfg configuration management."""
 
+import json
 from pathlib import Path
 import shlex
 from typing import Dict, Any
 
 from .base_service import BaseService
-from .config_schema import ConfigurationManager, CONFIG_SCHEMA, ProfileData, DEFAULT_PROFILE_NAME
+from .config_schema import (
+    ConfigurationManager,
+    CONFIG_SCHEMA,
+    SCRIPT_ONLY_FIELDS,
+    ProfileData,
+    DEFAULT_PROFILE_NAME,
+)
 from .config_schema_generated import ConfigurationData, get_script_generation_logic
 from .constants import (
     ARMADA_DEVICE_ENV,
@@ -22,7 +27,8 @@ from .types import ConfigurationResponse, ProfilesResponse, ProfileResponse
 class ConfigurationService(BaseService):
     """Service for managing TOML-based lsfg configuration"""
 
-    _WRAPPER_FORMAT_MARKER = "# decky-lsfg-vk-experimental-wrapper-format: 7"
+    _WRAPPER_FORMAT_MARKER = "# decky-lsfg-vk-experimental-wrapper-format: 9"
+    _WRAPPER_PROFILE_SETTINGS_VERSION = 1
     _REQUIRED_WRAPPER_EXPORTS = (
         "export LSFGVK_PRESENT_ACQUIRE_TIMEOUT_MS=",
         "export LSFGVK_PRESENT_RECOVERY_RECREATE=",
@@ -30,22 +36,152 @@ class ConfigurationService(BaseService):
     )
 
     @staticmethod
-    def _profile_selection_lines(profile_name: str, config: ConfigurationData) -> list[str]:
+    def _wrapper_settings_defaults() -> Dict[str, Any]:
+        return {
+            field_name: CONFIG_SCHEMA[field_name].default
+            for field_name in SCRIPT_ONLY_FIELDS
+        }
+
+    @staticmethod
+    def _normalize_wrapper_settings(raw_settings: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate Decky-only wrapper settings without polluting engine TOML."""
+        candidate = ConfigurationManager.get_defaults()
+        candidate.update({
+            field_name: raw_settings[field_name]
+            for field_name in SCRIPT_ONLY_FIELDS
+            if field_name in raw_settings
+        })
+        validated = ConfigurationManager.validate_config(candidate)
+        return {
+            field_name: validated[field_name]
+            for field_name in SCRIPT_ONLY_FIELDS
+        }
+
+    def _read_wrapper_profile_settings(self) -> Dict[str, Dict[str, Any]]:
+        """Read persisted per-profile launcher settings, falling back safely."""
+        if not self.wrapper_profile_settings_path.exists():
+            return {}
+
+        try:
+            raw_data = json.loads(
+                self.wrapper_profile_settings_path.read_text(encoding="utf-8")
+            )
+            if not isinstance(raw_data, dict):
+                raise ValueError("wrapper settings must be a JSON object")
+            raw_profiles = raw_data.get("profiles", {})
+            if not isinstance(raw_profiles, dict):
+                raise ValueError("wrapper settings profiles must be an object")
+            settings: Dict[str, Dict[str, Any]] = {}
+            for profile_name, raw_settings in raw_profiles.items():
+                if isinstance(profile_name, str) and isinstance(raw_settings, dict):
+                    settings[profile_name] = self._normalize_wrapper_settings(raw_settings)
+            return settings
+        except (OSError, IOError, ValueError, TypeError, json.JSONDecodeError) as error:
+            self.log.warning(
+                "Ignoring invalid per-profile wrapper settings at %s: %s",
+                self.wrapper_profile_settings_path,
+                error,
+            )
+            return {}
+
+    def _write_wrapper_profile_settings(
+            self, profile_settings: Dict[str, Dict[str, Any]]) -> None:
+        normalized_profiles = {
+            profile_name: self._normalize_wrapper_settings(settings)
+            for profile_name, settings in profile_settings.items()
+        }
+        payload = {
+            "version": self._WRAPPER_PROFILE_SETTINGS_VERSION,
+            "profiles": normalized_profiles,
+        }
+        self.config_dir.mkdir(parents=True, exist_ok=True)
+        self._write_file(
+            self.wrapper_profile_settings_path,
+            json.dumps(payload, indent=2, sort_keys=True) + "\n",
+            0o644,
+        )
+
+    def _wrapper_settings_for_profile(
+            self,
+            profile_name: str,
+            profile_settings: Dict[str, Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        settings = self._wrapper_settings_defaults()
+        stored_settings = (profile_settings or self._read_wrapper_profile_settings()).get(profile_name)
+        if stored_settings:
+            settings.update(stored_settings)
+        return self._normalize_wrapper_settings(settings)
+
+    def _config_for_profile(
+            self,
+            profile_data: ProfileData,
+            profile_name: str,
+            profile_settings: Dict[str, Dict[str, Any]] = None,
+    ) -> ConfigurationData:
+        """Merge lsfg-vk TOML, global, and Decky wrapper fields for one profile."""
+        config = dict(
+            profile_data["profiles"].get(
+                profile_name, ConfigurationManager.get_defaults()
+            )
+        )
+        config.update(profile_data["global_config"])
+        config.update(self._wrapper_settings_for_profile(profile_name, profile_settings))
+        return ConfigurationManager.validate_config(config)
+
+    def migrate_wrapper_profile_settings_if_needed(self) -> bool:
+        """Preserve old current-wrapper compatibility settings on first upgrade.
+
+        Older releases stored these values only in the generated launcher. That
+        launcher represented the selected profile, so it can be imported without
+        guessing settings for any other profile.
+        """
+        if self.wrapper_profile_settings_path.exists() or not self.lsfg_script_path.exists():
+            return False
+
+        try:
+            script_values = ConfigurationManager.parse_script_content(
+                self.lsfg_script_path.read_text(encoding="utf-8")
+            )
+            profile_data = self._get_profile_data()
+            self._write_wrapper_profile_settings({
+                profile_data["current_profile"]: self._normalize_wrapper_settings(script_values)
+            })
+            self.log.info(
+                "Migrated wrapper-only settings into profile '%s'",
+                profile_data["current_profile"],
+            )
+            return True
+        except (OSError, IOError, ValueError, TypeError) as error:
+            self.log.warning("Could not migrate wrapper-only profile settings: %s", error)
+            return False
+
+    @staticmethod
+    def _has_active_in(config: ConfigurationData) -> bool:
+        """Return whether an engine profile can select itself by process name."""
+        active_in = config.get("active_in", "")
+        if isinstance(active_in, (list, tuple)):
+            return bool(active_in)
+        return bool(str(active_in).strip())
+
+    @classmethod
+    def _profile_selection_lines(
+            cls,
+            profile_name: str,
+            config: ConfigurationData,
+            automatic_matching_enabled: bool = None,
+    ) -> list[str]:
         """Choose between Decky's selected profile and automatic matching.
 
         ``LSFGVK_PROFILE`` deliberately overrides lsfg-vk's ``active_in`` matching.
         Keep Decky's selected-profile behaviour for profiles without activation rules,
         but let lsfg-vk perform its native automatic selection when rules are present.
         """
-        active_in = config.get("active_in", "")
-        if isinstance(active_in, (list, tuple)):
-            has_active_in = bool(active_in)
-        else:
-            has_active_in = bool(str(active_in).strip())
+        if automatic_matching_enabled is None:
+            automatic_matching_enabled = cls._has_active_in(config)
 
-        if has_active_in:
+        if automatic_matching_enabled:
             return [
-                "# active_in is configured; lsfg-vk will select a matching profile automatically.",
+                "# An active_in profile is configured; lsfg-vk will select a matching profile automatically.",
             ]
         return [f"export LSFGVK_PROFILE={shlex.quote(profile_name)}"]
     
@@ -56,24 +192,11 @@ class ConfigurationService(BaseService):
             ConfigurationResponse with current configuration or error
         """
         try:
-            if not self.config_file_path.exists():
-                from .dll_detection import DllDetectionService
-                dll_service = DllDetectionService(self.log)
-                toml_config = ConfigurationManager.get_defaults_with_dll_detection(dll_service)
-            else:
-                content = self.config_file_path.read_text(encoding='utf-8')
-                toml_config = ConfigurationManager.parse_toml_content(content)
-            
-            script_values = {}
-            if self.lsfg_script_path.exists():
-                try:
-                    script_content = self.lsfg_script_path.read_text(encoding='utf-8')
-                    script_values = ConfigurationManager.parse_script_content(script_content)
-                    self.log.info(f"Parsed script values: {script_values}")
-                except Exception as e:
-                    self.log.warning(f"Failed to parse launch script: {str(e)}")
-            
-            config = ConfigurationManager.merge_config_with_script(toml_config, script_values)
+            self.migrate_wrapper_profile_settings_if_needed()
+            profile_data = self._get_profile_data()
+            config = self._config_for_profile(
+                profile_data, profile_data["current_profile"]
+            )
             
             return self._success_response(ConfigurationResponse, config=config)
             
@@ -204,11 +327,11 @@ class ConfigurationService(BaseService):
             The complete script content as a string
         """
         current_profile = profile_data["current_profile"]
-        config = profile_data["profiles"].get(current_profile, ConfigurationManager.get_defaults())
-        
-        merged_config = dict(config)
-        for field_name, value in profile_data["global_config"].items():
-            merged_config[field_name] = value
+        merged_config = self._config_for_profile(profile_data, current_profile)
+        automatic_matching_enabled = any(
+            self._has_active_in(profile_config)
+            for profile_config in profile_data["profiles"].values()
+        )
         
         lines = [
             "#!/bin/bash",
@@ -220,7 +343,15 @@ class ConfigurationService(BaseService):
         lines.extend(generate_script_lines(merged_config))
         
         lines.extend(self._generate_layer_environment_lines())
-        lines.extend(self._profile_selection_lines(current_profile, merged_config))
+        # Never export LSFGVK_PROFILE once any profile uses Active In: the
+        # environment override takes precedence over upstream's executable
+        # detection and would otherwise make profiles depend on the UI's last
+        # selected entry.
+        lines.extend(self._profile_selection_lines(
+            current_profile,
+            merged_config,
+            automatic_matching_enabled,
+        ))
         lines.extend(self._generate_game_launch_lines())
         
         return "\n".join(lines) + "\n"
@@ -256,13 +387,14 @@ class ConfigurationService(BaseService):
     def migrate_launch_script_if_needed(self) -> bool:
         """Upgrade an installed generated wrapper without touching user data.
 
-        Wrapper format 7 writes explicitly enabled engine diagnostics to the
-        plugin-private log file, so Heroic cannot discard them. It retains
-        format 6's Adaptive game-owned swapchain recreation behaviour.
-        It preserves explicit caller overrides, the validated 50 ms acquisition
-        timeout, and the experimental Flatpak manifest selection. Validate the
-        required exports as well as the marker so an intermediate locally
-        generated wrapper cannot be mistaken for the completed format.
+        Wrapper format 9 permits automatic Active In matching whenever at least
+        one profile has an activation rule, while retaining format 8's selected
+        profile compatibility settings, format 7's plugin-private diagnostics
+        log, format 6's Adaptive game-owned swapchain recreation behaviour,
+        explicit caller overrides, the validated 50 ms acquisition timeout, and
+        experimental Flatpak manifest selection. Validate the required exports
+        as well as the marker so an intermediate locally generated wrapper
+        cannot be mistaken for the completed format.
         """
         if not self.lsfg_script_path.exists():
             return False
@@ -284,7 +416,7 @@ class ConfigurationService(BaseService):
             if not result["success"]:
                 raise OSError(result.get("error") or "could not refresh launch wrapper")
 
-            self.log.info("Upgraded installed lsfg-vk experimental launch wrapper to format 7")
+            self.log.info("Upgraded installed lsfg-vk experimental launch wrapper to format 9")
             return True
         except OSError:
             raise
@@ -371,6 +503,7 @@ class ConfigurationService(BaseService):
             ProfileResponse with success status and the normalized profile name
         """
         try:
+            self.migrate_wrapper_profile_settings_if_needed()
             profile_data = self._get_profile_data()
             
             if not source_profile:
@@ -380,8 +513,12 @@ class ConfigurationService(BaseService):
             normalized_name = ConfigurationManager.normalize_profile_name(profile_name)
             
             new_profile_data = ConfigurationManager.create_profile(profile_data, profile_name, source_profile)
-            
+            profile_settings = self._read_wrapper_profile_settings()
+            profile_settings[normalized_name] = dict(
+                self._wrapper_settings_for_profile(source_profile, profile_settings)
+            )
             self._save_profile_data(new_profile_data)
+            self._write_wrapper_profile_settings(profile_settings)
             
             self.log.info(f"Created profile '{normalized_name}' from '{source_profile}'")
             
@@ -409,11 +546,14 @@ class ConfigurationService(BaseService):
             ProfileResponse with success status
         """
         try:
+            self.migrate_wrapper_profile_settings_if_needed()
             profile_data = self._get_profile_data()
-            
+            profile_settings = self._read_wrapper_profile_settings()
             new_profile_data = ConfigurationManager.delete_profile(profile_data, profile_name)
-            
+            profile_settings.pop(profile_name, None)
             self._save_profile_data(new_profile_data)
+            if self.wrapper_profile_settings_path.exists() or profile_settings:
+                self._write_wrapper_profile_settings(profile_settings)
             
             script_result = self.update_lsfg_script_from_profile_data(new_profile_data)
             if not script_result["success"]:
@@ -445,14 +585,19 @@ class ConfigurationService(BaseService):
             ProfileResponse with success status and the normalized profile name
         """
         try:
+            self.migrate_wrapper_profile_settings_if_needed()
             profile_data = self._get_profile_data()
             
             # Get the normalized name that will be used for storage
             normalized_name = ConfigurationManager.normalize_profile_name(new_name)
             
             new_profile_data = ConfigurationManager.rename_profile(profile_data, old_name, new_name)
-            
+            profile_settings = self._read_wrapper_profile_settings()
+            if old_name in profile_settings:
+                profile_settings[normalized_name] = profile_settings.pop(old_name)
             self._save_profile_data(new_profile_data)
+            if self.wrapper_profile_settings_path.exists() or profile_settings:
+                self._write_wrapper_profile_settings(profile_settings)
             
             script_result = self.update_lsfg_script_from_profile_data(new_profile_data)
             if not script_result["success"]:
@@ -484,6 +629,7 @@ class ConfigurationService(BaseService):
             ProfileResponse with success status
         """
         try:
+            self.migrate_wrapper_profile_settings_if_needed()
             profile_data = self._get_profile_data()
             
             new_profile_data = ConfigurationManager.set_current_profile(profile_data, profile_name)
@@ -520,6 +666,7 @@ class ConfigurationService(BaseService):
             ConfigurationResponse with success status
         """
         try:
+            self.migrate_wrapper_profile_settings_if_needed()
             profile_data = self._get_profile_data()
             
             if profile_name not in profile_data["profiles"]:
@@ -534,8 +681,10 @@ class ConfigurationService(BaseService):
             for field_name in ["dll", "allow_fp16"]:
                 if field_name in config:
                     profile_data["global_config"][field_name] = config[field_name]
-            
+            profile_settings = self._read_wrapper_profile_settings()
+            profile_settings[profile_name] = self._normalize_wrapper_settings(config)
             self._save_profile_data(profile_data)
+            self._write_wrapper_profile_settings(profile_settings)
             
             if profile_name == profile_data["current_profile"]:
                 script_result = self.update_lsfg_script_from_profile_data(profile_data)
@@ -572,7 +721,9 @@ class ConfigurationService(BaseService):
             self.log.info(f"Updated lsfg launch script at {self.lsfg_script_path} for profile '{profile_data['current_profile']}'")
             
             # Get current profile config for response
-            current_config = profile_data["profiles"].get(profile_data["current_profile"], ConfigurationManager.get_defaults())
+            current_config = self._config_for_profile(
+                profile_data, profile_data["current_profile"]
+            )
             
             return self._success_response(ConfigurationResponse,
                                         "Launch script updated successfully",

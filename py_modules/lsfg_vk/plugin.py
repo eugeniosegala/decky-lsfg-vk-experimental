@@ -419,6 +419,11 @@ class Plugin:
         """
         decky.logger.info("decky-lsfg-vk-experimental plugin loaded")
         try:
+            if self.configuration_service.migrate_wrapper_profile_settings_if_needed():
+                decky.logger.info("Migrated wrapper-only settings into the active profile")
+        except OSError as error:
+            decky.logger.warning("Could not migrate wrapper-only profile settings: %s", error)
+        try:
             if self.configuration_service.remove_legacy_vkbasalt_exports():
                 decky.logger.info("Removed obsolete vkBasalt exports from isolated launcher")
         except OSError as error:

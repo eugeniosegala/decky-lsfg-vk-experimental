@@ -352,6 +352,22 @@ export function ProfileManagement({ currentProfile, onProfileChange, mainRunning
 
       <PanelSectionRow>
         <div
+          style={{
+            fontSize: "12px",
+            lineHeight: "1.4",
+            color: "#b8c5d6",
+            marginBottom: "4px",
+          }}
+        >
+          {t(
+            'PROFILE_HELP',
+            'To make a game profile: quit the game, choose New Profile, configure it, then set Active In to the game executable (for example, game.exe). Profiles cannot be created or changed while a game is running.'
+          )}
+        </div>
+      </PanelSectionRow>
+
+      <PanelSectionRow>
+        <div
           className="LSFG_ProfilesCollapseButton_Container"
           style={{ marginTop: "4px", marginBottom: "8px" }}
         >

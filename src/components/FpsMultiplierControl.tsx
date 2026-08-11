@@ -84,8 +84,8 @@ export function FpsMultiplierControl({
           <PanelSectionRow>
             <ToggleField
               label="Smooth Cadence"
-              description="Locks to a validated constant interpolation cadence for smoother motion, but can lower real-frame cadence and feel less responsive. Leave off for lower latency and stricter target scheduling."
-              checked={config.adaptive_stable_cadence ?? false}
+              description="Uses a validated constant interpolation cadence. It can make motion smoother and feel more responsive in some games; results vary by game and hardware. Turn it off if you prefer stricter target scheduling or the game's response feels better without it."
+              checked={config.adaptive_stable_cadence ?? true}
               onChange={(value) => onConfigChange(ADAPTIVE_STABLE_CADENCE, value)}
             />
           </PanelSectionRow>

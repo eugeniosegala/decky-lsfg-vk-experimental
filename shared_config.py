@@ -54,7 +54,7 @@ CONFIG_SCHEMA_DEF = {
     "target_fps": {
         "name": "target_fps",
         "fieldType": ConfigFieldType.INTEGER,
-        "default": 120,
+        "default": 90,
         "description": "target displayed framerate for adaptive frame generation",
         "location": "toml"
     },
@@ -70,8 +70,8 @@ CONFIG_SCHEMA_DEF = {
     "adaptive_stable_cadence": {
         "name": "adaptive_stable_cadence",
         "fieldType": ConfigFieldType.BOOLEAN,
-        "default": False,
-        "description": "prefer smoother constant interpolation at the cost of real-frame cadence and responsiveness",
+        "default": True,
+        "description": "prefer a steadier interpolation cadence; perceived smoothness and responsiveness vary by game",
         "location": "toml"
     },
     

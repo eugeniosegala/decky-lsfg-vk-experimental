@@ -1,13 +1,12 @@
 # lsfg-vk payload provenance
 
-This directory retains one original PancakeTAS dev28 release asset as a compact
-baseline and rollback reference. Experimental fork releases are recorded below
-as metadata only; their binaries remain on the experimental engine repository's
-GitHub releases page instead of being duplicated in this Decky repository.
+This directory retains one original PancakeTAS dev28 release asset as a compact baseline and rollback reference.
+Experimental fork releases are recorded below as metadata only; their binaries remain on the experimental engine
+repository's GitHub releases page instead of being duplicated in this Decky repository.
 
 The Decky packager copies an explicit list of plugin files and does **not**
-include this directory in the distributable ZIP. The runtime payload included
-in a release ZIP remains the single archive declared and checksum-pinned in
+include this directory in the distributable ZIP. The runtime payload included in a release ZIP remains the single
+archive declared and checksum-pinned in
 `package.json`.
 
 ## Original PancakeTAS dev28 baseline
@@ -26,7 +25,8 @@ in a release ZIP remains the single archive declared and checksum-pinned in
 - Release tag: `v2.0.0-dev28-experimental.1`
 - Source commit: `82e0d49976db8bce5e472fa154526e971529e091`
 - Upstream lineage: `lsfg-vk 2.0.0-dev28`
-- Source: `https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.1/lsfg-vk-2.0.0-dev28-experimental.1-linux.tar.xz`
+- Source:
+  `https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.1/lsfg-vk-2.0.0-dev28-experimental.1-linux.tar.xz`
 - SHA-256: `d447f6e821d76cffbcb003cfabdd81e1c7ea35c30d9c92c11ec498d4be28e9b2`
 
 ## v2.0.0-dev28-experimental.2
@@ -136,9 +136,9 @@ in a release ZIP remains the single archive declared and checksum-pinned in
 - Host SHA-256: `3a88778e971a1175910ba95b61821ac097bc7baa99fad930fadfdc94a9cde39e`
 - Flatpak archive: `lsfg-vk-2.0.0-dev28-experimental.10-flatpaks.tar.xz`
 - Flatpak SHA-256: `1221d76dd1007da6ef792e8a3e5aee2bc9ef2f792b1b6fd8880001d8055f8f41`
-- Notes: Maintains temporal model history while generated outputs are bypassed during Gamescope presentation stalls
-  and resets Adaptive timing state across recovery. Testing showed that a single successful image probe could still
-  restart generation too early, which is addressed by the following candidate.
+- Notes: Maintains temporal model history while generated outputs are bypassed during Gamescope presentation stalls and
+  resets Adaptive timing state across recovery. Testing showed that a single successful image probe could still restart
+  generation too early, which is addressed by the following candidate.
 
 ## v2.0.0-dev28-experimental.11
 
@@ -233,22 +233,22 @@ in a release ZIP remains the single archive declared and checksum-pinned in
 - Host SHA-256: `d752994f6f9f32e0561b81e77f1654adff8ba54d97087eb73a81577b5c7737af`
 - Flatpak archive: `lsfg-vk-2.0.0-dev28-experimental.17-flatpaks.tar.xz`
 - Flatpak SHA-256: `23f38dcf3669389a68f4e93a0641582bd8cc85f0e45843d6afc1e3e2ef4701fb`
-- Notes: Adds optional bounded constant-cadence validation, retains the last validated Adaptive generation level through a
-  recovered swapchain, progressively backs off rejected higher-level probes, and freezes Adaptive decisions while
+- Notes: Adds optional bounded constant-cadence validation, retains the last validated Adaptive generation level through
+  a recovered swapchain, progressively backs off rejected higher-level probes, and freezes Adaptive decisions while
   generated output is unavailable. Constant cadence now waits for strict scheduling to settle and is considered only
   near a natural target divisor. A severe sustained collapse performs one bounded real-only measurement before resuming
   fractional scheduling or probing one higher configured level. Abrupt menu-related cadence stalls now enter a separate
   bounded discontinuity recovery: the engine retains the proven generation level, waits for one stable second before
   restoring it, and falls back to a clean ramp after five seconds. Its first generated-image recovery refreshes history
   without immediately rebuilding the swapchain. Smooth Cadence is now opt-in because constant cadence can lower the
-  real-frame presentation rate and responsiveness. A sustained gameplay cadence drop rebases after one second instead
-  of waiting five seconds for the old rate; only a hard stall retains the previous baseline. The discontinuity safeguard
-  remains active in Adaptive mode. An interrupted ramp or bridge probe now rearms after two stable seconds without
-  being counted as a failed load test; genuine rejections retain their 15-second cooldown but may retry early after a
-  sustained 15% real-only base-rate improvement. Adaptive now stops at the lowest proven level that can supply at
-  least 98% of its target. It also detects a delayed collapse after accepting a higher strict-scheduling level,
-  measures one second without generation load, and restores the lower level only when that measurement recovers the
-  prior cadence. Fixed mode remains unchanged.
+  real-frame presentation rate and responsiveness. A sustained gameplay cadence drop rebases after one second instead of
+  waiting five seconds for the old rate; only a hard stall retains the previous baseline. The discontinuity safeguard
+  remains active in Adaptive mode. An interrupted ramp or bridge probe now rearms after two stable seconds without being
+  counted as a failed load test; genuine rejections retain their 15-second cooldown but may retry early after a
+  sustained 15% real-only base-rate improvement. Adaptive now stops at the lowest proven level that can supply at least
+  98% of its target. It also detects a delayed collapse after accepting a higher strict-scheduling level, measures one
+  second without generation load, and restores the lower level only when that measurement recovers the prior cadence.
+  Fixed mode remains unchanged.
 
 ## v2.0.0-dev28-experimental.18
 
@@ -261,6 +261,20 @@ in a release ZIP remains the single archive declared and checksum-pinned in
 - Flatpak archive: `lsfg-vk-2.0.0-dev28-experimental.18-flatpaks.tar.xz`
 - Flatpak SHA-256: `c7b8cd70e62ededfce10665ff1cad41fc6268d12d9995fdae5edd6e1748c4603`
 - Notes: First published engine prerelease since `.9`, consolidating the tested `.10` through `.18` revisions. It adds
-  temporal-history maintenance and warm-up, a configurable Adaptive ceiling and optional Smooth Cadence, load-aware
-  ramp and rescue policies, Gamescope recovery safeguards, less sensitive target satisfaction, and DX12/VKD3D
-  fast-present burst filtering. Fixed multiplier mode remains unchanged.
+  temporal-history maintenance and warm-up, a configurable Adaptive ceiling and optional Smooth Cadence, load-aware ramp
+  and rescue policies, Gamescope recovery safeguards, less sensitive target satisfaction, and DX12/VKD3D fast-present
+  burst filtering. Fixed multiplier mode remains unchanged.
+
+## v2.0.0-dev28-experimental.19
+
+- Source repository: `https://github.com/eugeniosegala/lsfg-vk-experimental`
+- Release tag: `v2.0.0-dev28-experimental.19`
+- Source commit: `40f56701df1e43c4893d6110cb47362fb9565859`
+- Upstream lineage: `lsfg-vk 2.0.0-dev28`
+- Host archive: `lsfg-vk-2.0.0-dev28-experimental.19-linux.tar.xz`
+- Host SHA-256: `2b26c0e532eb407eb8e1ac6252ba8dc0f6478b424065bbcfca8222e0898b6489`
+- Flatpak archive: `lsfg-vk-2.0.0-dev28-experimental.19-flatpaks.tar.xz`
+- Flatpak SHA-256: `35ad14a6fa0162e07c3c2d637cdde07d22dfd2a408d409f4877d4036eb3cdf7c`
+- Notes: Keeps a validated 2x Adaptive level through an isolated 100–250 ms gameplay hitch, refreshes three real
+  temporal-history frames, and resumes without entering the longer menu/focus recovery. Fixed mode, Adaptive 3x/4x,
+  generated-image acquisition fallback, and swapchain recreation are unchanged.

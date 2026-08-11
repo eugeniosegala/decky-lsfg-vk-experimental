@@ -1,6 +1,6 @@
 {
   "name": "decky-lsfg-vk-experimental",
-  "version": "0.13.0-experimental.18",
+  "version": "0.13.0-experimental.19",
   "description": "Experimental lsfg-vk features for Lossless Scaling on Steam OS",
   "type": "module",
   "scripts": {
@@ -47,18 +47,18 @@
   "remote_binary_bundling": true,
   "remote_binary": [
     {
-      "name": "lsfg-vk-2.0.0-dev28-experimental.18-linux.tar.xz",
-      "version": "2.0.0-dev28-experimental.18",
+      "name": "lsfg-vk-2.0.0-dev28-experimental.19-linux.tar.xz",
+      "version": "2.0.0-dev28-experimental.19",
       "lineage_version": "2.0.0-dev28",
       "source_repository": "https://github.com/eugeniosegala/lsfg-vk-experimental",
-      "release_tag": "v2.0.0-dev28-experimental.18",
-      "source_commit": "2eb2facedeebf7ee3345ea271345de98a1767674",
-      "url": "https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.18/lsfg-vk-2.0.0-dev28-experimental.18-linux.tar.xz",
-      "sha256hash": "055a455c58bf8029e738290711f8035e59c4e4c31f3b5c56b2e194c6b4e04235",
+      "release_tag": "v2.0.0-dev28-experimental.19",
+      "source_commit": "40f56701df1e43c4893d6110cb47362fb9565859",
+      "url": "https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.19/lsfg-vk-2.0.0-dev28-experimental.19-linux.tar.xz",
+      "sha256hash": "2b26c0e532eb407eb8e1ac6252ba8dc0f6478b424065bbcfca8222e0898b6489",
       "flatpak_bundle": {
-        "name": "lsfg-vk-2.0.0-dev28-experimental.18-flatpaks.tar.xz",
-        "url": "https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.18/lsfg-vk-2.0.0-dev28-experimental.18-flatpaks.tar.xz",
-        "sha256hash": "c7b8cd70e62ededfce10665ff1cad41fc6268d12d9995fdae5edd6e1748c4603"
+        "name": "lsfg-vk-2.0.0-dev28-experimental.19-flatpaks.tar.xz",
+        "url": "https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.19/lsfg-vk-2.0.0-dev28-experimental.19-flatpaks.tar.xz",
+        "sha256hash": "35ad14a6fa0162e07c3c2d637cdde07d22dfd2a408d409f4877d4036eb3cdf7c"
       }
     }
   ],

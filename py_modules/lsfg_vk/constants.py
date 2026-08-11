@@ -21,6 +21,9 @@ PRESENT_ACQUIRE_TIMEOUT_MS = 50
 # state that cannot be reset by recreating only the internal LSFG context.
 PRESENT_RECOVERY_RECREATE = 1
 CONFIG_FILENAME = "conf.toml"
+# The engine reads conf.toml directly, so Decky-only launcher settings must be
+# stored separately rather than adding unknown keys to an upstream profile.
+WRAPPER_PROFILE_SETTINGS_FILENAME = "profile-wrapper-settings.json"
 # Bundled upstream payload filenames. The archive name is read from the packaged
 # package.json remote_binary record so the release pin has one source of truth.
 LIB_FILENAME = "liblsfg-vk-layer.so"

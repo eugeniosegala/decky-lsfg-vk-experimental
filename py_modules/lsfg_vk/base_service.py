@@ -10,7 +10,14 @@ from typing import Any, Optional, TypeVar, Dict
 
 import decky
 
-from .constants import LOCAL_LIB, VULKAN_LAYER_DIR, SCRIPT_NAME, CONFIG_DIR, CONFIG_FILENAME
+from .constants import (
+    LOCAL_LIB,
+    VULKAN_LAYER_DIR,
+    SCRIPT_NAME,
+    CONFIG_DIR,
+    CONFIG_FILENAME,
+    WRAPPER_PROFILE_SETTINGS_FILENAME,
+)
 
 ResponseType = TypeVar('ResponseType', bound=Dict[str, Any])
 
@@ -36,6 +43,7 @@ class BaseService:
         self.lsfg_launch_script_path = self.user_home / SCRIPT_NAME
         self.config_dir = self.user_home / CONFIG_DIR
         self.config_file_path = self.config_dir / CONFIG_FILENAME
+        self.wrapper_profile_settings_path = self.config_dir / WRAPPER_PROFILE_SETTINGS_FILENAME
     
     def _ensure_directories(self) -> None:
         """Create necessary directories if they don't exist"""

@@ -1,9 +1,10 @@
 # Configuration guide
 
 The defaults are a good starting point: fixed **2x**, Flow Scale **0.90**, Performance Mode disabled, and FP16 allowed
-where supported. Adaptive settings can be changed while a game is running, but the layer briefly resets its timing and
-stability calculations afterwards. Let it settle for a few seconds before judging performance. Restart the game if a
-switch between Fixed and Adaptive causes instability or fails to attach.
+where supported. Adaptive mode defaults to a **90 FPS** target with **Smooth Cadence** enabled. Adaptive settings can be
+changed while a game is running, but the layer briefly resets its timing and stability calculations afterwards. Let it
+settle for a few seconds before judging performance. Restart the game if a switch between Fixed and Adaptive causes
+instability or fails to attach.
 
 ## Frame-generation mode
 
@@ -20,12 +21,13 @@ switch between Fixed and Adaptive causes instability or fails to attach.
   exceed the selected ceiling, or overcome GPU/model/compositor limits.
 - **Maximum Adaptive Multiplier:** Adaptive ceiling of 2x, 3x, or 4x; 3x is the default. Use 2x to prioritise image
   quality or 4x where the GPU headroom is available.
-- **Smooth Cadence:** Disabled by default in Adaptive mode. When enabled, strict scheduling settles first and constant
-  cadence is considered only when the target already needs nearly every matching cadence slot. It can make displayed
-  motion more consistent, but may lower the real-frame presentation rate and feel less responsive. Leave it disabled
-  for lower latency and stricter target scheduling. After a severe sustained slowdown, Adaptive briefly measures the
-  real-only rate and either resumes fractional scheduling or tests one higher level when **Maximum Adaptive
-  Multiplier** permits it. Rescue never exceeds that maximum and has a cooldown to avoid repeated switching.
+- **Smooth Cadence:** Enabled by default in Adaptive mode. Strict scheduling settles first and constant cadence is
+  considered only when the target already needs nearly every matching cadence slot. It can make displayed motion
+  smoother and feel more responsive in some games, while others may work better with it off. Results depend on the game,
+  hardware, and target. Disable it if you prefer stricter target scheduling or the game's response feels better without
+  it. After a severe sustained slowdown, Adaptive briefly measures the real-only rate and either resumes fractional
+  scheduling or tests one higher level when **Maximum Adaptive Multiplier** permits it. Rescue never exceeds that
+  maximum and has a cooldown to avoid repeated switching.
 
 Adaptive also has an automatic Steam-menu discontinuity safeguard, independent of **Smooth Cadence**. After a hard
 cadence stall, it temporarily presents real frames, waits for the measured base cadence to remain healthy for one
@@ -33,7 +35,31 @@ second, and then restores the last proven generation level. If the old cadence d
 Adaptive discards that stale baseline and ramps again from zero. A sustained gameplay cadence drop instead stabilizes
 for one second and rebases at the new measured rate, avoiding a five-second wait for an old rate that is no longer
 achievable. This can briefly reduce displayed FPS after leaving a menu, but avoids treating its transient frame rate as
-normal gameplay. Fixed mode does not use this policy.
+normal gameplay. After 2x has already proved stable, an isolated short gameplay hitch instead refreshes three real
+history frames and resumes 2x immediately. Fixed mode does not use these Adaptive policies.
+
+## Profiles and per-game selection
+
+The plugin stores multiple lsfg-vk profiles in its private `conf.toml`; it does not create a separate layer install or
+config file for every game. In the plugin's **Profile** section, choose **New Profile**, enter a name, and the plugin
+copies the selected profile's settings, then switches to the new profile. Configure it normally afterwards.
+
+To select engine settings automatically for a game, enter its executable/process name in **Active In**. lsfg-vk then
+matches the appropriate profile at launch. Once at least one profile has an **Active In** value, the wrapper leaves
+engine-profile selection to lsfg-vk; you can return the UI selector to **Default** without breaking automatic matching.
+The following settings are profile-based and support that automatic match:
+
+- Fixed multiplier or Adaptive mode, Target FPS, Maximum Adaptive Multiplier, and Smooth Cadence
+- Flow Scale, Performance Mode, GPU matching, and Active In
+
+The `Lossless.dll` path and FP16 permission are shared globally because they apply to the installed engine, not to an
+individual game.
+
+Decky also keeps the launcher compatibility options per profile—Disable Frame Generation, Base FPS Cap, WoW64, Steam
+Deck Mode, MangoHud workaround, Gamescope WSI Layer, and Zink. They are saved in this plugin's private profile state and
+are restored when you select that profile in Decky. They cannot follow **Active In** automatically: those variables must
+be set by the wrapper before lsfg-vk sees the game's process name. Select the profile manually before launching a game
+that needs one of those compatibility options, then restart the game after changing profiles.
 
 ## Quality and matching
 
