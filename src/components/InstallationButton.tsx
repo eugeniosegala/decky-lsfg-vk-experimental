@@ -40,7 +40,7 @@ export function InstallationButton({
       return (
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <FaTrash />
-          <div>Remove Experimental LSFG-VK</div>
+          <div>{t("INSTALL_REMOVE_EXPERIMENTAL", "Remove Experimental LSFG-VK")}</div>
         </div>
       );
     }
@@ -48,7 +48,7 @@ export function InstallationButton({
     return (
       <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
         <FaDownload />
-        <div>Install Experimental LSFG-VK (developer build)</div>
+        <div>{t("INSTALL_EXPERIMENTAL", "Install Experimental LSFG-VK (developer build)")}</div>
       </div>
     );
   };

@@ -120,7 +120,7 @@ export function Content() {
               fontSize: "13px"
             }}
           >
-            <strong>{mainRunningApp.display_name}</strong> running. {t('PROFILE_CLOSE_GAME', 'Close game to change profile.')}
+            <strong>{mainRunningApp.display_name}</strong> {t('CONTENT_RUNNING', 'running.')}{" "}{t('PROFILE_CLOSE_GAME', 'Close game to change profile.')}
           </div>
         </PanelSectionRow>
       )}
@@ -137,19 +137,18 @@ export function Content() {
             }}
           >
             <div style={{ fontWeight: "bold", marginBottom: "4px" }}>
-              Experimental LSFG-VK update required
+              {t('CONTENT_ENGINE_UPDATE_REQUIRED', 'Experimental LSFG-VK update required')}
             </div>
             <div style={{ fontSize: "13px", marginBottom: "10px" }}>
-              Installed: {installedEngineVersion || "not recorded"}. This plugin expects: {expectedEngineVersion || "the bundled version"}.
-              {!installedEngineVersion && " The installed payload predates version tracking."}{" "}
-              Reinstall the private engine to apply this plugin release's pinned payload. If you use Heroic, refresh its matching runtime extension in Flatpak Extensions afterwards.
+              {t('CONTENT_ENGINE_INSTALLED', 'Installed:')} {installedEngineVersion || t('CONTENT_ENGINE_NOT_RECORDED', 'not recorded')}. {t('CONTENT_ENGINE_EXPECTS', 'This plugin expects:')} {expectedEngineVersion || t('CONTENT_ENGINE_BUNDLED_VERSION', 'the bundled version')}.
+              {!installedEngineVersion && ` ${t('CONTENT_ENGINE_PREDATES_TRACKING', 'The installed payload predates version tracking.')}`} {t('CONTENT_ENGINE_UPDATE_DESC', "Reinstall the private engine to apply this plugin release's pinned payload. If you use Heroic, refresh its matching runtime extension in Flatpak Extensions afterwards.")}
             </div>
             <ButtonItem
               layout="below"
               onClick={onInstall}
               disabled={isInstalling || isUninstalling}
             >
-              Reinstall Experimental LSFG-VK
+              {t('CONTENT_REINSTALL_EXPERIMENTAL', 'Reinstall Experimental LSFG-VK')}
             </ButtonItem>
           </div>
         </PanelSectionRow>

@@ -8,6 +8,7 @@ import {
   MULTIPLIER,
   TARGET_FPS
 } from "../config/generatedConfigSchema";
+import t from "../i18n/i18n";
 
 interface FpsMultiplierControlProps {
   config: ConfigurationData;
@@ -46,8 +47,8 @@ export function FpsMultiplierControl({
     <>
           <PanelSectionRow>
             <ToggleField
-              label="Adaptive Frame Generation"
-              description="Experimental. Changes apply live, but the layer needs a few seconds to reset its timing and stability calculations. Let it settle before judging performance. Restart the game if switching between Fixed and Adaptive causes instability or fails to attach."
+              label={t("ADAPTIVE_TITLE", "Adaptive Frame Generation")}
+              description={t("ADAPTIVE_DESC", "Experimental. Changes apply live, but the layer needs a few seconds to reset its timing and stability calculations. Let it settle before judging performance. Restart the game if switching between Fixed and Adaptive causes instability or fails to attach.")}
               checked={config.adaptive}
               onChange={(value) => onConfigChange(ADAPTIVE, value)}
             />
@@ -57,8 +58,8 @@ export function FpsMultiplierControl({
         <>
           <PanelSectionRow>
             <SliderField
-              label={`Target FPS (${config.target_fps})`}
-              description="Desired output rate. The multiplier limit may intentionally keep output below this target."
+              label={`${t("ADAPTIVE_TARGET_FPS", "Target FPS")} (${config.target_fps})`}
+              description={t("ADAPTIVE_TARGET_FPS_DESC", "Desired output rate. The multiplier limit may intentionally keep output below this target.")}
               value={config.target_fps}
               min={30}
               max={240}
@@ -68,8 +69,8 @@ export function FpsMultiplierControl({
           </PanelSectionRow>
           <PanelSectionRow>
             <SliderField
-              label={`Maximum Adaptive Multiplier (${adaptiveMaxMultiplier}x)`}
-              description="Interpolation ceiling. 3x is balanced; 2x usually looks best, while 4x gives more headroom to reach the target. Test per game."
+              label={`${t("ADAPTIVE_MAX_MULTIPLIER", "Maximum Adaptive Multiplier")} (${adaptiveMaxMultiplier}x)`}
+              description={t("ADAPTIVE_MAX_MULTIPLIER_DESC", "Interpolation ceiling. 3x is balanced; 2x usually looks best, while 4x gives more headroom to reach the target. Test per game.")}
               value={adaptiveMaxMultiplier}
               min={2}
               max={4}
@@ -83,8 +84,8 @@ export function FpsMultiplierControl({
           </PanelSectionRow>
           <PanelSectionRow>
             <ToggleField
-              label="Smooth Cadence"
-              description="Uses a validated constant interpolation cadence. It can make motion smoother and feel more responsive in some games; results vary by game and hardware. Turn it off if you prefer stricter target scheduling or the game's response feels better without it."
+              label={t("ADAPTIVE_SMOOTH_CADENCE", "Smooth Cadence")}
+              description={t("ADAPTIVE_SMOOTH_CADENCE_DESC", "Uses a validated constant interpolation cadence. It can make motion smoother and feel more responsive in some games; results vary by game and hardware. Turn it off if you prefer stricter target scheduling or the game's response feels better without it.")}
               checked={config.adaptive_stable_cadence ?? true}
               onChange={(value) => onConfigChange(ADAPTIVE_STABLE_CADENCE, value)}
             />
@@ -102,7 +103,7 @@ export function FpsMultiplierControl({
             color: "white"
           }}
         >
-          FPS Multiplier
+          {t("MULTIPLIER_TITLE", "FPS Multiplier")}
         </div>
       </PanelSectionRow>
 
@@ -141,7 +142,7 @@ export function FpsMultiplierControl({
               textAlign: "center"
             }}
           >
-            {config.adaptive ? "Adaptive" : `${config.multiplier}X`}
+            {config.adaptive ? t("ADAPTIVE_VALUE", "Adaptive") : `${config.multiplier}X`}
           </div>
           <DialogButton
             style={{

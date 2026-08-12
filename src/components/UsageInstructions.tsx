@@ -59,7 +59,7 @@ export function UsageInstructions() {
             marginTop: "8px"
           }}
         >
-This experimental plugin uses its own layer and configuration at ~/.config/decky-lsfg-vk-experimental/conf.toml. It is selected only for games launched through this command.
+          {t('USAGE_EXPERIMENTAL_CONFIG_NOTE', 'This experimental plugin uses its own layer and configuration at ~/.config/decky-lsfg-vk-experimental/conf.toml. It is selected only for games launched through this command.')}
         </div>
       </PanelSectionRow>
 
@@ -72,7 +72,7 @@ This experimental plugin uses its own layer and configuration at ~/.config/decky
             marginTop: "4px"
           }}
         >
-          Isolation bypasses other global implicit Vulkan layers for this game, such as vkBasalt. Use only one LSFG-VK wrapper per game.
+          {t('USAGE_ISOLATION_NOTE', 'Isolation bypasses other global implicit Vulkan layers for this game, such as vkBasalt. Use only one LSFG-VK wrapper per game.')}
         </div>
       </PanelSectionRow>
     </>

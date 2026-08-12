@@ -4,6 +4,7 @@
  */
 
 import { toaster } from "@decky/api";
+import t from "../i18n/i18n";
 
 export interface ToastOptions {
   title: string;
@@ -34,35 +35,49 @@ export function showErrorToast(title: string, body: string): void {
  * Standard success messages for common operations
  */
 export const ToastMessages = {
-  INSTALL_SUCCESS: {
-    title: "Installation Complete",
-    body: "Experimental lsfg-vk developer build installed privately"
+  get INSTALL_SUCCESS() {
+    return {
+      title: t("TOAST_INSTALL_COMPLETE", "Installation Complete"),
+      body: t("TOAST_INSTALL_COMPLETE_DESC", "Experimental lsfg-vk developer build installed privately")
+    };
   },
-  INSTALL_ERROR: {
-    title: "Installation Failed",
-    body: "Unknown error occurred"
+  get INSTALL_ERROR() {
+    return {
+      title: t("TOAST_INSTALL_FAILED", "Installation Failed"),
+      body: t("TOAST_UNKNOWN_ERROR", "Unknown error occurred")
+    };
   },
-  UNINSTALL_SUCCESS: {
-    title: "Experimental Layer Removed",
-    body: "Experimental lsfg-vk files have been removed"
+  get UNINSTALL_SUCCESS() {
+    return {
+      title: t("TOAST_UNINSTALL_COMPLETE", "Experimental Layer Removed"),
+      body: t("TOAST_UNINSTALL_COMPLETE_DESC", "Experimental lsfg-vk files have been removed")
+    };
   },
-  UNINSTALL_ERROR: {
-    title: "Uninstallation Failed",
-    body: "Unknown error occurred"
+  get UNINSTALL_ERROR() {
+    return {
+      title: t("TOAST_UNINSTALL_FAILED", "Uninstallation Failed"),
+      body: t("TOAST_UNKNOWN_ERROR", "Unknown error occurred")
+    };
   },
-  CONFIG_UPDATE_ERROR: {
-    title: "Update Failed",
-    body: "Failed to update configuration"
+  get CONFIG_UPDATE_ERROR() {
+    return {
+      title: t("TOAST_CONFIG_UPDATE_FAILED", "Update Failed"),
+      body: t("TOAST_CONFIG_UPDATE_FAILED_DESC", "Failed to update configuration")
+    };
   },
-  CLIPBOARD_SUCCESS: {
-    title: "Copied to Clipboard!",
-    body: "Launch option ready to paste"
+  get CLIPBOARD_SUCCESS() {
+    return {
+      title: t("TOAST_CLIPBOARD_SUCCESS", "Copied to Clipboard!"),
+      body: t("TOAST_CLIPBOARD_SUCCESS_DESC", "Launch option ready to paste")
+    };
   },
-  CLIPBOARD_ERROR: {
-    title: "Copy Failed",
-    body: "Unable to copy to clipboard"
+  get CLIPBOARD_ERROR() {
+    return {
+      title: t("TOAST_CLIPBOARD_FAILED", "Copy Failed"),
+      body: t("TOAST_CLIPBOARD_FAILED_DESC", "Unable to copy to clipboard")
+    };
   }
-} as const;
+};
 
 /**
  * Show a toast with dynamic error message

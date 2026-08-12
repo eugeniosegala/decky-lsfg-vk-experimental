@@ -1,5 +1,4 @@
-// languages.json build via CI build
-// to generate for localhost/dev, run `build_i18n_json.sh` script
+// Generated from defaults/i18n by the normal frontend build.
 import * as languages from "./languages.json";
 
 type LanguageEntry = {
@@ -54,19 +53,26 @@ export const getLanguageName = (lang?: string): string => {
  *
  * @param key - Translation key
  * @param originalString - Original text (fallback)
+ * @param replacements - Named values for placeholders such as {profile}
  * @returns Translated string or original text if translation not found
  *
  * @example
  * t('CONTENT_FPS_MULTIPLIER', 'FPS Multiplier')
  */
-const t = (key: string, originalString: string): string => {
+const t = (
+  key: string,
+  originalString: string,
+  replacements: Record<string, string | number> = {}
+): string => {
   const lang = getCurrentLanguage();
+  const translated = lang === "en"
+    ? originalString
+    : LANGS[lang]?.strings?.[key] ?? originalString;
 
-  // English always returns the original text
-  if (lang === "en") return originalString;
-
-  // Return translation if exists, otherwise return original text
-  return LANGS[lang]?.strings?.[key] ?? originalString;
+  return Object.entries(replacements).reduce(
+    (text, [name, value]) => text.split(`{${name}}`).join(String(value)),
+    translated
+  );
 };
 
 export default t;

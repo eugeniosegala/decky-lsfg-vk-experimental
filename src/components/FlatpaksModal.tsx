@@ -74,13 +74,16 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
         // Reload status after operation
         const newStatus = await checkFlatpakExtensionStatus();
         setExtensionStatus(newStatus);
-        showSuccessToast('Flatpak extension updated', result.message || `${version} runtime extension updated`);
+        showSuccessToast(t('FLATPAK_EXTENSION_UPDATED', 'Flatpak extension updated'), result.message || `${version} ${t('FLATPAK_RUNTIME_EXTENSION_UPDATED', 'runtime extension updated')}`);
       } else {
-        showErrorToast('Flatpak extension failed', result.error || result.message || `Could not ${operation} the ${version} runtime extension`);
+        const action = operation === 'install'
+          ? t('FLATPAK_INSTALL_ACTION', 'install')
+          : t('FLATPAK_UNINSTALL_ACTION', 'uninstall');
+        showErrorToast(t('FLATPAK_EXTENSION_FAILED', 'Flatpak extension failed'), result.error || result.message || `${t('FLATPAK_EXTENSION_ACTION_FAILED', 'Could not')} ${action} ${version} ${t('FLATPAK_RUNTIME_EXTENSION', 'runtime extension')}`);
       }
     } catch (error) {
       console.error(`Error ${operation}ing extension:`, error);
-      showErrorToast('Flatpak extension failed', String(error));
+      showErrorToast(t('FLATPAK_EXTENSION_FAILED', 'Flatpak extension failed'), String(error));
     } finally {
       setOperationInProgress(null);
     }
@@ -105,11 +108,11 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
         // Reload apps data after operation
         const newApps = await getFlatpakApps();
         setFlatpakApps(newApps);
-        showSuccessToast('Flatpak application updated', result.message || `${app.app_name || app.app_id} updated`);
+        showSuccessToast(t('FLATPAK_APPLICATION_UPDATED', 'Flatpak application updated'), result.message || `${app.app_name || app.app_id} ${t('FLATPAK_UPDATED', 'updated')}`);
       } else {
         setAppErrors((current) => ({
           ...current,
-          [app.app_id]: result.error || result.message || `Could not update ${app.app_name || app.app_id}`
+          [app.app_id]: result.error || result.message || `${t('FLATPAK_APPLICATION_ACTION_FAILED', 'Could not update')} ${app.app_name || app.app_id}`
         }));
       }
     } catch (error) {
@@ -261,8 +264,8 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
             <DialogControlsSectionHeader>{t('FLATPAK_APPS_TITLE', 'Flatpak Applications')}</DialogControlsSectionHeader>
             <PanelSectionRow>
               <Field
-                label="Prepare an application"
-                description="Install its matching runtime extension, then prepare only that app here. For Heroic, use the full Wrapper command path shown below in each game you want to enable. Preparing Heroic does not enable frame generation globally."
+                label={t('FLATPAK_PREPARE_APPLICATION', 'Prepare an application')}
+                description={t('FLATPAK_PREPARE_APPLICATION_DESC', "Install its matching runtime extension, then prepare only that app here. For Heroic, use the full Wrapper command path shown below in each game you want to enable. Preparing Heroic does not enable frame generation globally.")}
               />
             </PanelSectionRow>
 
@@ -290,7 +293,11 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
                       <Field 
                         label={app.app_name || app.app_id}
                         description={app.app_id === 'com.heroicgameslauncher.hgl'
-                          ? `${app.app_id} - ${statusText}. Per game: Settings > Advanced > enter this in Heroic's first Wrapper field: ${app.wrapper_path}; leave Arguments empty.`
+                          ? t(
+                            'FLATPAK_HEROIC_APP_DESC',
+                            '{app_id} - {status}. Per game: Settings > Advanced > enter this in Heroic\'s first Wrapper field: {wrapper_path}; leave Arguments empty.',
+                            { app_id: app.app_id, status: statusText, wrapper_path: app.wrapper_path }
+                          )
                           : `${app.app_id} - ${statusText}`}
                         icon={<FaCog style={{color: appError ? '#f44336' : statusColor}} />}
                       >
@@ -355,10 +362,10 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
                 {t('FLATPAK_STEAM_CONFIG_HEADER', 'Configure Steam Flatpak Shortcuts')}
               </div>
               <div style={{ fontSize: '0.9em', lineHeight: '1.4', marginBottom: '8px' }}>
-                {t('FLATPAK_STEAM_CONFIG_DESC', 'Only use these target instructions for a Flatpak shortcut inside Steam. Heroic users should prepare Heroic above, then set the existing experimental wrapper in the chosen game’s Advanced settings.')}
+                {t('FLATPAK_STEAM_CONFIG_DESC', "Only use these target instructions for a Flatpak shortcut inside Steam. Heroic users should prepare Heroic above, then set the existing experimental wrapper in the chosen game's Advanced settings.")}
               </div>
               <div style={{ fontSize: '0.9em', lineHeight: '1.4', marginBottom: '12px', color: '#ffa500' }}>
-                <strong>IMPORTANT:</strong> {t('FLATPAK_STEAM_CONFIG_IMPORTANT', 'Set this in TARGET (NOT LAUNCH OPTIONS)')}
+                <strong>{t('FLATPAK_IMPORTANT_LABEL', 'IMPORTANT:')}</strong> {t('FLATPAK_STEAM_CONFIG_IMPORTANT', 'Set this in TARGET (NOT LAUNCH OPTIONS)')}
               </div>
 
               {instructionSteps.map((step) => (

@@ -6,6 +6,7 @@ import {
   showUninstallSuccessToast, 
   showUninstallErrorToast 
 } from "../utils/toastUtils";
+import t from "../i18n/i18n";
 
 export function useInstallationActions() {
   const [isInstalling, setIsInstalling] = useState<boolean>(false);
@@ -17,13 +18,13 @@ export function useInstallationActions() {
     reloadConfig?: () => Promise<void>
   ) => {
     setIsInstalling(true);
-    setInstallationStatus("Installing experimental lsfg-vk (developer build)...");
+    setInstallationStatus(t("STATUS_ENGINE_INSTALLING", "Installing experimental lsfg-vk (developer build)..."));
 
     try {
       const result = await installLsfgVk();
       if (result.success) {
         setIsInstalled(true);
-        setInstallationStatus("Experimental lsfg-vk installed");
+        setInstallationStatus(t("STATUS_ENGINE_INSTALLED", "Experimental lsfg-vk installed"));
         showInstallSuccessToast();
 
         // Reload lsfg config after installation
@@ -31,11 +32,11 @@ export function useInstallationActions() {
           await reloadConfig();
         }
       } else {
-        setInstallationStatus(`Installation failed: ${result.error}`);
+        setInstallationStatus(`${t("STATUS_INSTALL_FAILED", "Installation failed:")} ${result.error}`);
         showInstallErrorToast(result.error);
       }
     } catch (error) {
-      setInstallationStatus(`Installation failed: ${error}`);
+      setInstallationStatus(`${t("STATUS_INSTALL_FAILED", "Installation failed:")} ${error}`);
       showInstallErrorToast(String(error));
     } finally {
       setIsInstalling(false);
@@ -47,20 +48,20 @@ export function useInstallationActions() {
     setInstallationStatus: (value: string) => void
   ) => {
     setIsUninstalling(true);
-    setInstallationStatus("Removing experimental lsfg-vk...");
+    setInstallationStatus(t("STATUS_ENGINE_REMOVING", "Removing experimental lsfg-vk..."));
 
     try {
       const result = await uninstallLsfgVk();
       if (result.success) {
         setIsInstalled(false);
-        setInstallationStatus("Experimental lsfg-vk removed successfully!");
+        setInstallationStatus(t("STATUS_ENGINE_REMOVED", "Experimental lsfg-vk removed successfully!"));
         showUninstallSuccessToast();
       } else {
-        setInstallationStatus(`Uninstallation failed: ${result.error}`);
+        setInstallationStatus(`${t("STATUS_UNINSTALL_FAILED", "Uninstallation failed:")} ${result.error}`);
         showUninstallErrorToast(result.error);
       }
     } catch (error) {
-      setInstallationStatus(`Uninstallation failed: ${error}`);
+      setInstallationStatus(`${t("STATUS_UNINSTALL_FAILED", "Uninstallation failed:")} ${error}`);
       showUninstallErrorToast(String(error));
     } finally {
       setIsUninstalling(false);

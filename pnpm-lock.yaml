@@ -39,6 +39,13 @@ importers:
       typescript:
         specifier: ^5.6.2
         version: 5.6.2
+    optionalDependencies:
+      '@rollup/rollup-linux-x64-gnu':
+        specifier: 4.22.5
+        version: 4.22.5
+      '@rollup/rollup-linux-x64-musl':
+        specifier: 4.22.5
+        version: 4.22.5
 
 packages:
 
