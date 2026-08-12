@@ -110,8 +110,9 @@ real-only and generated frames to average 90. It keeps that cadence only if it s
 while retaining at least 74% of the probe's base rate; otherwise it returns to strict target scheduling. Bounded
 activation and retention limits, plus a short exit grace, tolerate normal frame-time variation without allowing costly
 cases such as 100 -> 120 to run at 2x. Decky exposes `adaptive_stable_cadence` as the Adaptive-only **Smooth Cadence**
-toggle. It now defaults to enabled: it can make motion smoother and feel more responsive in some games, while others
-work better with it off. Enabling or disabling it does not change the other Adaptive protections.
+toggle. The engine defaults it to disabled, while Decky enables it by default because it can make motion smoother.
+It may lower real-frame cadence and increase input lag, so disable it for games where responsiveness matters more.
+Enabling or disabling it does not change the other Adaptive protections.
 
 The `.17` candidate now lets strict Adaptive settle before considering Smooth Cadence and requires the strict schedule
 to demand at least 95% of the corresponding integer cadence. A severe sustained cadence collapse starts one bounded

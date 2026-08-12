@@ -108,7 +108,7 @@
   "ADAPTIVE_MAX_MULTIPLIER": "アダプティブ最大倍率",
   "ADAPTIVE_MAX_MULTIPLIER_DESC": "補間の上限です。3x はバランス型、2x は通常もっとも良い画質、4x は目標に到達する余裕を増やします。ゲームごとに確認してください。",
   "ADAPTIVE_SMOOTH_CADENCE": "スムーズ ケイデンス",
-  "ADAPTIVE_SMOOTH_CADENCE_DESC": "検証済みの一定補間ケイデンスを使用します。動きがより滑らかになる場合がありますが、ゲームやハードウェアによって異なります。厳密な目標スケジューリングを優先する場合や応答性が悪く感じる場合はオフにしてください。",
+  "ADAPTIVE_SMOOTH_CADENCE_DESC": "検証済みの一定補間ケイデンスを使用します。表示上の動きがより滑らかになる場合がありますが、実フレームのケイデンスを下げ、入力遅延を増やす可能性があります。既定で有効です。ゲームの応答性がオフの方が良いと感じる場合は無効にしてください。",
   "ADAPTIVE_VALUE": "アダプティブ",
   "CONFIG_DLL_PATH": "Lossless.dll のパス",
   "CONFIG_DLL_PATH_DESC": "Lossless.dll の完全パス（任意）。空欄にすると lsfg-vk の自動検出を使用します。",

@@ -24,10 +24,11 @@ instability or fails to attach.
 - **Maximum Adaptive Multiplier:** Ceiling for generated frames: 2x, 3x, or 4x. 3x is the balanced default; 2x usually
   gives the best image quality, while 4x gives Adaptive more headroom to reach the target. Test per game.
 - **Smooth Cadence:** Enabled by default in Adaptive mode. Strict scheduling settles first and constant cadence is
-  considered only when the target already needs nearly every matching cadence slot. It can make displayed motion
-  smoother and feel more responsive in some games, while others may work better with it off. Results depend on the game,
-  hardware, and target. Disable it if you prefer stricter target scheduling or the game's response feels better without
-  it. After a severe sustained slowdown, Adaptive briefly measures the real-only rate and either resumes fractional
+  considered only when the target already needs nearly every matching cadence slot. It can make displayed motion look
+  smoother, but does so by holding a continuous generation level; this can lower the real-frame presentation cadence and
+  increase input lag. Leave it enabled where its visual smoothness is worthwhile; disable it when strict target
+  scheduling or responsiveness matters more for that game. After a severe sustained slowdown, Adaptive briefly
+  measures the real-only rate and either resumes fractional
   scheduling or tests one higher level when **Maximum Adaptive Multiplier** permits it. Rescue never exceeds that
   maximum and has a cooldown to avoid repeated switching.
 

@@ -83,7 +83,7 @@ export const CONFIG_SCHEMA: Record<string, ConfigField> = {
     name: "adaptive_stable_cadence",
     fieldType: ConfigFieldType.BOOLEAN,
     default: true,
-    description: "prefer a steadier interpolation cadence; perceived smoothness and responsiveness vary by game"
+    description: "prefer smoother constant interpolation; may lower real-frame cadence and increase input lag"
   },
   flow_scale: {
     name: "flow_scale",

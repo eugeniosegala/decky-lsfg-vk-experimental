@@ -95,7 +95,7 @@ export function FpsMultiplierControl({
           <PanelSectionRow>
             <ToggleField
               label={t("ADAPTIVE_SMOOTH_CADENCE", "Smooth Cadence")}
-              description={t("ADAPTIVE_SMOOTH_CADENCE_DESC", "Uses a validated constant interpolation cadence. It can make motion smoother and feel more responsive in some games; results vary by game and hardware. Turn it off if you prefer stricter target scheduling or the game's response feels better without it.")}
+              description={t("ADAPTIVE_SMOOTH_CADENCE_DESC", "Uses a validated constant interpolation cadence. It can make displayed motion smoother, but may lower real-frame cadence and increase input lag. Enabled by default; disable it if a game feels more responsive without it.")}
               checked={config.adaptive_stable_cadence ?? true}
               onChange={(value) => onConfigChange(ADAPTIVE_STABLE_CADENCE, value)}
             />

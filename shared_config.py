@@ -79,7 +79,7 @@ CONFIG_SCHEMA_DEF = {
         "name": "adaptive_stable_cadence",
         "fieldType": ConfigFieldType.BOOLEAN,
         "default": True,
-        "description": "prefer a steadier interpolation cadence; perceived smoothness and responsiveness vary by game",
+        "description": "prefer smoother constant interpolation; may lower real-frame cadence and increase input lag",
         "location": "toml"
     },
     
