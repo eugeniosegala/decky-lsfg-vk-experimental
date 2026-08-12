@@ -76,7 +76,7 @@ if [[ -n "$(git -C "$project_dir" status --porcelain --untracked-files=normal)" 
   exit 1
 fi
 
-read -r archive_name engine_version package_version github_repository has_flatpak_bundle < <(
+read -r archive_name engine_version package_version github_repository has_flatpak_bundle archive_url release_tag < <(
   node -e '
     const manifest = require(process.argv[1]);
     const [binary] = manifest.remote_binary ?? [];
@@ -93,9 +93,20 @@ read -r archive_name engine_version package_version github_repository has_flatpa
       process.exitCode = 1;
       throw new Error("flatpak_bundle must define name, url, and sha256hash when present");
     }
-    process.stdout.write(`${binary.name}\t${binary.version}\t${manifest.version}\t${githubRepository}\t${flatpak ? "true" : "false"}\n`);
+    process.stdout.write(`${binary.name}\t${binary.version}\t${manifest.version}\t${githubRepository}\t${flatpak ? "true" : "false"}\t${binary.url ?? ""}\t${binary.release_tag ?? ""}\n`);
   ' "$project_dir/package.json"
 )
+
+notes_package_version="0.13.0-experimental.21"
+notes_engine_version="2.0.0-dev28-experimental.21"
+if [[ "$package_version" != "$notes_package_version" || "$engine_version" != "$notes_engine_version" ]]; then
+  echo "Release notes still describe plugin $notes_package_version with engine $notes_engine_version. Update them before publishing." >&2
+  exit 1
+fi
+if [[ "$archive_url" == local-only://* || "$release_tag" == local-only-* ]]; then
+  echo "Refusing to publish a package pinned to a local-only engine payload." >&2
+  exit 1
+fi
 
 if [[ "$output_path_set" == false ]]; then
   output_path="$project_dir/out/Decky.LSFG-VK.Experimental-$package_version.zip"
@@ -133,12 +144,14 @@ notes_file="$notes_dir/release-notes.md"
 printf '%s\n' \
   '> **Optional coexistence:** If you want to keep the original/public Decky LSFG-VK plugin installed, you can. Both plugins can remain installed and enabled. For native Steam/Proton games, choose exactly one launch wrapper: public `~/lsfg %command%` or experimental `~/.local/bin/lsfg-vk-experimental %command%`; never combine them. Flatpak apps, including Heroic, are selected through Flatpak setup instead.' \
   '' \
-  '## This release: live Frame Generation control and focused UI improvements' \
+  '## This release: deterministic Adaptive stability baseline' \
   '' \
-  '- **Live Frame Generation switch:** The first control in **Frame Generation Mode** now turns frame generation on or off immediately, without changing your selected Fixed or Adaptive settings. Turning it back on resumes the same profile. This is the dedicated replacement for the old 0x multiplier approach.' \
-  '- **Engine update:** Bundles checksum-verified `lsfg-vk 2.0.0-dev28-experimental.20`, which provides the live real-frame passthrough used by the new switch. Complete the required in-plugin engine-update step after installing the ZIP.' \
-  '- **Japanese and Korean interface:** The experimental UI is now localized across its configuration, profile, installation, Flatpak, and live Frame Generation controls.' \
-  '- **Isolation cleanup:** Removed the obsolete Gamescope WSI and MangoHud controls. They cannot take effect through this plugin’s isolated Vulkan-layer path.' \
+  '- **Engine update:** Bundles checksum-verified `lsfg-vk 2.0.0-dev28-experimental.21`. Complete the required in-plugin engine-update step after installing the ZIP.' \
+  '- **Deterministic Adaptive controller:** Adaptive policy now runs through an independently testable, clock-driven state machine with deterministic timing tests and a 120-case compatibility matrix.' \
+  '- **Smooth Cadence ceiling guard:** Restoration, rescue, and recovery can no longer retain more generated frames than the selected Maximum Adaptive Multiplier.' \
+  '- **Known-good runtime boundary:** The intermittent-flinch `ab4f790` hot-path experiment is deliberately excluded. Rendering, submission, shaders, interpolation timing, and Fixed 2x/3x/4x scheduling remain on the hardware-validated path.' \
+  '- **Clearer mode-switch guidance:** Adaptive settings continue to apply live, while the UI now explains that switching between Fixed and Adaptive requires a game restart so the game-owned swapchain has the correct capacity.' \
+  '- **Live Frame Generation control retained:** Turn synthesis off or on immediately without changing the selected Fixed or Adaptive settings.' \
   '' \
   'See the [Configuration guide](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/blob/main/docs/CONFIGURATION.md) and [Troubleshooting guide](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/blob/main/docs/TROUBLESHOOTING.md) for the full behaviour and per-game controls.' \
   '' \

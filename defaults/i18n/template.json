@@ -102,7 +102,7 @@
   "CONTENT_REINSTALL_EXPERIMENTAL": "Reinstall Experimental LSFG-VK",
   "MULTIPLIER_TITLE": "FPS Multiplier",
   "ADAPTIVE_TITLE": "Adaptive Frame Generation",
-  "ADAPTIVE_DESC": "Experimental. Changes apply live, but the layer needs a few seconds to reset its timing and stability calculations. Let it settle before judging performance. Restart the game if switching between Fixed and Adaptive causes instability or fails to attach.",
+  "ADAPTIVE_DESC": "Experimental. Adaptive settings apply live. Restart the game after switching between Fixed and Adaptive so its swapchain has the correct capacity, then let timing settle before judging performance.",
   "ADAPTIVE_TARGET_FPS": "Target FPS",
   "ADAPTIVE_TARGET_FPS_DESC": "Desired output rate. The multiplier limit may intentionally keep output below this target.",
   "ADAPTIVE_MAX_MULTIPLIER": "Maximum Adaptive Multiplier",

@@ -3,8 +3,8 @@
 The defaults are a good starting point: fixed **2x**, Flow Scale **0.90**, Performance Mode disabled, and FP16 allowed
 where supported. Adaptive mode defaults to a **90 FPS** target with **Smooth Cadence** enabled. Adaptive settings can be
 changed while a game is running, but the layer briefly resets its timing and stability calculations afterwards. Let it
-settle for a few seconds before judging performance. Restart the game if a switch between Fixed and Adaptive causes
-instability or fails to attach.
+settle for a few seconds before judging performance. Restart the game after switching between Fixed and Adaptive so
+the game-owned swapchain is created with the correct generated-frame capacity.
 
 ## Frame-generation mode
 

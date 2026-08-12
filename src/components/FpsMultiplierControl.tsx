@@ -58,7 +58,7 @@ export function FpsMultiplierControl({
       <PanelSectionRow>
         <ToggleField
           label={t("ADAPTIVE_TITLE", "Adaptive Frame Generation")}
-          description={t("ADAPTIVE_DESC", "Experimental. Changes apply live, but the layer needs a few seconds to reset its timing and stability calculations. Let it settle before judging performance. Restart the game if switching between Fixed and Adaptive causes instability or fails to attach.")}
+          description={t("ADAPTIVE_DESC", "Experimental. Adaptive settings apply live. Restart the game after switching between Fixed and Adaptive so its swapchain has the correct capacity, then let timing settle before judging performance.")}
           checked={config.adaptive}
           onChange={(value) => onConfigChange(ADAPTIVE, value)}
         />

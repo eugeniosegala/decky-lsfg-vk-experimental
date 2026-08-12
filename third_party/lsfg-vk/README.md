@@ -293,3 +293,17 @@ archive declared and checksum-pinned in
   When disabled, LSFG-VK forwards original frames and skips generated-frame work. Re-enabling it resets and warms
   temporal history before synthesis resumes; Fixed/Adaptive mode selection and existing recovery safeguards remain
   intact.
+
+## v2.0.0-dev28-experimental.21
+
+- Source repository: `https://github.com/eugeniosegala/lsfg-vk-experimental`
+- Release tag: `v2.0.0-dev28-experimental.21`
+- Source commit: `eb5c453fa04010d6c9a0f4decb4d2bb71d2ae38b`
+- Upstream lineage: `lsfg-vk 2.0.0-dev28`
+- Host archive: `lsfg-vk-2.0.0-dev28-experimental.21-linux.tar.xz`
+- Host SHA-256: `29972ff0a9bf66189b97882c72d522ff81cb4c41a12040050ada6163bc2d3fc6`
+- Flatpak archive: `lsfg-vk-2.0.0-dev28-experimental.21-flatpaks.tar.xz`
+- Flatpak SHA-256: `503db55c420345215dc83261be3748d3d38e7385ff785143d1996d3b35ca33ca`
+- Notes: Extracts Adaptive policy into a clock-driven state machine with deterministic regression coverage and prevents
+  Smooth Cadence from retaining a generated-frame level above the configured maximum. The unstable local-only
+  `ab4f790` hot-path experiment is excluded, preserving the known-good rendering and submission path.
