@@ -108,6 +108,11 @@ reinstall-and-restart fallback above, then repeat the required engine-install st
 - [Local packaging and publishing](docs/PACKAGING.md): build a ZIP for a Steam machine or publish a prerelease.
 - [Upstream engine record](UPSTREAM_LSFGVK.md): pinned source, checksums, and carried changes.
 
+## Featured In
+
+Community creators have covered and tested this experimental plugin on Steam Deck hardware. See
+[Featured In](docs/FEATURED_IN.md) for video links, channels, and coverage details.
+
 ## Credits
 
 - **[Kurt Himebauch / xXJSONDeruloXx](https://github.com/xXJSONDeruloXx/decky-lsfg-vk)** for the original Decky LSFG-VK
