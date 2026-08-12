@@ -278,3 +278,18 @@ archive declared and checksum-pinned in
 - Notes: Keeps a validated 2x Adaptive level through an isolated 100–250 ms gameplay hitch, refreshes three real
   temporal-history frames, and resumes without entering the longer menu/focus recovery. Fixed mode, Adaptive 3x/4x,
   generated-image acquisition fallback, and swapchain recreation are unchanged.
+
+## v2.0.0-dev28-experimental.20
+
+- Source repository: `https://github.com/eugeniosegala/lsfg-vk-experimental`
+- Release tag: `v2.0.0-dev28-experimental.20`
+- Source commit: `70da2eedab0422e0a3ef5bb4d67da446d0d3d9f3`
+- Upstream lineage: `lsfg-vk 2.0.0-dev28`
+- Host archive: `lsfg-vk-2.0.0-dev28-experimental.20-linux.tar.xz`
+- Host SHA-256: `5c9f9d75c9cadae56546ff9e3448b14c82bafaf0a931f3a48babb9c41e842b49`
+- Flatpak archive: `lsfg-vk-2.0.0-dev28-experimental.20-flatpaks.tar.xz`
+- Flatpak SHA-256: `78d5d8099b439e297ff5e1e08f3aeb04c54fa1a15efd4ac512bf2e3a5928f9db`
+- Notes: Adds the independent `frame_generation_enabled` runtime switch used by the Decky **Frame Generation** toggle.
+  When disabled, LSFG-VK forwards original frames and skips generated-frame work. Re-enabling it resets and warms
+  temporal history before synthesis resumes; Fixed/Adaptive mode selection and existing recovery safeguards remain
+  intact.
