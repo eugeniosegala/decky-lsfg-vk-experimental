@@ -11,17 +11,17 @@ Update both in the same commit.
 | Release repository          | [`eugeniosegala/lsfg-vk-experimental`](https://github.com/eugeniosegala/lsfg-vk-experimental)                                                         |
 | Tracked branch              | `develop`                                                                                                                                             |
 | Last checked                | 2026-08-12                                                                                                                                            |
-| Integrated source commit    | `eb5c453fa04010d6c9a0f4decb4d2bb71d2ae38b`                                                                                                            |
-| Commit date and subject     | 2026-08-12 — `release: prepare 2.0.0-dev28-experimental.21`                                                                                           |
-| Experimental prerelease tag | `v2.0.0-dev28-experimental.21`                                                                                                                        |
+| Integrated source commit    | `865b34b2f596c545cabfd0810f905c18194bf6b4`                                                                                                            |
+| Commit date and subject     | 2026-08-12 — `experimental.24` release candidate                                                                                                     |
+| Experimental prerelease tag | `v2.0.0-dev28-experimental.24`                                                                                                                        |
 | Release state               | Engine and Decky prereleases published and verified on 2026-08-12                                                                                     |
 | Upstream lineage            | [`PancakeTAS/lsfg-vk`](https://github.com/PancakeTAS/lsfg-vk) `2.0.0-dev28`                                                                           |
-| Release asset               | `lsfg-vk-2.0.0-dev28-experimental.21-linux.tar.xz`                                                                                                    |
-| Asset SHA-256               | `29972ff0a9bf66189b97882c72d522ff81cb4c41a12040050ada6163bc2d3fc6`                                                                                    |
-| Asset URL                   | `https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.21/lsfg-vk-2.0.0-dev28-experimental.21-linux.tar.xz` |
-| Flatpak archive             | `lsfg-vk-2.0.0-dev28-experimental.21-flatpaks.tar.xz`                                                                                                 |
-| Flatpak SHA-256             | `503db55c420345215dc83261be3748d3d38e7385ff785143d1996d3b35ca33ca`                                                                                    |
-| Decky plugin version        | `0.13.0-experimental.21` (published prerelease)                                                                                                       |
+| Release asset               | `lsfg-vk-2.0.0-dev28-experimental.24-linux.tar.xz`                                                                                                    |
+| Asset SHA-256               | `09add7d1a14f7a6928cec65fc2aa711bf83c101639825409b9e80d7120d05ee4`                                                                                    |
+| Asset URL                   | `https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.24/lsfg-vk-2.0.0-dev28-experimental.24-linux.tar.xz` |
+| Flatpak archive             | `lsfg-vk-2.0.0-dev28-experimental.24-flatpaks.tar.xz`                                                                                                 |
+| Flatpak SHA-256             | `726325151f0645c687b78d013165785bcb3a9c2587a58aa4accdbf1857753727`                                                                                    |
+| Decky plugin version        | `0.13.0-experimental.24` (published prerelease)                                                                                                       |
 | Decky plugin package ID     | `decky-lsfg-vk-experimental`                                                                                                                          |
 
 This integration is pinned to the published tag and checksum-verified release assets above. The experimental fork's
@@ -30,7 +30,7 @@ artifacts have been reviewed and this record has been updated.
 
 ## Integrated Flatpak support
 
-Engine release `v2.0.0-dev28-experimental.21` includes separate experimental Flatpak runtime extensions for 23.08, 24.08,
+Engine release `v2.0.0-dev28-experimental.24` includes separate experimental Flatpak runtime extensions for 23.08, 24.08,
 and 25.08. The Decky pin includes the checksum-verified host and Flatpak release assets. The local package script
 downloads, verifies, and embeds those three extensions. The plugin prepares a Flatpak app to access its private
 configuration, `Lossless.dll`, and wrapper; the wrapper then enables the experimental layer only for Heroic games
@@ -44,11 +44,11 @@ that explicitly select it.
 | Coexistence design   | Dedicated ID and prefix; the experimental plugin selects it only for Flatpak apps explicitly enabled by the user. |
 
 The engine prerelease and both archive checksums have been verified. The Decky prerelease embeds only those
-checksum-pinned assets and is published after the complete integration is reviewed.
+checksum-pinned assets.
 
 ### Adaptive Frame Generation
 
-The published `v2.0.0-dev28-experimental.21` release retains the opt-in target-FPS scheduler introduced in `.9`. It
+The published `v2.0.0-dev28-experimental.24` release retains the opt-in target-FPS scheduler introduced in `.9`. It
 smooths the measured real-frame interval and dynamically schedules zero to three generated frames between real frames,
 with evenly spaced interpolation timestamps. It adds a configurable 2x, 3x, or 4x Adaptive ceiling, defaulting to 3x.
 If reaching the target would require a higher ratio, the scheduler deliberately undershoots the target instead of
@@ -63,7 +63,7 @@ Adaptive Frame Generation is selected.
 
 ### Gamescope presentation recovery
 
-The published `v2.0.0-dev28-experimental.21` release retains the `.4` synchronization fix and diagnostics. SteamOS
+The published `v2.0.0-dev28-experimental.24` release retains the `.4` synchronization fix and diagnostics. SteamOS
 traces showed the Steam-menu slowdown was dominated by generated-image acquisition, with waits reaching approximately
 74 ms. Testing `.5` then showed the fallback working safely but repeating the full 25 ms timeout on every unavailable
 frame. The `.6` engine uses non-blocking probes after the first timeout, continues showing real game frames while
@@ -74,7 +74,7 @@ two real frames. Testing `.7` also captured recoveries lasting 225 and 529 real 
 could repeatedly miss the compositor's image-release window. The `.8` engine makes one bounded reacquisition attempt
 per second after the first second of fallback, without forcing a game-owned swapchain recreation.
 
-Prepared plugin version `0.13.0-experimental.21` enables a validated 50 ms timeout in its isolated wrapper. SteamOS
+Plugin version `0.13.0-experimental.24` enables a validated 50 ms timeout in its isolated wrapper. SteamOS
 testing showed successful acquisitions between 25 and 48 ms, while genuine stalls reached the 50 ms bound; this avoids
 the false fallbacks seen with the earlier 25 ms wrapper setting. Explicit caller overrides are preserved. The engine
 itself remains opt-in when used outside this Decky plugin.
@@ -178,6 +178,14 @@ Cadence restoration, rescue, and recovery paths from retaining more generated fr
 The locally tested `ab4f790` hot-path experiment is deliberately excluded after it produced intermittent generation
 flinches; `.21` preserves the known-good rendering, submission, shader, and Fixed-mode paths.
 
+The published `.24` release includes two recovery improvements visible in SteamOS traces. A Steam-menu discontinuity keeps
+the recovered real-frame baseline while restoring the previous generation level, so the existing delayed-load guard
+can run a one-second real-only confirmation and return to the lower proven level if restoration collapses throughput.
+Separately, the first isolated generated-image acquisition recovery stays in place and warms three history frames;
+only a repeated recovery inside 15 seconds may request the existing guarded game-swapchain recreation. The five-second
+cross-context recreation cooldown remains intact. These changes are confined to Adaptive recovery policy and leave the
+known-good rendering, submission, shader, interpolation-timing, allocation, and Fixed 2x/3x/4x paths unchanged.
+
 ### Flatpak payload hotfix
 
 `v2.0.0-dev28-experimental.3` corrects the Flatpak layer manifest's library path from `lib/` to the actual `lib64/`
@@ -205,7 +213,7 @@ Flatpak extension layout and manifest path for all three supported runtimes befo
 2. Compare from the baseline commit above:
 
    ```bash
-   git -C /path/to/lsfg-vk-experimental log --oneline eb5c453fa04010d6c9a0f4decb4d2bb71d2ae38b..origin/develop
+   git -C /path/to/lsfg-vk-experimental log --oneline 865b34b2f596c545cabfd0810f905c18194bf6b4..origin/develop
    ```
 
 3. Review the fork's release notes, `docs/Configuration.md`, `docs/Flatpak-Guide.md`, host release asset, Flatpak

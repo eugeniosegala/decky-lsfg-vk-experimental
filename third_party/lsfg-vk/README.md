@@ -307,3 +307,17 @@ archive declared and checksum-pinned in
 - Notes: Extracts Adaptive policy into a clock-driven state machine with deterministic regression coverage and prevents
   Smooth Cadence from retaining a generated-frame level above the configured maximum. The unstable local-only
   `ab4f790` hot-path experiment is excluded, preserving the known-good rendering and submission path.
+
+## v2.0.0-dev28-experimental.24
+
+- Source repository: `https://github.com/eugeniosegala/lsfg-vk-experimental`
+- Release tag: `v2.0.0-dev28-experimental.24`
+- Source commit: `865b34b2f596c545cabfd0810f905c18194bf6b4`
+- Upstream lineage: `lsfg-vk 2.0.0-dev28`
+- Host archive: `lsfg-vk-2.0.0-dev28-experimental.24-linux.tar.xz`
+- Host SHA-256: `09add7d1a14f7a6928cec65fc2aa711bf83c101639825409b9e80d7120d05ee4`
+- Flatpak archive: `lsfg-vk-2.0.0-dev28-experimental.24-flatpaks.tar.xz`
+- Flatpak SHA-256: `726325151f0645c687b78d013165785bcb3a9c2587a58aa4accdbf1857753727`
+- Notes: Strengthens Adaptive recovery after Steam-menu or focus interruptions, adds safer bounded generated-image
+  recovery, and ensures restoration, rescue, and recovery respect the configured Maximum Adaptive Multiplier. The
+  deterministic scheduler baseline, rendering path, shaders, interpolation timing, and Fixed scheduling remain unchanged.

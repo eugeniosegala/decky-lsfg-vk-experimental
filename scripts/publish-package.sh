@@ -97,8 +97,8 @@ read -r archive_name engine_version package_version github_repository has_flatpa
   ' "$project_dir/package.json"
 )
 
-notes_package_version="0.13.0-experimental.21"
-notes_engine_version="2.0.0-dev28-experimental.21"
+notes_package_version="0.13.0-experimental.24"
+notes_engine_version="2.0.0-dev28-experimental.24"
 if [[ "$package_version" != "$notes_package_version" || "$engine_version" != "$notes_engine_version" ]]; then
   echo "Release notes still describe plugin $notes_package_version with engine $notes_engine_version. Update them before publishing." >&2
   exit 1
@@ -144,14 +144,14 @@ notes_file="$notes_dir/release-notes.md"
 printf '%s\n' \
   '> **Optional coexistence:** If you want to keep the original/public Decky LSFG-VK plugin installed, you can. Both plugins can remain installed and enabled. For native Steam/Proton games, choose exactly one launch wrapper: public `~/lsfg %command%` or experimental `~/.local/bin/lsfg-vk-experimental %command%`; never combine them. Flatpak apps, including Heroic, are selected through Flatpak setup instead.' \
   '' \
-  '## This release: deterministic Adaptive stability baseline' \
+  '## What’s new since experimental.21' \
   '' \
-  '- **Engine update:** Bundles checksum-verified `lsfg-vk 2.0.0-dev28-experimental.21`. Complete the required in-plugin engine-update step after installing the ZIP.' \
-  '- **Deterministic Adaptive controller:** Adaptive policy now runs through an independently testable, clock-driven state machine with deterministic timing tests and a 120-case compatibility matrix.' \
-  '- **Smooth Cadence ceiling guard:** Restoration, rescue, and recovery can no longer retain more generated frames than the selected Maximum Adaptive Multiplier.' \
-  '- **Known-good runtime boundary:** The intermittent-flinch `ab4f790` hot-path experiment is deliberately excluded. Rendering, submission, shaders, interpolation timing, and Fixed 2x/3x/4x scheduling remain on the hardware-validated path.' \
-  '- **Clearer mode-switch guidance:** Adaptive settings continue to apply live, while the UI now explains that switching between Fixed and Adaptive requires a game restart so the game-owned swapchain has the correct capacity.' \
-  '- **Live Frame Generation control retained:** Turn synthesis off or on immediately without changing the selected Fixed or Adaptive settings.' \
+  '- **Engine update:** Bundles checksum-verified `lsfg-vk 2.0.0-dev28-experimental.24`. Complete the required in-plugin engine-update step after installing the ZIP.' \
+  '- **Stronger Adaptive recovery:** After a Steam-menu or focus interruption, Adaptive preserves the recovered real-frame baseline while restoring the previous generation level. If that level causes a sustained throughput collapse, it confirms the result with one second of real-only frames and returns to the lower proven level.' \
+  '- **Safer generated-image recovery:** A single generated-image acquisition recovery now stays in place and refreshes three history frames. Only a repeated recovery within 15 seconds may request guarded swapchain recreation, with a five-second cross-context cooldown.' \
+  '- **Maximum multiplier protection:** Smooth Cadence restoration, rescue, and recovery respect the selected Maximum Adaptive Multiplier.' \
+  '- **Live configuration:** Frame Generation, Adaptive Target, Maximum Adaptive Multiplier, Smooth Cadence, Flow Scale, and Performance Mode apply without a restart. Switching between Fixed and Adaptive, or increasing a Fixed multiplier beyond the capacity used when the game created its swapchain, requires a game restart.' \
+  '- **Live Frame Generation control:** Turn synthesis off or on immediately without changing the selected Fixed or Adaptive settings.' \
   '' \
   'See the [Configuration guide](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/blob/main/docs/CONFIGURATION.md) and [Troubleshooting guide](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/blob/main/docs/TROUBLESHOOTING.md) for the full behaviour and per-game controls.' \
   '' \
