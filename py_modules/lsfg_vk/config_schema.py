@@ -37,7 +37,7 @@ SCRIPT_ONLY_FIELDS = {
     if definition["location"] == "script"
 }
 PROFILE_TOML_FIELDS = {
-    "active_in", "gpu", "multiplier", "adaptive", "target_fps", "adaptive_max_multiplier",
+    "active_in", "gpu", "frame_generation_enabled", "multiplier", "adaptive", "target_fps", "adaptive_max_multiplier",
     "adaptive_stable_cadence",
     "flow_scale", "performance_mode", "pacing"
 }
@@ -160,6 +160,7 @@ class ConfigurationManager:
             if config["gpu"]:
                 lines.append(f"gpu = {_toml_string(config['gpu'])}")
             lines.extend([
+                f"frame_generation_enabled = {str(config['frame_generation_enabled']).lower()}",
                 f"multiplier = {config['multiplier']}",
                 f"adaptive = {str(config['adaptive']).lower()}",
                 f"target_fps = {config['target_fps']}",

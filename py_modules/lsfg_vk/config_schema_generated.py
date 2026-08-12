@@ -15,6 +15,7 @@ from shared_config import CONFIG_SCHEMA_DEF, ConfigFieldType
 # Field name constants for type-safe access
 DLL = "dll"
 ALLOW_FP16 = "allow_fp16"
+FRAME_GENERATION_ENABLED = "frame_generation_enabled"
 MULTIPLIER = "multiplier"
 ADAPTIVE = "adaptive"
 TARGET_FPS = "target_fps"
@@ -29,8 +30,6 @@ DISABLE_LSFGVK = "disable_lsfgvk"
 DXVK_FRAME_RATE = "dxvk_frame_rate"
 ENABLE_WOW64 = "enable_wow64"
 DISABLE_STEAMDECK_MODE = "disable_steamdeck_mode"
-MANGOHUD_WORKAROUND = "mangohud_workaround"
-ENABLE_WSI = "enable_wsi"
 ENABLE_ZINK = "enable_zink"
 
 
@@ -38,6 +37,7 @@ class ConfigurationData(TypedDict):
     """Type-safe configuration data structure - AUTO-GENERATED"""
     dll: str
     allow_fp16: bool
+    frame_generation_enabled: bool
     multiplier: int
     adaptive: bool
     target_fps: int
@@ -52,8 +52,6 @@ class ConfigurationData(TypedDict):
     dxvk_frame_rate: int
     enable_wow64: bool
     disable_steamdeck_mode: bool
-    mangohud_workaround: bool
-    enable_wsi: bool
     enable_zink: bool
 
 
@@ -83,10 +81,6 @@ def get_script_parsing_logic():
                         script_values["enable_wow64"] = value == "1"
                 if key == "SteamDeck":
                         script_values["disable_steamdeck_mode"] = value == "0"
-                if key == "MANGOHUD":
-                        script_values["mangohud_workaround"] = value == "1"
-                if key == "ENABLE_GAMESCOPE_WSI":
-                        script_values["enable_wsi"] = value != "0"
                 if key == "__GLX_VENDOR_LIBRARY_NAME" and value == "mesa":
                         script_values["enable_zink"] = True
                 if key == "MESA_LOADER_DRIVER_OVERRIDE" and value == "zink":
@@ -111,10 +105,6 @@ def get_script_generation_logic():
             lines.append("export PROTON_USE_WOW64=1")
         if config.get("disable_steamdeck_mode", False):
             lines.append("export SteamDeck=0")
-        if config.get("mangohud_workaround", False):
-            lines.append("export MANGOHUD=1")
-        if not config.get("enable_wsi", False):
-            lines.append("export ENABLE_GAMESCOPE_WSI=0")
         if config.get("enable_zink", False):
             lines.append("export __GLX_VENDOR_LIBRARY_NAME=mesa")
             lines.append("export MESA_LOADER_DRIVER_OVERRIDE=zink")
@@ -123,4 +113,4 @@ def get_script_generation_logic():
     return generate_script_lines
 
 
-ALL_FIELDS = ['dll', 'allow_fp16', 'multiplier', 'adaptive', 'target_fps', 'adaptive_max_multiplier', 'adaptive_stable_cadence', 'flow_scale', 'performance_mode', 'pacing', 'active_in', 'gpu', 'disable_lsfgvk', 'dxvk_frame_rate', 'enable_wow64', 'disable_steamdeck_mode', 'mangohud_workaround', 'enable_wsi', 'enable_zink']
+ALL_FIELDS = ['dll', 'allow_fp16', 'frame_generation_enabled', 'multiplier', 'adaptive', 'target_fps', 'adaptive_max_multiplier', 'adaptive_stable_cadence', 'flow_scale', 'performance_mode', 'pacing', 'active_in', 'gpu', 'disable_lsfgvk', 'dxvk_frame_rate', 'enable_wow64', 'disable_steamdeck_mode', 'enable_zink']

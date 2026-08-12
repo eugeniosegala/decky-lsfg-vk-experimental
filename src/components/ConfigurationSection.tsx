@@ -4,7 +4,7 @@ import { RiArrowDownSFill, RiArrowUpSFill } from "react-icons/ri";
 import { ConfigurationData } from "../config/configSchema";
 import {
   ACTIVE_IN, ALLOW_FP16, DISABLE_LSFGVK, DLL, FLOW_SCALE, GPU, PERFORMANCE_MODE,
-  DXVK_FRAME_RATE, DISABLE_STEAMDECK_MODE, MANGOHUD_WORKAROUND, ENABLE_WSI, ENABLE_ZINK
+  DXVK_FRAME_RATE, DISABLE_STEAMDECK_MODE, ENABLE_ZINK
 } from "../config/generatedConfigSchema";
 import t from "../i18n/i18n";
 
@@ -134,8 +134,8 @@ export function ConfigurationSection({
 
           <PanelSectionRow>
             <ToggleField
-              label={t("CONFIG_DISABLE_FRAME_GENERATION", "Disable Frame Generation")}
-              description={t("CONFIG_DISABLE_FRAME_GENERATION_DESC", "Disables lsfg-vk on the next game launch. Requires a game restart.")}
+              label={t("CONFIG_DISABLE_LSFGVK_NEXT_LAUNCH", "Disable LSFG-VK on Next Launch")}
+              description={t("CONFIG_DISABLE_LSFGVK_NEXT_LAUNCH_DESC", "Disables the entire LSFG-VK layer on the next game launch. Requires a game restart. Use Frame Generation above for live on/off.")}
               checked={config.disable_lsfgvk}
               onChange={(value) => onConfigChange(DISABLE_LSFGVK, value)}
             />
@@ -233,15 +233,6 @@ export function ConfigurationSection({
 
       {!workaroundsCollapsed && (
         <>
-        <PanelSectionRow>
-            <ToggleField
-              label={t("CONFIG_ENABLE_WSI", "Enable WSI")}
-              description={t("CONFIG_ENABLE_WSI_DESC", "Re-Enable Gamescope WSI Layer. Requires game restart to apply.")}
-              checked={config.enable_wsi}
-              onChange={(value) => onConfigChange(ENABLE_WSI, value)}
-            />
-          </PanelSectionRow>
-          
           <PanelSectionRow>
             <ToggleField
               label={t("CONFIG_ENABLE_WOW64", "Enable WOW64 for 32-bit games")}
@@ -257,15 +248,6 @@ export function ConfigurationSection({
               description={t("CONFIG_DISABLE_STEAMDECK_MODE_DESC", "Disables Steam Deck mode (Unlocks hidden settings in some games)")}
               checked={config.disable_steamdeck_mode}
               onChange={(value) => onConfigChange(DISABLE_STEAMDECK_MODE, value)}
-            />
-          </PanelSectionRow>
-
-          <PanelSectionRow>
-            <ToggleField
-              label={t("CONFIG_MANGOHUD_WORKAROUND", "MangoHud Workaround")}
-              description={t("CONFIG_MANGOHUD_WORKAROUND_DESC", "Enables a transparent mangohud overlay, sometimes fixes issues with 2X multiplier in game mode")}
-              checked={config.mangohud_workaround}
-              onChange={(value) => onConfigChange(MANGOHUD_WORKAROUND, value)}
             />
           </PanelSectionRow>
 

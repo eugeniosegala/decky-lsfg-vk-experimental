@@ -10,6 +10,7 @@ export enum ConfigFieldType {
 // Field name constants for type-safe access
 export const DLL = "dll" as const;
 export const ALLOW_FP16 = "allow_fp16" as const;
+export const FRAME_GENERATION_ENABLED = "frame_generation_enabled" as const;
 export const MULTIPLIER = "multiplier" as const;
 export const ADAPTIVE = "adaptive" as const;
 export const TARGET_FPS = "target_fps" as const;
@@ -24,8 +25,6 @@ export const DISABLE_LSFGVK = "disable_lsfgvk" as const;
 export const DXVK_FRAME_RATE = "dxvk_frame_rate" as const;
 export const ENABLE_WOW64 = "enable_wow64" as const;
 export const DISABLE_STEAMDECK_MODE = "disable_steamdeck_mode" as const;
-export const MANGOHUD_WORKAROUND = "mangohud_workaround" as const;
-export const ENABLE_WSI = "enable_wsi" as const;
 export const ENABLE_ZINK = "enable_zink" as const;
 
 // Configuration field definition
@@ -49,6 +48,12 @@ export const CONFIG_SCHEMA: Record<string, ConfigField> = {
     fieldType: ConfigFieldType.BOOLEAN,
     default: true,
     description: "allow FP16 acceleration (disable on older NVIDIA GPUs)"
+  },
+  frame_generation_enabled: {
+    name: "frame_generation_enabled",
+    fieldType: ConfigFieldType.BOOLEAN,
+    default: true,
+    description: "enable or stop live frame generation while preserving fixed or adaptive settings"
   },
   multiplier: {
     name: "multiplier",
@@ -134,18 +139,6 @@ export const CONFIG_SCHEMA: Record<string, ConfigField> = {
     default: false,
     description: "disable Steam Deck mode (unlocks hidden settings in some games)"
   },
-  mangohud_workaround: {
-    name: "mangohud_workaround",
-    fieldType: ConfigFieldType.BOOLEAN,
-    default: false,
-    description: "Enables a transparent mangohud overlay, sometimes fixes issues with 2X multiplier in game mode"
-  },
-  enable_wsi: {
-    name: "enable_wsi",
-    fieldType: ConfigFieldType.BOOLEAN,
-    default: false,
-    description: "Enable Gamescope WSI Layer; disable if frame generation is not applying or does not feel smooth"
-  },
   enable_zink: {
     name: "enable_zink",
     fieldType: ConfigFieldType.BOOLEAN,
@@ -158,6 +151,7 @@ export const CONFIG_SCHEMA: Record<string, ConfigField> = {
 export interface ConfigurationData {
   dll: string;
   allow_fp16: boolean;
+  frame_generation_enabled: boolean;
   multiplier: number;
   adaptive: boolean;
   target_fps: number;
@@ -172,8 +166,6 @@ export interface ConfigurationData {
   dxvk_frame_rate: number;
   enable_wow64: boolean;
   disable_steamdeck_mode: boolean;
-  mangohud_workaround: boolean;
-  enable_wsi: boolean;
   enable_zink: boolean;
 }
 
@@ -186,6 +178,7 @@ export function getDefaults(): ConfigurationData {
   return {
     dll: "",
     allow_fp16: true,
+    frame_generation_enabled: true,
     multiplier: 2,
     adaptive: false,
     target_fps: 90,
@@ -200,8 +193,6 @@ export function getDefaults(): ConfigurationData {
     dxvk_frame_rate: 0,
     enable_wow64: false,
     disable_steamdeck_mode: false,
-    mangohud_workaround: false,
-    enable_wsi: false,
     enable_zink: false,
   };
 }
@@ -210,6 +201,7 @@ export function getFieldTypes(): Record<string, ConfigFieldType> {
   return {
     dll: ConfigFieldType.STRING,
     allow_fp16: ConfigFieldType.BOOLEAN,
+    frame_generation_enabled: ConfigFieldType.BOOLEAN,
     multiplier: ConfigFieldType.INTEGER,
     adaptive: ConfigFieldType.BOOLEAN,
     target_fps: ConfigFieldType.INTEGER,
@@ -224,8 +216,6 @@ export function getFieldTypes(): Record<string, ConfigFieldType> {
     dxvk_frame_rate: ConfigFieldType.INTEGER,
     enable_wow64: ConfigFieldType.BOOLEAN,
     disable_steamdeck_mode: ConfigFieldType.BOOLEAN,
-    mangohud_workaround: ConfigFieldType.BOOLEAN,
-    enable_wsi: ConfigFieldType.BOOLEAN,
     enable_zink: ConfigFieldType.BOOLEAN,
   };
 }

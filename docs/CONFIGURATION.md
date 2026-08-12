@@ -8,8 +8,10 @@ instability or fails to attach.
 
 ## Frame-generation mode
 
-- **FPS Multiplier:** Fixed 2x, 3x, or 4x generation. lsfg-vk v2 has no fixed 0x choice. Use the plugin's **Disable
-  Frame Generation** setting and restart the game when you need to run without it.
+- **Frame Generation:** The first control switches frame generation on or off immediately, without changing the selected
+  Fixed or Adaptive settings. Turn it back on to resume with those settings.
+- **FPS Multiplier:** Fixed 2x, 3x, or 4x generation. lsfg-vk v2 has no fixed 0x multiplier; use the live **Frame
+  Generation** switch instead.
 - **Adaptive Frame Generation:** Optional mode that estimates the real frame rate and schedules zero to three generated
   frames to approach the selected target. It replaces the fixed multiplier controls for that profile. Target, ceiling,
   and Smooth Cadence changes apply live; expect a short settling period while Adaptive recalculates its timing.
@@ -49,14 +51,14 @@ matches the appropriate profile at launch. Once at least one profile has an **Ac
 engine-profile selection to lsfg-vk; you can return the UI selector to **Default** without breaking automatic matching.
 The following settings are profile-based and support that automatic match:
 
-- Fixed multiplier or Adaptive mode, Target FPS, Maximum Adaptive Multiplier, and Smooth Cadence
+- Live Frame Generation, Fixed multiplier or Adaptive mode, Target FPS, Maximum Adaptive Multiplier, and Smooth Cadence
 - Flow Scale, Performance Mode, GPU matching, and Active In
 
 The `Lossless.dll` path and FP16 permission are shared globally because they apply to the installed engine, not to an
 individual game.
 
-Decky also keeps the launcher compatibility options per profile—Disable Frame Generation, Base FPS Cap, WoW64, Steam
-Deck Mode, MangoHud workaround, Gamescope WSI Layer, and Zink. They are saved in this plugin's private profile state and
+Decky also keeps the launcher compatibility options per profile—Disable LSFG-VK on Next Launch, Base FPS Cap, WoW64,
+Steam Deck Mode, and Zink. They are saved in this plugin's private profile state and
 are restored when you select that profile in Decky. They cannot follow **Active In** automatically: those variables must
 be set by the wrapper before lsfg-vk sees the game's process name. Select the profile manually before launching a game
 that needs one of those compatibility options, then restart the game after changing profiles.
@@ -77,8 +79,12 @@ that needs one of those compatibility options, then restart the game after chang
 
 - **Base FPS Cap:** Optionally caps the base DirectX framerate before multiplication.
 - **WoW64:** Enables `PROTON_USE_WOW64=1` for compatible 32-bit games, primarily as a ProtonGE crash workaround.
-- **Steam Deck Mode** and **MangoHud workaround:** Per-game compatibility paths.
-- **Gamescope WSI Layer** and **Zink:** Optional paths for Gamescope and OpenGL games.
+- **Steam Deck Mode:** A per-game compatibility path.
+- **Zink:** Optional Vulkan-based OpenGL path for OpenGL games.
+
+Gamescope WSI and MangoHud controls are deliberately not shown in this isolated plugin. Its wrapper uses a private
+Vulkan implicit-layer path so the experimental layer cannot load alongside the public layer; that same isolation means
+globally installed WSI and MangoHud layers are not reliably discoverable for that game.
 
 The plugin writes `pacing = 'none'` and does not expose general HDR or dual-GPU controls. See
 [Troubleshooting](TROUBLESHOOTING.md) and the release notes for build-specific compatibility guidance.

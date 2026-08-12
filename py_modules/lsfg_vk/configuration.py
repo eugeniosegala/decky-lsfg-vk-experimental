@@ -27,7 +27,7 @@ from .types import ConfigurationResponse, ProfilesResponse, ProfileResponse
 class ConfigurationService(BaseService):
     """Service for managing TOML-based lsfg configuration"""
 
-    _WRAPPER_FORMAT_MARKER = "# decky-lsfg-vk-experimental-wrapper-format: 9"
+    _WRAPPER_FORMAT_MARKER = "# decky-lsfg-vk-experimental-wrapper-format: 10"
     _WRAPPER_PROFILE_SETTINGS_VERSION = 1
     _REQUIRED_WRAPPER_EXPORTS = (
         "export LSFGVK_PRESENT_ACQUIRE_TIMEOUT_MS=",
@@ -387,14 +387,15 @@ class ConfigurationService(BaseService):
     def migrate_launch_script_if_needed(self) -> bool:
         """Upgrade an installed generated wrapper without touching user data.
 
-        Wrapper format 9 permits automatic Active In matching whenever at least
-        one profile has an activation rule, while retaining format 8's selected
-        profile compatibility settings, format 7's plugin-private diagnostics
-        log, format 6's Adaptive game-owned swapchain recreation behaviour,
-        explicit caller overrides, the validated 50 ms acquisition timeout, and
-        experimental Flatpak manifest selection. Validate the required exports
-        as well as the marker so an intermediate locally generated wrapper
-        cannot be mistaken for the completed format.
+        Wrapper format 10 removes the obsolete Gamescope WSI and MangoHud
+        exports, which cannot work through the isolated Vulkan-layer path. It
+        retains format 9's automatic Active In matching, selected-profile
+        compatibility settings, plugin-private diagnostics log, Adaptive
+        game-owned swapchain recreation behaviour, explicit caller overrides,
+        validated 50 ms acquisition timeout, and experimental Flatpak manifest
+        selection. Validate the required exports as well as the marker so an
+        intermediate locally generated wrapper cannot be mistaken for the
+        completed format.
         """
         if not self.lsfg_script_path.exists():
             return False
@@ -416,7 +417,7 @@ class ConfigurationService(BaseService):
             if not result["success"]:
                 raise OSError(result.get("error") or "could not refresh launch wrapper")
 
-            self.log.info("Upgraded installed lsfg-vk experimental launch wrapper to format 9")
+            self.log.info("Upgraded installed lsfg-vk experimental launch wrapper to format 10")
             return True
         except OSError:
             raise

@@ -34,6 +34,14 @@ CONFIG_SCHEMA_DEF = {
         "description": "allow FP16 acceleration (disable on older NVIDIA GPUs)",
         "location": "global"
     },
+
+    "frame_generation_enabled": {
+        "name": "frame_generation_enabled",
+        "fieldType": ConfigFieldType.BOOLEAN,
+        "default": True,
+        "description": "enable or stop live frame generation while preserving fixed or adaptive settings",
+        "location": "toml"
+    },
     
     "multiplier": {
         "name": "multiplier",
@@ -146,22 +154,6 @@ CONFIG_SCHEMA_DEF = {
         "fieldType": ConfigFieldType.BOOLEAN,
         "default": False,
         "description": "disable Steam Deck mode (unlocks hidden settings in some games)",
-        "location": "script"
-    },
-    
-    "mangohud_workaround": {
-        "name": "mangohud_workaround",
-        "fieldType": ConfigFieldType.BOOLEAN,
-        "default": False,
-        "description": "Enables a transparent mangohud overlay, sometimes fixes issues with 2X multiplier in game mode",
-        "location": "script"
-    },
-    
-    "enable_wsi": {
-        "name": "enable_wsi",
-        "fieldType": ConfigFieldType.BOOLEAN,
-        "default": False,
-        "description": "Enable Gamescope WSI Layer; disable if frame generation is not applying or does not feel smooth",
         "location": "script"
     },
     

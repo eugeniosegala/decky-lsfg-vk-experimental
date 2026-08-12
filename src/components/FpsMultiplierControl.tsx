@@ -5,6 +5,7 @@ import {
   ADAPTIVE,
   ADAPTIVE_MAX_MULTIPLIER,
   ADAPTIVE_STABLE_CADENCE,
+  FRAME_GENERATION_ENABLED,
   MULTIPLIER,
   TARGET_FPS
 } from "../config/generatedConfigSchema";
@@ -45,13 +46,22 @@ export function FpsMultiplierControl({
 
   return (
     <>
-          <PanelSectionRow>
-            <ToggleField
-              label={t("ADAPTIVE_TITLE", "Adaptive Frame Generation")}
-              description={t("ADAPTIVE_DESC", "Experimental. Changes apply live, but the layer needs a few seconds to reset its timing and stability calculations. Let it settle before judging performance. Restart the game if switching between Fixed and Adaptive causes instability or fails to attach.")}
-              checked={config.adaptive}
-              onChange={(value) => onConfigChange(ADAPTIVE, value)}
-            />
+      <PanelSectionRow>
+        <ToggleField
+          label={t("FRAME_GENERATION_ENABLED", "Frame Generation")}
+          description={t("FRAME_GENERATION_ENABLED_DESC", "Turn frame generation on or off immediately. Your Fixed or Adaptive settings are preserved for when you turn it back on.")}
+          checked={config.frame_generation_enabled}
+          onChange={(value) => onConfigChange(FRAME_GENERATION_ENABLED, value)}
+        />
+      </PanelSectionRow>
+
+      <PanelSectionRow>
+        <ToggleField
+          label={t("ADAPTIVE_TITLE", "Adaptive Frame Generation")}
+          description={t("ADAPTIVE_DESC", "Experimental. Changes apply live, but the layer needs a few seconds to reset its timing and stability calculations. Let it settle before judging performance. Restart the game if switching between Fixed and Adaptive causes instability or fails to attach.")}
+          checked={config.adaptive}
+          onChange={(value) => onConfigChange(ADAPTIVE, value)}
+        />
       </PanelSectionRow>
 
       {config.adaptive && (

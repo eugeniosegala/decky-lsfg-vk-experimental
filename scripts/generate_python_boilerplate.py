@@ -33,8 +33,6 @@ def get_env_var_name(field_name: str) -> str:
         "dxvk_frame_rate": "DXVK_FRAME_RATE",
         "enable_wow64": "PROTON_USE_WOW64", 
         "disable_steamdeck_mode": "SteamDeck",
-        "mangohud_workaround": "MANGOHUD",
-        "enable_wsi": "ENABLE_GAMESCOPE_WSI",
         "enable_zink": "ZINK_ENABLE"
     }
     return env_map.get(field_name, field_name.upper())
@@ -73,11 +71,6 @@ def generate_script_parsing() -> str:
                 # Special case: SteamDeck=0 means disable_steamdeck_mode=True
                 lines.append(f'                    elif key == "{env_var}":')
                 lines.append(f'                        script_values["{field_name}"] = value == "0"')
-            elif field_name == "enable_wsi":
-                # Special case: ENABLE_GAMESCOPE_WSI=0 means enable_wsi=False.
-                # DXVK_HDR is deliberately not managed: HDR is not currently available.
-                lines.append(f'                    elif key == "{env_var}":')
-                lines.append(f'                        script_values["{field_name}"] = value != "0"')
             elif field_name == "enable_zink":
                 # Special case: Zink uses multiple environment variables
                 lines.append(f'                    elif key == "__GLX_VENDOR_LIBRARY_NAME" and value == "mesa":')
@@ -126,11 +119,6 @@ def generate_script_generation() -> str:
             if field_name == "disable_steamdeck_mode":
                 # Special case: disable_steamdeck_mode=True should export SteamDeck=0
                 lines.append(f'        if config.get("{field_name}", False):')
-                lines.append(f'            lines.append("export {env_var}=0")')
-            elif field_name == "enable_wsi":
-                # Special case: enable_wsi=False should export ENABLE_GAMESCOPE_WSI=0.
-                # Do not set DXVK_HDR: HDR is not currently available.
-                lines.append(f'        if not config.get("{field_name}", False):')
                 lines.append(f'            lines.append("export {env_var}=0")')
             elif field_name == "enable_zink":
                 # Special case: enable_zink=True should export multiple Zink environment variables
