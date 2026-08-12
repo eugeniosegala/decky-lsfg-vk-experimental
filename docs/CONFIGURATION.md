@@ -82,9 +82,10 @@ that needs one of those compatibility options, then restart the game after chang
 - **Steam Deck Mode:** A per-game compatibility path.
 - **Zink:** Optional Vulkan-based OpenGL path for OpenGL games.
 
-Gamescope WSI and MangoHud controls are deliberately not shown in this isolated plugin. Its wrapper uses a private
-Vulkan implicit-layer path so the experimental layer cannot load alongside the public layer; that same isolation means
-globally installed WSI and MangoHud layers are not reliably discoverable for that game.
+Gamescope WSI and MangoHud controls are deliberately not shown in this isolated plugin. Its wrapper replaces the
+normal implicit-layer search path with a private one so the experimental layer cannot load alongside the public layer.
+That same isolation means globally installed WSI and MangoHud layers cannot be discovered for that game, so exposing
+their controls would be misleading.
 
 The plugin writes `pacing = 'none'` and does not expose general HDR or dual-GPU controls. See
 [Troubleshooting](TROUBLESHOOTING.md) and the release notes for build-specific compatibility guidance.

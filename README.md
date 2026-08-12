@@ -78,7 +78,7 @@ The Steam launch wrapper cannot enter a Flatpak sandbox, so configure Heroic thr
 4. Start that game normally from Heroic or its Steam shortcut.
 
 The wrapper applies only to the selected Heroic games. It uses the isolated experimental Flatpak layer, so those games
-cannot discover vkBasalt or other globally installed implicit Vulkan layers.
+cannot discover vkBasalt, Gamescope WSI, MangoHud, or other globally installed implicit Vulkan layers.
 
 > [!IMPORTANT]
 > After installing a newer experimental plugin ZIP, return to **Flatpak Setup** and select **Update** for Heroic's
