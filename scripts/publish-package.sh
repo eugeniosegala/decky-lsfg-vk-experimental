@@ -133,14 +133,12 @@ notes_file="$notes_dir/release-notes.md"
 printf '%s\n' \
   '> **Optional coexistence:** If you want to keep the original/public Decky LSFG-VK plugin installed, you can. Both plugins can remain installed and enabled. For native Steam/Proton games, choose exactly one launch wrapper: public `~/lsfg %command%` or experimental `~/.local/bin/lsfg-vk-experimental %command%`; never combine them. Flatpak apps, including Heroic, are selected through Flatpak setup instead.' \
   '' \
-  '## This release: live Frame Generation control and a more polished SteamOS experience' \
+  '## This release: live Frame Generation control and focused UI improvements' \
   '' \
   '- **Live Frame Generation switch:** The first control in **Frame Generation Mode** now turns frame generation on or off immediately, without changing your selected Fixed or Adaptive settings. Turning it back on resumes the same profile. This is the dedicated replacement for the old 0x multiplier approach.' \
-  '- **Updated experimental v2 engine:** Bundles `lsfg-vk 2.0.0-dev28-experimental.20`, including its separate runtime frame-generation switch. The current engine also carries forward the SteamOS/Gamescope stability work: bounded image waits, real-frame fallback, temporal-history warm-up, and guarded recovery after a compositor interruption.' \
-  '- **Adaptive stability:** Adaptive starts and recovers from real frames, keeps the lowest proven multiplier that can meet the target, and avoids extra generation load when it would reduce base-game throughput. This helps it recover more predictably from menu, focus, and sustained gameplay-rate changes.' \
-  '- **Smooth Cadence:** This Adaptive mode can make displayed motion smoother, but may lower real-frame cadence and increase input lag. It is enabled by default; disable it per game when responsiveness matters more.' \
-  '- **More reliable wrapper updates:** Refreshing the experimental launcher now retains the selected profile compatibility settings, including Base FPS Cap, WoW64, Steam Deck Mode, and Zink.' \
-  '- **Localized interface:** The Decky UI now has complete Japanese and Korean translation support, including the experimental controls introduced by this fork.' \
+  '- **Engine update:** Bundles checksum-verified `lsfg-vk 2.0.0-dev28-experimental.20`, which provides the live real-frame passthrough used by the new switch. Complete the required in-plugin engine-update step after installing the ZIP.' \
+  '- **Japanese and Korean interface:** The experimental UI is now localized across its configuration, profile, installation, Flatpak, and live Frame Generation controls.' \
+  '- **Isolation cleanup:** Removed the obsolete Gamescope WSI and MangoHud controls. They cannot take effect through this plugin’s isolated Vulkan-layer path.' \
   '' \
   'See the [Configuration guide](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/blob/main/docs/CONFIGURATION.md) and [Troubleshooting guide](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/blob/main/docs/TROUBLESHOOTING.md) for the full behaviour and per-game controls.' \
   '' \

@@ -50,7 +50,7 @@ export function FpsMultiplierControl({
         <ToggleField
           label={t("FRAME_GENERATION_ENABLED", "Frame Generation")}
           description={t("FRAME_GENERATION_ENABLED_DESC", "Turn frame generation on or off immediately. Your Fixed or Adaptive settings are preserved for when you turn it back on.")}
-          checked={config.frame_generation_enabled}
+          checked={config.frame_generation_enabled ?? true}
           onChange={(value) => onConfigChange(FRAME_GENERATION_ENABLED, value)}
         />
       </PanelSectionRow>
