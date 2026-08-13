@@ -195,8 +195,6 @@ printf '%s\n' \
   '' \
   '- **HDR:** HDR remains problematic with this payload. Disable HDR in the game before playing; it can remain enabled in SteamOS. The plugin has no general HDR control, and the v1 HDR toggle was also non-functional.' \
   '' \
-  '- **No fixed 0x multiplier:** Unlike v1, the fixed selector remains 2x, 3x, or 4x. Use the live **Frame Generation** switch to stop or resume generation without changing its settings. **Disable LSFG-VK on Next Launch** is separate: it disables the entire layer and requires a game restart. Adaptive mode may internally schedule zero generated frames for an individual interval; that is not a persistent disable setting.' \
-  '' \
   '- **Isolation trade-offs:** The public and experimental plugins can coexist, but a game launched with the experimental wrapper cannot use vkBasalt or other globally installed Vulkan layers, such as overlay or post-processing layers. This affects only that game. If it needs those layers, switch its launch option back to the public plugin’s `~/lsfg %command%` wrapper.' \
   '' \
   '## Before you play' \
