@@ -10,27 +10,27 @@ Update both in the same commit.
 |-----------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Release repository          | [`eugeniosegala/lsfg-vk-experimental`](https://github.com/eugeniosegala/lsfg-vk-experimental)                                                         |
 | Tracked branch              | `develop`                                                                                                                                             |
-| Last checked                | 2026-08-12                                                                                                                                            |
-| Integrated source commit    | `865b34b2f596c545cabfd0810f905c18194bf6b4`                                                                                                            |
-| Commit date and subject     | 2026-08-12 — `experimental.24` release candidate                                                                                                     |
-| Experimental prerelease tag | `v2.0.0-dev28-experimental.24`                                                                                                                        |
-| Release state               | Engine and Decky prereleases published and verified on 2026-08-12                                                                                     |
+| Last checked                | 2026-08-13                                                                                                                                            |
+| Integrated source commit    | `4777cb2115760fd0936f91f535becb6d17d0c329`                                                                                                            |
+| Commit date and subject     | 2026-08-13 — `feat: add automatic HDR color pipeline`                                                                                                |
+| Experimental prerelease tag | `v2.0.0-dev28-experimental.25` (reserved candidate tag; not published)                                                                                |
+| Release state               | Local HDR candidate only; neither engine nor Decky branch has been pushed or released                                                                |
 | Upstream lineage            | [`PancakeTAS/lsfg-vk`](https://github.com/PancakeTAS/lsfg-vk) `2.0.0-dev28`                                                                           |
-| Release asset               | `lsfg-vk-2.0.0-dev28-experimental.24-linux.tar.xz`                                                                                                    |
-| Asset SHA-256               | `09add7d1a14f7a6928cec65fc2aa711bf83c101639825409b9e80d7120d05ee4`                                                                                    |
-| Asset URL                   | `https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.24/lsfg-vk-2.0.0-dev28-experimental.24-linux.tar.xz` |
-| Flatpak archive             | `lsfg-vk-2.0.0-dev28-experimental.24-flatpaks.tar.xz`                                                                                                 |
-| Flatpak SHA-256             | `726325151f0645c687b78d013165785bcb3a9c2587a58aa4accdbf1857753727`                                                                                    |
-| Decky plugin version        | `0.13.0-experimental.24` (published prerelease)                                                                                                       |
+| Release asset               | `lsfg-vk-2.0.0-dev28-experimental.25-linux.tar.xz` (local)                                                                                            |
+| Asset SHA-256               | `859aa47000bc4e6c5aef4cb2fa35950d288d466488dc13b82473215976f43c14`                                                                                    |
+| Asset URL                   | Reserved `.25` release URL; does not exist until the engine candidate is published                                                                   |
+| Flatpak archive             | `lsfg-vk-2.0.0-dev28-experimental.25-flatpaks.tar.xz` (local)                                                                                         |
+| Flatpak SHA-256             | `e2d7b432a8f29a4c241543fe9e8d0c14f7ad333396197a46e5cc55fc850a135b`                                                                                    |
+| Decky plugin version        | `0.13.0-experimental.25` (local candidate; not published)                                                                                             |
 | Decky plugin package ID     | `decky-lsfg-vk-experimental`                                                                                                                          |
 
-This integration is pinned to the published tag and checksum-verified release assets above. The experimental fork's
-`develop` branch may advance independently; do not treat newer commits as integrated until their source and immutable
-artifacts have been reviewed and this record has been updated.
+This integration is pinned to a committed local source checkpoint and locally built artifacts. The URLs and tags in
+`package.json` reserve the eventual release names but are not evidence of publication. Do not run the publishing script
+until SteamOS HDR testing passes, the Flatpak checksum is recorded, and the user explicitly authorizes publication.
 
 ## Integrated Flatpak support
 
-Engine release `v2.0.0-dev28-experimental.24` includes separate experimental Flatpak runtime extensions for 23.08, 24.08,
+Engine candidate `v2.0.0-dev28-experimental.25` includes separate experimental Flatpak runtime extensions for 23.08, 24.08,
 and 25.08. The Decky pin includes the checksum-verified host and Flatpak release assets. The local package script
 downloads, verifies, and embeds those three extensions. The plugin prepares a Flatpak app to access its private
 configuration, `Lossless.dll`, and wrapper; the wrapper then enables the experimental layer only for Heroic games
@@ -43,12 +43,25 @@ that explicitly select it.
 | Supported runtimes   | Freedesktop `23.08`, `24.08`, and `25.08`                                                                         |
 | Coexistence design   | Dedicated ID and prefix; the experimental plugin selects it only for Flatpak apps explicitly enabled by the user. |
 
-The engine prerelease and both archive checksums have been verified. The Decky prerelease embeds only those
-checksum-pinned assets.
+The local Decky candidate embeds only checksum-pinned artifacts. The native archive and the three-runtime Flatpak
+archive were built and verified locally from the committed `.25` source.
+
+### Automatic HDR colour path
+
+The `.25` candidate classifies swapchain format and colour space together. It supports SteamOS HDR10/PQ and linear
+scRGB, converting HDR10 through linear scRGB around the frame-generation model. Ordinary 8-bit SDR and high-precision
+SDR remain separate modes. Unsupported or unvalidated HDR transfer functions, including HLG and Dolby Vision, bypass
+generated frames and present the game's real frames instead of guessing a conversion.
+
+The experimental wrapper remains private but now uses additive Vulkan implicit-layer discovery by default, allowing
+Gamescope WSI to advertise the compositor's HDR formats. A per-profile **Hide HDR from Game (Restart)** workaround
+intentionally restores the legacy private-only discovery path for rare games that cannot start when HDR is exposed.
+The existing **Disable LSFG-VK on Next Launch** workaround remains the last-resort recovery if the layer itself prevents
+a title from starting.
 
 ### Adaptive Frame Generation
 
-The published `v2.0.0-dev28-experimental.24` release retains the opt-in target-FPS scheduler introduced in `.9`. It
+The `.25` candidate retains the opt-in target-FPS scheduler introduced in `.9`. It
 smooths the measured real-frame interval and dynamically schedules zero to three generated frames between real frames,
 with evenly spaced interpolation timestamps. It adds a configurable 2x, 3x, or 4x Adaptive ceiling, defaulting to 3x.
 If reaching the target would require a higher ratio, the scheduler deliberately undershoots the target instead of
@@ -63,7 +76,7 @@ Adaptive Frame Generation is selected.
 
 ### Gamescope presentation recovery
 
-The published `v2.0.0-dev28-experimental.24` release retains the `.4` synchronization fix and diagnostics. SteamOS
+The `.25` candidate retains the `.4` synchronization fix and diagnostics. SteamOS
 traces showed the Steam-menu slowdown was dominated by generated-image acquisition, with waits reaching approximately
 74 ms. Testing `.5` then showed the fallback working safely but repeating the full 25 ms timeout on every unavailable
 frame. The `.6` engine uses non-blocking probes after the first timeout, continues showing real game frames while
@@ -74,7 +87,7 @@ two real frames. Testing `.7` also captured recoveries lasting 225 and 529 real 
 could repeatedly miss the compositor's image-release window. The `.8` engine makes one bounded reacquisition attempt
 per second after the first second of fallback, without forcing a game-owned swapchain recreation.
 
-Plugin version `0.13.0-experimental.24` enables a validated 50 ms timeout in its isolated wrapper. SteamOS
+Plugin version `0.13.0-experimental.25` retains the validated 50 ms timeout in its private wrapper. SteamOS
 testing showed successful acquisitions between 25 and 48 ms, while genuine stalls reached the 50 ms bound; this avoids
 the false fallbacks seen with the earlier 25 ms wrapper setting. Explicit caller overrides are preserved. The engine
 itself remains opt-in when used outside this Decky plugin.

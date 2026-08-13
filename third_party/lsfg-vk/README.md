@@ -321,3 +321,17 @@ archive declared and checksum-pinned in
 - Notes: Strengthens Adaptive recovery after Steam-menu or focus interruptions, adds safer bounded generated-image
   recovery, and ensures restoration, rescue, and recovery respect the configured Maximum Adaptive Multiplier. The
   deterministic scheduler baseline, rendering path, shaders, interpolation timing, and Fixed scheduling remain unchanged.
+
+## v2.0.0-dev28-experimental.25 (local candidate)
+
+- Source repository: `https://github.com/eugeniosegala/lsfg-vk-experimental`
+- Reserved release tag: `v2.0.0-dev28-experimental.25` (not published)
+- Source commit: `4777cb2115760fd0936f91f535becb6d17d0c329`
+- Upstream lineage: `lsfg-vk 2.0.0-dev28`
+- Host archive: `lsfg-vk-2.0.0-dev28-experimental.25-linux.tar.xz`
+- Host SHA-256: `859aa47000bc4e6c5aef4cb2fa35950d288d466488dc13b82473215976f43c14`
+- Flatpak archive: `lsfg-vk-2.0.0-dev28-experimental.25-flatpaks.tar.xz`
+- Flatpak SHA-256: `e2d7b432a8f29a4c241543fe9e8d0c14f7ad333396197a46e5cc55fc850a135b`
+- Notes: Adds explicit swapchain colour classification, HDR10/PQ conversion through linear scRGB, direct linear-scRGB
+  frame generation, and real-frame passthrough for unsupported HDR modes or frame-generation initialization failures.
+  The local Decky candidate preserves Gamescope WSI discovery by default and adds a per-profile SDR startup recovery.

@@ -413,7 +413,10 @@ class FlatpakService(BaseService):
                     in_environment = False
                 elif in_environment and line.startswith(f"LSFGVK_CONFIG={config_path}/conf.toml"):
                     has_lsfg_config_env = True
-                elif in_environment and line.startswith(f"VK_IMPLICIT_LAYER_PATH={FLATPAK_IMPLICIT_LAYER_DIR}"):
+                elif in_environment and (
+                    line.startswith(f"VK_IMPLICIT_LAYER_PATH={FLATPAK_IMPLICIT_LAYER_DIR}")
+                    or line.startswith(f"VK_ADD_IMPLICIT_LAYER_PATH={FLATPAK_IMPLICIT_LAYER_DIR}")
+                ):
                     has_isolated_layer_env = True
 
             legacy_env_override = has_lsfg_config_env or has_isolated_layer_env
@@ -529,7 +532,11 @@ class FlatpakService(BaseService):
             # Older experimental versions activated the layer globally for the
             # Flatpak app. Remove those values during upgrade: the mounted
             # wrapper now applies them only to an individual Heroic game.
-            for variable in ("LSFGVK_CONFIG", "VK_IMPLICIT_LAYER_PATH"):
+            for variable in (
+                "LSFGVK_CONFIG",
+                "VK_IMPLICIT_LAYER_PATH",
+                "VK_ADD_IMPLICIT_LAYER_PATH",
+            ):
                 result = self._run_flatpak_command(
                     ["override", "--user", f"--unset-env={variable}", app_id],
                     capture_output=True, text=True
@@ -578,7 +585,11 @@ class FlatpakService(BaseService):
                 if result.returncode != 0:
                     removal_errors.append(f"{override}: {result.stderr}")
 
-            for variable in ("LSFGVK_CONFIG", "VK_IMPLICIT_LAYER_PATH"):
+            for variable in (
+                "LSFGVK_CONFIG",
+                "VK_IMPLICIT_LAYER_PATH",
+                "VK_ADD_IMPLICIT_LAYER_PATH",
+            ):
                 result = self._run_flatpak_command(
                     ["override", "--user", f"--unset-env={variable}", app_id],
                     capture_output=True, text=True

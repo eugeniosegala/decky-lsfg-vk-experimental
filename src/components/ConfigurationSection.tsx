@@ -4,7 +4,7 @@ import { RiArrowDownSFill, RiArrowUpSFill } from "react-icons/ri";
 import { ConfigurationData } from "../config/configSchema";
 import {
   ACTIVE_IN, ALLOW_FP16, DISABLE_LSFGVK, DLL, FLOW_SCALE, GPU, PERFORMANCE_MODE,
-  DXVK_FRAME_RATE, DISABLE_STEAMDECK_MODE, ENABLE_ZINK
+  DXVK_FRAME_RATE, DISABLE_HDR_EXPOSURE, DISABLE_STEAMDECK_MODE, ENABLE_ZINK
 } from "../config/generatedConfigSchema";
 import t from "../i18n/i18n";
 
@@ -233,6 +233,15 @@ export function ConfigurationSection({
 
       {!workaroundsCollapsed && (
         <>
+          <PanelSectionRow>
+            <ToggleField
+              label={t("CONFIG_DISABLE_HDR_EXPOSURE", "Hide HDR from Game (Restart)")}
+              description={t("CONFIG_DISABLE_HDR_EXPOSURE_DESC", "Emergency startup recovery. Keeps Gamescope HDR hidden from this game until you turn this off. Requires a game restart.")}
+              checked={config.disable_hdr_exposure}
+              onChange={(value) => onConfigChange(DISABLE_HDR_EXPOSURE, value)}
+            />
+          </PanelSectionRow>
+
           <PanelSectionRow>
             <ToggleField
               label={t("CONFIG_ENABLE_WOW64", "Enable WOW64 for 32-bit games")}

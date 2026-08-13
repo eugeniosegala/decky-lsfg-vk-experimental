@@ -1,6 +1,6 @@
 {
   "name": "decky-lsfg-vk-experimental",
-  "version": "0.13.0-experimental.24",
+  "version": "0.13.0-experimental.25",
   "description": "Experimental lsfg-vk features for Lossless Scaling on Steam OS",
   "type": "module",
   "scripts": {
@@ -8,7 +8,7 @@
     "watch": "rollup -c -w",
     "package:local": "./scripts/package-local.sh",
     "package:publish": "./scripts/publish-package.sh",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "python3 -m unittest discover -s tests -p 'test_*.py'"
   },
   "repository": {
     "type": "git",
@@ -51,18 +51,18 @@
   "remote_binary_bundling": true,
   "remote_binary": [
     {
-      "name": "lsfg-vk-2.0.0-dev28-experimental.24-linux.tar.xz",
-      "version": "2.0.0-dev28-experimental.24",
+      "name": "lsfg-vk-2.0.0-dev28-experimental.25-linux.tar.xz",
+      "version": "2.0.0-dev28-experimental.25",
       "lineage_version": "2.0.0-dev28",
       "source_repository": "https://github.com/eugeniosegala/lsfg-vk-experimental",
-      "release_tag": "v2.0.0-dev28-experimental.24",
-      "source_commit": "865b34b2f596c545cabfd0810f905c18194bf6b4",
-      "url": "https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.24/lsfg-vk-2.0.0-dev28-experimental.24-linux.tar.xz",
-      "sha256hash": "09add7d1a14f7a6928cec65fc2aa711bf83c101639825409b9e80d7120d05ee4",
+      "release_tag": "v2.0.0-dev28-experimental.25",
+      "source_commit": "4777cb2115760fd0936f91f535becb6d17d0c329",
+      "url": "https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.25/lsfg-vk-2.0.0-dev28-experimental.25-linux.tar.xz",
+      "sha256hash": "859aa47000bc4e6c5aef4cb2fa35950d288d466488dc13b82473215976f43c14",
       "flatpak_bundle": {
-        "name": "lsfg-vk-2.0.0-dev28-experimental.24-flatpaks.tar.xz",
-        "url": "https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.24/lsfg-vk-2.0.0-dev28-experimental.24-flatpaks.tar.xz",
-        "sha256hash": "726325151f0645c687b78d013165785bcb3a9c2587a58aa4accdbf1857753727"
+        "name": "lsfg-vk-2.0.0-dev28-experimental.25-flatpaks.tar.xz",
+        "url": "https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.25/lsfg-vk-2.0.0-dev28-experimental.25-flatpaks.tar.xz",
+        "sha256hash": "e2d7b432a8f29a4c241543fe9e8d0c14f7ad333396197a46e5cc55fc850a135b"
       }
     }
   ]

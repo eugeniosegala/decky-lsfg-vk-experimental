@@ -22,6 +22,7 @@
 | 🖼️ | **Improved full-quality image** | In testing, v2 with **Performance Mode disabled** can show noticeably less ghosting than the older layer. Results remain game-dependent; Performance Mode is still useful when lower GPU overhead matters more than image quality.                                                                    |
 | 🎯 | **Adaptive Frame Generation**   | Optionally target 30–240 FPS while the layer varies generated frames up to a selected 2x–4x ceiling. It is disabled by default while it continues to be refined.                                                                                                                                      |
 | 🛡️ | **Gamescope recovery**          | Bounded presentation recovery preserves proven Adaptive state, ignores transient Steam-menu cadence, refreshes history, and resumes only after the game cadence is stable again. A validated 2x Adaptive setup also recovers from short gameplay hitches without entering the longer menu/focus path. |
+| 🌈 | **Automatic HDR colour path**   | Preserves Gamescope WSI discovery and lets the engine process SteamOS HDR10/PQ and linear scRGB swapchains in the model's linear HDR space—without a plugin HDR switch. |
 | ⏯️ | **Live frame-generation switch** | Turn frame generation on or off immediately without changing the selected Fixed or Adaptive settings. Turn it back on to resume with the same profile.                                                                                                                                                |
 | 🎮 | **Per-game Heroic support**     | Use the experimental layer only for the Heroic games you choose, with the same private configuration and engine as native Steam games.                                                                                                                                                                |
 
@@ -77,8 +78,9 @@ The Steam launch wrapper cannot enter a Flatpak sandbox, so configure Heroic thr
    Leave **Arguments** empty. Do not use `%command%` in Heroic.
 4. Start that game normally from Heroic or its Steam shortcut.
 
-The wrapper applies only to the selected Heroic games. It uses the isolated experimental Flatpak layer, so those games
-cannot discover vkBasalt, Gamescope WSI, MangoHud, or other globally installed implicit Vulkan layers.
+The wrapper applies only to the selected Heroic games. It puts the isolated experimental Flatpak layer first, while
+preserving the runtime's normal implicit-layer discovery. This is required for Gamescope WSI and HDR. If the public
+LSFG-VK layer is also visible, Vulkan keeps the first same-named layer, so the private experimental payload wins.
 
 > [!IMPORTANT]
 > After installing a newer experimental plugin ZIP, return to **Flatpak Setup** and select **Update** for Heroic's

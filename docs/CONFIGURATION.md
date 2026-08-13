@@ -58,8 +58,8 @@ The following settings are profile-based and support that automatic match:
 The `Lossless.dll` path and FP16 permission are shared globally because they apply to the installed engine, not to an
 individual game.
 
-Decky also keeps the launcher compatibility options per profile—Disable LSFG-VK on Next Launch, Base FPS Cap, WoW64,
-Steam Deck Mode, and Zink. They are saved in this plugin's private profile state and
+Decky also keeps the launcher compatibility options per profile—Disable LSFG-VK on Next Launch, Hide HDR from Game
+(Restart), Base FPS Cap, WoW64, Steam Deck Mode, and Zink. They are saved in this plugin's private profile state and
 are restored when you select that profile in Decky. They cannot follow **Active In** automatically: those variables must
 be set by the wrapper before lsfg-vk sees the game's process name. Select the profile manually before launching a game
 that needs one of those compatibility options, then restart the game after changing profiles.
@@ -83,10 +83,18 @@ that needs one of those compatibility options, then restart the game after chang
 - **Steam Deck Mode:** A per-game compatibility path.
 - **Zink:** Optional Vulkan-based OpenGL path for OpenGL games.
 
-Gamescope WSI and MangoHud controls are deliberately not shown in this isolated plugin. Its wrapper replaces the
-normal implicit-layer search path with a private one so the experimental layer cannot load alongside the public layer.
-That same isolation means globally installed WSI and MangoHud layers cannot be discovered for that game, so exposing
-their controls would be misleading.
+Gamescope WSI and MangoHud controls are deliberately not shown. The wrapper adds the private experimental manifest
+ahead of the normal implicit-layer search path. Vulkan therefore discovers Gamescope WSI when SteamOS enables it, while
+the first same-named LSFG-VK manifest remains the private experimental one. Existing caller-supplied layer paths are
+preserved.
 
-The plugin writes `pacing = 'none'` and does not expose general HDR or dual-GPU controls. See
+HDR is automatic rather than a configuration switch. With SteamOS HDR enabled, the engine recognizes the standard
+Gamescope HDR10/PQ and linear-scRGB swapchain combinations. HDR10 is converted to linear scRGB around frame generation;
+unsupported HDR transfer functions and HDR frame-generation initialization failures remain on real-frame passthrough
+instead of producing incorrect colours or failing the game swapchain. A game must still implement HDR and may require
+its own in-game HDR setting. For a rare startup problem caused by HDR exposure, use the selected profile's **Hide HDR
+from Game (Restart)** workaround to boot in SDR and change the game's HDR setting. It remains active for that profile
+until you turn it off. Use **Disable LSFG-VK on Next Launch** when the layer itself is the suspected cause. The plugin
+writes `pacing = 'none'` and does not expose a
+dual-GPU control. See
 [Troubleshooting](TROUBLESHOOTING.md) and the release notes for build-specific compatibility guidance.

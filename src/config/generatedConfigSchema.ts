@@ -22,6 +22,7 @@ export const PACING = "pacing" as const;
 export const ACTIVE_IN = "active_in" as const;
 export const GPU = "gpu" as const;
 export const DISABLE_LSFGVK = "disable_lsfgvk" as const;
+export const DISABLE_HDR_EXPOSURE = "disable_hdr_exposure" as const;
 export const DXVK_FRAME_RATE = "dxvk_frame_rate" as const;
 export const ENABLE_WOW64 = "enable_wow64" as const;
 export const DISABLE_STEAMDECK_MODE = "disable_steamdeck_mode" as const;
@@ -121,6 +122,12 @@ export const CONFIG_SCHEMA: Record<string, ConfigField> = {
     default: false,
     description: "disable lsfg-vk on the next launch (requires a game restart)"
   },
+  disable_hdr_exposure: {
+    name: "disable_hdr_exposure",
+    fieldType: ConfigFieldType.BOOLEAN,
+    default: false,
+    description: "hide Gamescope HDR formats for startup recovery until disabled"
+  },
   dxvk_frame_rate: {
     name: "dxvk_frame_rate",
     fieldType: ConfigFieldType.INTEGER,
@@ -163,6 +170,7 @@ export interface ConfigurationData {
   active_in: string;
   gpu: string;
   disable_lsfgvk: boolean;
+  disable_hdr_exposure: boolean;
   dxvk_frame_rate: number;
   enable_wow64: boolean;
   disable_steamdeck_mode: boolean;
@@ -190,6 +198,7 @@ export function getDefaults(): ConfigurationData {
     active_in: "",
     gpu: "",
     disable_lsfgvk: false,
+    disable_hdr_exposure: false,
     dxvk_frame_rate: 0,
     enable_wow64: false,
     disable_steamdeck_mode: false,
@@ -213,6 +222,7 @@ export function getFieldTypes(): Record<string, ConfigFieldType> {
     active_in: ConfigFieldType.STRING,
     gpu: ConfigFieldType.STRING,
     disable_lsfgvk: ConfigFieldType.BOOLEAN,
+    disable_hdr_exposure: ConfigFieldType.BOOLEAN,
     dxvk_frame_rate: ConfigFieldType.INTEGER,
     enable_wow64: ConfigFieldType.BOOLEAN,
     disable_steamdeck_mode: ConfigFieldType.BOOLEAN,

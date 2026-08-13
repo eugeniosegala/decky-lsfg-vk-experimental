@@ -151,6 +151,9 @@ trap cleanup EXIT
 echo "Generating configuration bindings..."
 python3 "$project_dir/scripts/generate_ts_schema.py"
 
+echo "Testing launch-wrapper environment..."
+npm --prefix "$project_dir" test
+
 echo "Building frontend..."
 npm --prefix "$project_dir" run build
 

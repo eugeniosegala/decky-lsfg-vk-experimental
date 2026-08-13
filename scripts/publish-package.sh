@@ -97,8 +97,8 @@ read -r archive_name engine_version package_version github_repository has_flatpa
   ' "$project_dir/package.json"
 )
 
-notes_package_version="0.13.0-experimental.24"
-notes_engine_version="2.0.0-dev28-experimental.24"
+notes_package_version="0.13.0-experimental.25"
+notes_engine_version="2.0.0-dev28-experimental.25"
 if [[ "$package_version" != "$notes_package_version" || "$engine_version" != "$notes_engine_version" ]]; then
   echo "Release notes still describe plugin $notes_package_version with engine $notes_engine_version. Update them before publishing." >&2
   exit 1
@@ -146,12 +146,14 @@ printf '%s\n' \
   '' \
   '## What’s new since experimental.21' \
   '' \
-  '- **Engine update:** Bundles checksum-verified `lsfg-vk 2.0.0-dev28-experimental.24`. Complete the required in-plugin engine-update step after installing the ZIP.' \
+  '- **Engine update:** Bundles checksum-verified `lsfg-vk 2.0.0-dev28-experimental.25`. Complete the required in-plugin engine-update step after installing the ZIP.' \
   '- **Stronger Adaptive recovery:** After a Steam-menu or focus interruption, Adaptive preserves the recovered real-frame baseline while restoring the previous generation level. If that level causes a sustained throughput collapse, it confirms the result with one second of real-only frames and returns to the lower proven level.' \
   '- **Safer generated-image recovery:** A single generated-image acquisition recovery now stays in place and refreshes three history frames. Only a repeated recovery within 15 seconds may request guarded swapchain recreation, with a five-second cross-context cooldown.' \
   '- **Maximum multiplier protection:** Smooth Cadence restoration, rescue, and recovery respect the selected Maximum Adaptive Multiplier.' \
   '- **Live configuration:** Frame Generation, Adaptive Target, Maximum Adaptive Multiplier, Smooth Cadence, Flow Scale, and Performance Mode apply without a restart. Switching between Fixed and Adaptive, or increasing a Fixed multiplier beyond the capacity used when the game created its swapchain, requires a game restart.' \
   '- **Live Frame Generation control:** Turn synthesis off or on immediately without changing the selected Fixed or Adaptive settings.' \
+  '- **Automatic HDR colour path:** Preserves Gamescope WSI discovery and supports SteamOS HDR10/PQ and linear scRGB frame generation without a plugin toggle. HDR10 is converted through linear scRGB around the model; unsupported HDR transfer functions use safe real-frame passthrough.' \
+  '- **Rare HDR startup recovery:** A per-profile **Hide HDR from Game (Restart)** workaround restores legacy isolated Vulkan discovery so a title that cannot start when HDR is advertised can boot in SDR.' \
   '' \
   'See the [Configuration guide](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/blob/main/docs/CONFIGURATION.md) and [Troubleshooting guide](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/blob/main/docs/TROUBLESHOOTING.md) for the full behaviour and per-game controls.' \
   '' \
@@ -193,9 +195,9 @@ printf '%s\n' \
   '' \
   "## Known limitations of lsfg-vk $engine_version" \
   '' \
-  '- **HDR:** HDR remains problematic with this payload. Disable HDR in the game before playing; it can remain enabled in SteamOS. The plugin has no general HDR control, and the v1 HDR toggle was also non-functional.' \
+  '- **HDR scope:** SteamOS HDR10/PQ and linear scRGB are supported automatically. A game must still provide its own HDR renderer, and unsupported transfer functions such as HLG or Dolby Vision use real-frame passthrough.' \
   '' \
-  '- **Isolation trade-offs:** The public and experimental plugins can coexist, but a game launched with the experimental wrapper cannot use vkBasalt or other globally installed Vulkan layers, such as overlay or post-processing layers. This affects only that game. If it needs those layers, switch its launch option back to the public plugin’s `~/lsfg %command%` wrapper.' \
+  '- **Layer coexistence:** The wrapper adds the private experimental manifest before normal implicit-layer discovery so Gamescope WSI remains available. If the public LSFG-VK manifest is also installed, Vulkan keeps the first same-named layer and the private experimental payload wins. Other enabled implicit layers may now be discoverable for that game.' \
   '' \
   '## Before you play' \
   '' \

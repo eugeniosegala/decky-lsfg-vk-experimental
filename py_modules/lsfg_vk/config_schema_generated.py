@@ -27,6 +27,7 @@ PACING = "pacing"
 ACTIVE_IN = "active_in"
 GPU = "gpu"
 DISABLE_LSFGVK = "disable_lsfgvk"
+DISABLE_HDR_EXPOSURE = "disable_hdr_exposure"
 DXVK_FRAME_RATE = "dxvk_frame_rate"
 ENABLE_WOW64 = "enable_wow64"
 DISABLE_STEAMDECK_MODE = "disable_steamdeck_mode"
@@ -49,6 +50,7 @@ class ConfigurationData(TypedDict):
     active_in: str
     gpu: str
     disable_lsfgvk: bool
+    disable_hdr_exposure: bool
     dxvk_frame_rate: int
     enable_wow64: bool
     disable_steamdeck_mode: bool
@@ -72,6 +74,8 @@ def get_script_parsing_logic():
                 # Auto-generated parsing logic:
                 if key == "DISABLE_LSFGVK":
                         script_values["disable_lsfgvk"] = value == "1"
+                if key == "LSFGVK_DISABLE_HDR_EXPOSURE":
+                        script_values["disable_hdr_exposure"] = value == "1"
                 if key == "DXVK_FRAME_RATE":
                         try:
                             script_values["dxvk_frame_rate"] = int(value)
@@ -98,6 +102,8 @@ def get_script_generation_logic():
         lines = []
         if config.get("disable_lsfgvk", False):
             lines.append("export DISABLE_LSFGVK=1")
+        if config.get("disable_hdr_exposure", False):
+            lines.append("export LSFGVK_DISABLE_HDR_EXPOSURE=1")
         dxvk_frame_rate = config.get("dxvk_frame_rate", 0)
         if dxvk_frame_rate > 0:
             lines.append(f"export DXVK_FRAME_RATE={dxvk_frame_rate}")
@@ -113,4 +119,4 @@ def get_script_generation_logic():
     return generate_script_lines
 
 
-ALL_FIELDS = ['dll', 'allow_fp16', 'frame_generation_enabled', 'multiplier', 'adaptive', 'target_fps', 'adaptive_max_multiplier', 'adaptive_stable_cadence', 'flow_scale', 'performance_mode', 'pacing', 'active_in', 'gpu', 'disable_lsfgvk', 'dxvk_frame_rate', 'enable_wow64', 'disable_steamdeck_mode', 'enable_zink']
+ALL_FIELDS = ['dll', 'allow_fp16', 'frame_generation_enabled', 'multiplier', 'adaptive', 'target_fps', 'adaptive_max_multiplier', 'adaptive_stable_cadence', 'flow_scale', 'performance_mode', 'pacing', 'active_in', 'gpu', 'disable_lsfgvk', 'disable_hdr_exposure', 'dxvk_frame_rate', 'enable_wow64', 'disable_steamdeck_mode', 'enable_zink']

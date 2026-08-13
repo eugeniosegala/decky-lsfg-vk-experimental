@@ -1,5 +1,34 @@
 # Troubleshooting
 
+## HDR
+
+There is no normal plugin HDR enable/disable switch. Enable HDR in SteamOS, then enable HDR in the game if it offers its
+own setting. The experimental wrapper preserves Gamescope WSI discovery so compatible games can expose their HDR modes.
+The engine diagnoses the swapchain format and colour space and supports the standard SteamOS HDR10/PQ and linear-scRGB
+paths.
+
+HDR10 frame generation is decoded from BT.2020/PQ into linear scRGB for the model, then encoded back to BT.2020/PQ for
+presentation. Unsupported HDR encodings, including HLG and Dolby Vision, use the game's real frames rather than
+synthesizing frames with incorrect colours. This does not make HDR available in a game that has no HDR renderer, and a
+non-SteamOS compositor or GPU-driver HDR problem remains outside the plugin's colour pipeline.
+
+For a quick engine check, start the game from Steam and inspect its log for a line like:
+
+```text
+lsfg-vk: swapchain colour pipeline: format=64; color-space=1000104008; mode=hdr10-pq; frame-generation=supported
+```
+
+`mode=scrgb-linear` is also supported. `frame-generation=passthrough` includes a reason on the following line and is a
+safe compatibility result, not washed-out generated output.
+
+The plugin does not force HDR on. If the game chooses an HDR format that LSFG has not validated, or LSFG cannot create
+the HDR frame-generation resources on that GPU, the engine keeps the game's native swapchain and presents real frames.
+If a game still fails before reaching its menu, select its Decky profile, enable **Hide HDR from Game (Restart)**,
+and restart it. That emergency compatibility path uses the wrapper's previous isolated Vulkan discovery, preventing
+Gamescope WSI from advertising HDR so the game can boot in SDR. Disable HDR in the game's settings, clear the Decky
+workaround, and test LSFG again. **Disable LSFG-VK on Next Launch** remains available if the LSFG layer itself is the
+problem. A separate everyday HDR switch is intentionally avoided.
+
 ## Steam menu / Gamescope recovery
 
 The experimental wrapper enables a 50 ms bound when Gamescope does not release an extra generated-frame image. Rather

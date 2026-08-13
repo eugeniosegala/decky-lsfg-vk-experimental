@@ -72,7 +72,7 @@ export function UsageInstructions() {
             marginTop: "4px"
           }}
         >
-          {t('USAGE_ISOLATION_NOTE', 'Isolation bypasses other global implicit Vulkan layers for this game, such as vkBasalt. Use only one LSFG-VK wrapper per game.')}
+          {t('USAGE_ISOLATION_NOTE', 'The experimental layer stays private while normal implicit Vulkan layers, including Gamescope WSI, remain discoverable. Use only one LSFG-VK wrapper per game.')}
         </div>
       </PanelSectionRow>
     </>

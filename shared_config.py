@@ -131,6 +131,14 @@ CONFIG_SCHEMA_DEF = {
         "location": "script"
     },
 
+    "disable_hdr_exposure": {
+        "name": "disable_hdr_exposure",
+        "fieldType": ConfigFieldType.BOOLEAN,
+        "default": False,
+        "description": "hide Gamescope HDR formats for startup recovery until disabled",
+        "location": "script"
+    },
+
     # Unsupported controls are intentionally omitted from the current schema.
     
     "dxvk_frame_rate": {

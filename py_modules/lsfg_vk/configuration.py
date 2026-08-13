@@ -27,11 +27,12 @@ from .types import ConfigurationResponse, ProfilesResponse, ProfileResponse
 class ConfigurationService(BaseService):
     """Service for managing TOML-based lsfg configuration"""
 
-    _WRAPPER_FORMAT_MARKER = "# decky-lsfg-vk-experimental-wrapper-format: 10"
+    _WRAPPER_FORMAT_MARKER = "# decky-lsfg-vk-experimental-wrapper-format: 12"
     _WRAPPER_PROFILE_SETTINGS_VERSION = 1
     _REQUIRED_WRAPPER_EXPORTS = (
         "export LSFGVK_PRESENT_ACQUIRE_TIMEOUT_MS=",
         "export LSFGVK_PRESENT_RECOVERY_RECREATE=",
+        "export VK_ADD_IMPLICIT_LAYER_PATH=",
         "lsfgvk_diagnostics_default=",
     )
 
@@ -264,12 +265,11 @@ class ConfigurationService(BaseService):
             return self._error_response(ConfigurationResponse, str(e), config=None)
 
     def remove_legacy_vkbasalt_exports(self) -> bool:
-        """Remove obsolete vkBasalt exports from an existing isolated launcher.
+        """Remove obsolete plugin-managed vkBasalt exports.
 
-        The isolated launcher overrides Vulkan implicit-layer discovery, so it
-        cannot load a globally installed vkBasalt layer. Older plugin versions
-        nevertheless wrote these exports; remove them during upgrade rather
-        than leaving no-op settings in a user's launcher.
+        Layer discovery is now preserved, so a separately configured vkBasalt
+        installation can work normally. Older plugin versions managed these
+        variables directly; remove those stale exports during migration.
         """
         if not self.lsfg_script_path.exists():
             return False
@@ -369,9 +369,19 @@ class ConfigurationService(BaseService):
             f'export LSFGVK_PRESENT_ACQUIRE_TIMEOUT_MS="${{LSFGVK_PRESENT_ACQUIRE_TIMEOUT_MS:-{PRESENT_ACQUIRE_TIMEOUT_MS}}}"',
             f'export LSFGVK_PRESENT_RECOVERY_RECREATE="${{LSFGVK_PRESENT_RECOVERY_RECREATE:-{PRESENT_RECOVERY_RECREATE}}}"',
             f"if [ -d {shlex.quote(FLATPAK_IMPLICIT_LAYER_DIR)} ]; then",
-            f"    export VK_IMPLICIT_LAYER_PATH={shlex.quote(FLATPAK_IMPLICIT_LAYER_DIR)}",
+            f"    lsfgvk_implicit_layer_dir={shlex.quote(FLATPAK_IMPLICIT_LAYER_DIR)}",
             "else",
-            f"    export VK_IMPLICIT_LAYER_PATH={shlex.quote(str(self.local_share_dir))}",
+            f"    lsfgvk_implicit_layer_dir={shlex.quote(str(self.local_share_dir))}",
+            "fi",
+            'if [ "${LSFGVK_DISABLE_HDR_EXPOSURE:-0}" != "0" ]; then',
+            '    export VK_IMPLICIT_LAYER_PATH="$lsfgvk_implicit_layer_dir"',
+            '    unset VK_ADD_IMPLICIT_LAYER_PATH',
+            'elif [ -n "${VK_IMPLICIT_LAYER_PATH:-}" ]; then',
+            '    export VK_IMPLICIT_LAYER_PATH="$lsfgvk_implicit_layer_dir:$VK_IMPLICIT_LAYER_PATH"',
+            'elif [ -n "${VK_ADD_IMPLICIT_LAYER_PATH:-}" ]; then',
+            '    export VK_ADD_IMPLICIT_LAYER_PATH="$lsfgvk_implicit_layer_dir:$VK_ADD_IMPLICIT_LAYER_PATH"',
+            "else",
+            '    export VK_ADD_IMPLICIT_LAYER_PATH="$lsfgvk_implicit_layer_dir"',
             "fi",
             f"export LSFGVK_CONFIG={shlex.quote(str(self.config_file_path))}",
             "# Heroic can discard a game's stderr. Capture opt-in engine diagnostics here instead.",
@@ -387,9 +397,13 @@ class ConfigurationService(BaseService):
     def migrate_launch_script_if_needed(self) -> bool:
         """Upgrade an installed generated wrapper without touching user data.
 
-        Wrapper format 10 removes the obsolete Gamescope WSI and MangoHud
-        exports, which cannot work through the isolated Vulkan-layer path. It
-        retains format 9's automatic Active In matching, selected-profile
+        Wrapper format 12 adds an opt-in legacy-isolation recovery path for
+        games that cannot start when Gamescope advertises HDR. Format 11 added
+        the private experimental manifest ahead of the
+        normal implicit-layer search path instead of replacing that path. This
+        keeps the experimental layer isolated from the same-named public layer
+        while preserving Gamescope WSI discovery for HDR-capable games. It
+        retains format 10's automatic Active In matching, selected-profile
         compatibility settings, plugin-private diagnostics log, Adaptive
         game-owned swapchain recreation behaviour, explicit caller overrides,
         validated 50 ms acquisition timeout, and experimental Flatpak manifest
@@ -417,7 +431,7 @@ class ConfigurationService(BaseService):
             if not result["success"]:
                 raise OSError(result.get("error") or "could not refresh launch wrapper")
 
-            self.log.info("Upgraded installed lsfg-vk experimental launch wrapper to format 10")
+            self.log.info("Upgraded installed lsfg-vk experimental launch wrapper to format 12")
             return True
         except OSError:
             raise
