@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+# Filter one lsfg-vk test run into a focused, shareable diagnostic trace.
+set -euo pipefail
+
+default_plugin_log="${HOME}/.config/decky-lsfg-vk-experimental/present-diagnostics.log"
+default_steam_log="${HOME}/.steam/steam/logs/console-linux.txt"
+log_path="${LSFGVK_PRESENT_DIAGNOSTICS_LOG:-}"
+line_count=800
+presets=()
+
+usage() {
+  cat <<'EOF'
+Usage: lsfg-vk-experimental-diagnostics [options] [PRESET ...]
+
+Filters the current lsfg-vk diagnostics log. Multiple presets may be combined.
+The plugin-private log is preferred; Steam's console log is used when the
+private log does not exist.
+
+Presets:
+  hdr          HDR/scRGB selection, passthrough, and initialization
+  adaptive     Adaptive policy, stabilization, ramp, rescue, and cadence
+  recovery     generated-image fallback, history warm-up, and recreation
+  performance  slow presentation, copy, scheduling, and submission operations
+  lifecycle    swapchain creation/destruction and colour-pipeline selection
+  startup      layer discovery, context creation, HDR selection, and failures
+  layers       Vulkan-loader, Gamescope WSI, and LSFG layer discovery
+  errors       failures, timeouts, fallbacks, passthrough, and Vulkan errors
+  all          every relevant LSFG, Vulkan-loader, and Gamescope WSI line
+               (alias: everything)
+
+Options:
+  --log PATH   Read PATH instead of automatically selecting a log
+  --lines N    Return at most the last N matching lines (default: 800)
+  --list       List presets
+  -h, --help   Show this help
+
+Examples:
+  lsfg-vk-experimental-diagnostics hdr
+  lsfg-vk-experimental-diagnostics adaptive recovery
+  lsfg-vk-experimental-diagnostics --lines 2000 all > lsfg-report.txt
+EOF
+}
+
+list_presets() {
+  printf '%s\n' hdr adaptive recovery performance lifecycle startup layers errors all
+}
+
+while (($#)); do
+  case "$1" in
+    --log)
+      if (($# < 2)); then
+        echo "--log requires a path" >&2
+        exit 2
+      fi
+      log_path="$2"
+      shift 2
+      ;;
+    --lines)
+      if (($# < 2)); then
+        echo "--lines requires a positive integer" >&2
+        exit 2
+      fi
+      line_count="$2"
+      shift 2
+      ;;
+    --list)
+      list_presets
+      exit 0
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --*)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+    *)
+      presets+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [[ ! "$line_count" =~ ^[1-9][0-9]*$ ]]; then
+  echo "--lines must be a positive integer" >&2
+  exit 2
+fi
+
+if ((${#presets[@]} == 0)); then
+  presets=(all)
+fi
+
+if [[ -z "$log_path" ]]; then
+  if [[ -f "$default_plugin_log" ]]; then
+    log_path="$default_plugin_log"
+  else
+    log_path="$default_steam_log"
+  fi
+fi
+
+if [[ ! -f "$log_path" ]]; then
+  echo "Diagnostics log not found: $log_path" >&2
+  echo "Enable LSFGVK_PRESENT_DIAGNOSTICS=1, reproduce the issue, and quit the game first." >&2
+  exit 1
+fi
+
+pattern=""
+add_pattern() {
+  if [[ -n "$pattern" ]]; then
+    pattern+="|"
+  fi
+  pattern+="($1)"
+}
+
+for preset in "${presets[@]}"; do
+  case "$preset" in
+    hdr)
+      add_pattern 'lsfg-vk: (swapchain colour pipeline|frame generation disabled for this swapchain|frame generation is off for this swapchain|LSFG frame-generation initialization failed)'
+      ;;
+    adaptive)
+      add_pattern 'lsfg-vk: present diagnostics: operation=adaptive-'
+      ;;
+    recovery)
+      add_pattern 'lsfg-vk: present diagnostics: operation=(skip-generated-frames|resume-generated-frames|generated-image-recovered|history-warmup|request-swapchain-recreation|swapchain-recreation-suppressed)'
+      ;;
+    performance)
+      add_pattern 'lsfg-vk: present diagnostics: operation=(present-|schedule-|submit-|acquire-|wait-|copy-|render-)'
+      ;;
+    lifecycle)
+      add_pattern 'lsfg-vk: present diagnostics: operation=swapchain-context-(create|destroy)'
+      add_pattern 'lsfg-vk: (swapchain colour pipeline|frame generation disabled for this swapchain|frame generation is off for this swapchain|LSFG frame-generation initialization failed)'
+      ;;
+    startup)
+      add_pattern '(VK_LAYER_LSFGVK_frame_generation|VkLayer_LSFGVK_frame_generation|Gamescope WSI|Vulkan Loader|<Loader>|<Device>)'
+      add_pattern 'lsfg-vk: present diagnostics: operation=swapchain-context-create'
+      add_pattern 'lsfg-vk: (swapchain colour pipeline|frame generation disabled for this swapchain|frame generation is off for this swapchain|LSFG frame-generation initialization failed)'
+      ;;
+    layers)
+      add_pattern '(VK_LAYER_LSFGVK_frame_generation|VkLayer_LSFGVK_frame_generation|Gamescope WSI|Vulkan Loader|<Loader>|<Device>)'
+      ;;
+    errors)
+      add_pattern 'lsfg-vk:.*(failed|failure|error|timeout|fallback|passthrough|disabled|VK_ERROR|VK_TIMEOUT|VK_NOT_READY|device lost)'
+      add_pattern '(Vulkan Loader|Gamescope WSI).*(ERROR|Error|error|WARNING|Warning|warning)'
+      ;;
+    all|everything)
+      add_pattern '(lsfg-vk:|VK_LAYER_LSFGVK_frame_generation|VkLayer_LSFGVK_frame_generation|Gamescope WSI|Vulkan Loader|<Loader>|<Device>)'
+      ;;
+    *)
+      echo "Unknown preset: $preset" >&2
+      echo "Available presets:" >&2
+      list_presets >&2
+      exit 2
+      ;;
+  esac
+done
+
+echo "lsfg-vk diagnostics source: $log_path" >&2
+echo "presets: ${presets[*]}; last matching lines: $line_count" >&2
+
+{ grep -aE "$pattern" "$log_path" || true; } | tail -n "$line_count"

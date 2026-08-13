@@ -13,6 +13,7 @@ from typing import Dict, Any, Optional
 from .base_service import BaseService
 from .constants import (
     LIB_FILENAME, JSON_FILENAME, CLI_FILENAME, CLI_DIR, BIN_DIR,
+    DIAGNOSTICS_HELPER_FILENAME,
 )
 from .config_schema import ConfigurationManager
 from .types import InstallationResponse, UninstallationResponse, InstallationCheckResponse
@@ -52,6 +53,8 @@ class InstallationService(BaseService):
             self._create_config_file()
             
             self._create_lsfg_launch_script()
+
+            self._install_diagnostics_helper(plugin_dir)
 
             self._write_engine_state(archive_metadata)
             
@@ -252,6 +255,42 @@ class InstallationService(BaseService):
         # Write the script file
         self._write_file(self.lsfg_launch_script_path, script_content, 0o755)
         self.log.info(f"Created lsfg launch script at {self.lsfg_launch_script_path}")
+
+    def _install_diagnostics_helper(self, plugin_dir: Path) -> None:
+        """Install the packaged read-only diagnostic filter beside the wrapper."""
+        source = self._diagnostics_helper_source(plugin_dir)
+        self.diagnostics_script_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, self.diagnostics_script_path)
+        self.diagnostics_script_path.chmod(0o755)
+        self.log.info("Installed diagnostics helper to %s", self.diagnostics_script_path)
+
+    @staticmethod
+    def _diagnostics_helper_source(plugin_dir: Path) -> Path:
+        """Resolve the release-ZIP helper, with a source-tree development fallback."""
+        candidates = (
+            plugin_dir / BIN_DIR / DIAGNOSTICS_HELPER_FILENAME,
+            plugin_dir / "scripts" / DIAGNOSTICS_HELPER_FILENAME,
+        )
+        for candidate in candidates:
+            if candidate.is_file():
+                return candidate
+        raise OSError(f"Bundled diagnostics helper not found at {candidates[0]}")
+
+    def migrate_diagnostics_helper_if_needed(self) -> bool:
+        """Install or refresh the helper without requiring an engine reinstall."""
+        plugin_dir = Path(__file__).parent.parent.parent
+        source = self._diagnostics_helper_source(plugin_dir)
+        try:
+            current = self.diagnostics_script_path.read_bytes()
+            bundled = source.read_bytes()
+            executable = bool(self.diagnostics_script_path.stat().st_mode & 0o111)
+            if current == bundled and executable:
+                return False
+        except OSError:
+            pass
+
+        self._install_diagnostics_helper(plugin_dir)
+        return True
     
     def get_launch_script_path(self) -> str:
         """Get the path to the lsfg launch script
@@ -328,7 +367,7 @@ class InstallationService(BaseService):
         try:
             removed_files = []
             # Remove core lsfg-vk files, but preserve config file to maintain user's custom profiles
-            files_to_remove = [self.lib_file, self.json_file, self.cli_file, self.engine_state_file, self.lsfg_launch_script_path]
+            files_to_remove = [self.lib_file, self.json_file, self.cli_file, self.engine_state_file, self.lsfg_launch_script_path, self.diagnostics_script_path]
             
             for file_path in files_to_remove:
                 if self._remove_if_exists(file_path):
@@ -369,10 +408,11 @@ class InstallationService(BaseService):
             self.log.info(f"  CLI file: {self.cli_file}")
             self.log.info(f"  Launch script: {self.lsfg_launch_script_path}")
             self.log.info(f"  Launch script: {self.lsfg_script_path}")
+            self.log.info(f"  Diagnostics helper: {self.diagnostics_script_path}")
             
             removed_files = []
             # Remove core lsfg-vk files, but preserve config file to maintain user's custom profiles
-            files_to_remove = [self.lib_file, self.json_file, self.cli_file, self.engine_state_file, self.lsfg_launch_script_path, self.lsfg_script_path]
+            files_to_remove = [self.lib_file, self.json_file, self.cli_file, self.engine_state_file, self.lsfg_launch_script_path, self.lsfg_script_path, self.diagnostics_script_path]
             
             for file_path in files_to_remove:
                 try:

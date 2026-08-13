@@ -158,6 +158,9 @@ echo "Building frontend..."
 npm --prefix "$project_dir" run build
 
 mkdir -p "$package_dir/bin" "$package_dir/dist" "$package_dir/py_modules"
+cp "$project_dir/scripts/lsfg-vk-experimental-diagnostics" \
+  "$package_dir/bin/lsfg-vk-experimental-diagnostics"
+chmod 0755 "$package_dir/bin/lsfg-vk-experimental-diagnostics"
 if [[ -n "$engine_archive_path" ]]; then
   echo "Using local lsfg-vk $archive_version payload..."
   cp "$engine_archive_path" "$package_dir/bin/$archive_name"

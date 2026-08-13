@@ -14,6 +14,7 @@ from .constants import (
     LOCAL_LIB,
     VULKAN_LAYER_DIR,
     SCRIPT_NAME,
+    DIAGNOSTICS_SCRIPT_NAME,
     CONFIG_DIR,
     CONFIG_FILENAME,
     WRAPPER_PROFILE_SETTINGS_FILENAME,
@@ -41,6 +42,7 @@ class BaseService:
         self.local_share_dir = self.user_home / VULKAN_LAYER_DIR
         self.lsfg_script_path = self.user_home / SCRIPT_NAME
         self.lsfg_launch_script_path = self.user_home / SCRIPT_NAME
+        self.diagnostics_script_path = self.user_home / DIAGNOSTICS_SCRIPT_NAME
         self.config_dir = self.user_home / CONFIG_DIR
         self.config_file_path = self.config_dir / CONFIG_FILENAME
         self.wrapper_profile_settings_path = self.config_dir / WRAPPER_PROFILE_SETTINGS_FILENAME

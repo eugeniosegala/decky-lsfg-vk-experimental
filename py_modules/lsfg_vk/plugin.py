@@ -435,6 +435,12 @@ class Plugin:
         except OSError as error:
             decky.logger.warning("Could not upgrade experimental launch wrapper: %s", error)
 
+        try:
+            if self.installation_service.migrate_diagnostics_helper_if_needed():
+                decky.logger.info("Installed the experimental diagnostics helper")
+        except OSError as error:
+            decky.logger.warning("Could not install the diagnostics helper: %s", error)
+
     async def _unload(self):
         """
         Cleanup tasks when the plugin is unloaded.

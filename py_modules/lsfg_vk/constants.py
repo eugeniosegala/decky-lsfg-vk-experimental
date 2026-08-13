@@ -10,6 +10,8 @@ VULKAN_LAYER_DIR = f"{EXPERIMENTAL_ROOT}/vulkan/implicit_layer.d"
 CONFIG_DIR = ".config/decky-lsfg-vk-experimental"
 
 SCRIPT_NAME = ".local/bin/lsfg-vk-experimental"
+DIAGNOSTICS_SCRIPT_NAME = ".local/bin/lsfg-vk-experimental-diagnostics"
+DIAGNOSTICS_HELPER_FILENAME = "lsfg-vk-experimental-diagnostics"
 
 # Avoid persistent Gamescope presentation stalls by giving the generated-image
 # acquisition path a bounded first wait. During backoff, the engine probes

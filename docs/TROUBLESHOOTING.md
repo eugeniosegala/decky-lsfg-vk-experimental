@@ -96,7 +96,51 @@ Do not put `%command%` or either variable in Heroic's Wrapper or Arguments field
 Reproduce the issue, quit the game, then run this in Desktop Mode:
 
 ```bash
-grep -aE 'lsfg-vk: present diagnostics: operation=(adaptive-plan|adaptive-discontinuity|adaptive-stabilization|adaptive-gameplay-hitch|adaptive-fast-cadence-burst|adaptive-stable-cadence|adaptive-ramp|adaptive-recovery-resume-scheduled|adaptive-load-shed|adaptive-rescue|adaptive-bridge|adaptive-probe-aborted|adaptive-rearm|skip-generated-frames|generated-image-recovered|request-swapchain-recreation|swapchain-recreation-suppressed|swapchain-context-create|swapchain-context-destroy)' ~/.config/decky-lsfg-vk-experimental/present-diagnostics.log | tail -n 800
+~/.local/bin/lsfg-vk-experimental-diagnostics all
+```
+
+The plugin installs that read-only helper beside its launch wrapper and refreshes it automatically when the plugin is
+loaded. It selects the plugin-private log first and falls back to Steam's console log if necessary. Choose one or more
+presets to produce a smaller report:
+
+```bash
+# Was HDR10/PQ or linear scRGB selected? Did HDR initialize or use passthrough?
+~/.local/bin/lsfg-vk-experimental-diagnostics hdr
+
+# Target selection, stabilization, cadence, ramp, load shedding, bridge and rescue.
+~/.local/bin/lsfg-vk-experimental-diagnostics adaptive
+
+# Generated-image timeout, real-frame fallback, history warm-up and recreation.
+~/.local/bin/lsfg-vk-experimental-diagnostics recovery
+
+# Slow acquire, fence, scheduling, copy, submission and presentation operations.
+~/.local/bin/lsfg-vk-experimental-diagnostics performance
+
+# Vulkan layer discovery, Gamescope WSI, swapchain context and colour selection.
+~/.local/bin/lsfg-vk-experimental-diagnostics startup
+
+# Failures, timeouts, fallbacks, passthrough and Vulkan errors.
+~/.local/bin/lsfg-vk-experimental-diagnostics errors
+
+# Combine related views without collecting unrelated Adaptive policy traffic.
+~/.local/bin/lsfg-vk-experimental-diagnostics hdr recovery errors
+
+# Every relevant LSFG, Vulkan-loader, and Gamescope WSI line from the run.
+~/.local/bin/lsfg-vk-experimental-diagnostics --lines 2000 all > ~/lsfg-report.txt
+```
+
+Run `~/.local/bin/lsfg-vk-experimental-diagnostics --help` for the complete preset list. Use `--log PATH` to inspect a
+specific saved log and `--lines N` to change the output limit. Presets only filter an existing log; they do not enable
+diagnostics or change the game configuration.
+
+If the helper is unavailable, these raw commands provide the two most common reports:
+
+```bash
+# HDR selection and safe fallback.
+grep -aE 'lsfg-vk: (swapchain colour pipeline|frame generation disabled|LSFG frame-generation initialization failed)' ~/.config/decky-lsfg-vk-experimental/present-diagnostics.log | tail -n 100
+
+# Adaptive policy and Gamescope recovery.
+grep -aE 'lsfg-vk: present diagnostics: operation=(adaptive-|skip-generated-frames|resume-generated-frames|generated-image-recovered|history-warmup|request-swapchain-recreation|swapchain-recreation-suppressed|swapchain-context-create|swapchain-context-destroy)' ~/.config/decky-lsfg-vk-experimental/present-diagnostics.log | tail -n 800
 ```
 
 Remove the temporary Steam launch variables or Heroic environment rows afterwards: diagnostics can generate substantial
