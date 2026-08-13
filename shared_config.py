@@ -131,6 +131,8 @@ CONFIG_SCHEMA_DEF = {
         "location": "script"
     },
 
+    # Emergency launcher recovery, not an engine HDR toggle. This restores
+    # private-only Vulkan discovery before the game enumerates HDR formats.
     "disable_hdr_exposure": {
         "name": "disable_hdr_exposure",
         "fieldType": ConfigFieldType.BOOLEAN,

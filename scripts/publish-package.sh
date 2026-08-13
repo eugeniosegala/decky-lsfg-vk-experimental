@@ -147,13 +147,14 @@ printf '%s\n' \
   '## What’s new since experimental.21' \
   '' \
   '- **Engine update:** Bundles checksum-verified `lsfg-vk 2.0.0-dev28-experimental.25`. Complete the required in-plugin engine-update step after installing the ZIP.' \
+  '- **Automatic HDR colour path:** Preserves Gamescope WSI discovery and supports SteamOS HDR10/PQ and linear scRGB frame generation without a plugin toggle. HDR10 is converted through linear scRGB around the model; unsupported HDR transfer functions use safe real-frame passthrough.' \
+  '- **64-bit and 32-bit Vulkan support:** Installs architecture-matched host and Flatpak layers. Vulkan selects the correct layer for each game process, so genuine 32-bit Vulkan games no longer need the old WoW64 option.' \
+  '- **Rare HDR startup recovery:** A per-profile **Hide HDR from Game (Restart)** workaround restores legacy isolated Vulkan discovery so a title that cannot start when HDR is advertised can boot in SDR.' \
   '- **Stronger Adaptive recovery:** After a Steam-menu or focus interruption, Adaptive preserves the recovered real-frame baseline while restoring the previous generation level. If that level causes a sustained throughput collapse, it confirms the result with one second of real-only frames and returns to the lower proven level.' \
   '- **Safer generated-image recovery:** A single generated-image acquisition recovery now stays in place and refreshes three history frames. Only a repeated recovery within 15 seconds may request guarded swapchain recreation, with a five-second cross-context cooldown.' \
   '- **Maximum multiplier protection:** Smooth Cadence restoration, rescue, and recovery respect the selected Maximum Adaptive Multiplier.' \
   '- **Live configuration:** Frame Generation, Adaptive Target, Maximum Adaptive Multiplier, Smooth Cadence, Flow Scale, and Performance Mode apply without a restart. Switching between Fixed and Adaptive, or increasing a Fixed multiplier beyond the capacity used when the game created its swapchain, requires a game restart.' \
   '- **Live Frame Generation control:** Turn synthesis off or on immediately without changing the selected Fixed or Adaptive settings.' \
-  '- **Automatic HDR colour path:** Preserves Gamescope WSI discovery and supports SteamOS HDR10/PQ and linear scRGB frame generation without a plugin toggle. HDR10 is converted through linear scRGB around the model; unsupported HDR transfer functions use safe real-frame passthrough.' \
-  '- **Rare HDR startup recovery:** A per-profile **Hide HDR from Game (Restart)** workaround restores legacy isolated Vulkan discovery so a title that cannot start when HDR is advertised can boot in SDR.' \
   '' \
   'See the [Configuration guide](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/blob/main/docs/CONFIGURATION.md) and [Troubleshooting guide](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/blob/main/docs/TROUBLESHOOTING.md) for the full behaviour and per-game controls.' \
   '' \

@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 from types import SimpleNamespace
 import unittest
 
@@ -88,6 +89,32 @@ class WrapperEnvironmentTests(unittest.TestCase):
         self.assertNotIn("enable_wow64", ALL_FIELDS)
         lines = get_script_generation_logic()({"enable_wow64": True})
         self.assertNotIn("export PROTON_USE_WOW64=1", lines)
+
+    def test_obsolete_wow64_profile_setting_is_discarded(self):
+        settings = self.service._normalize_wrapper_settings({
+            "enable_wow64": True,
+            "disable_hdr_exposure": True,
+        })
+        self.assertNotIn("enable_wow64", settings)
+        self.assertTrue(settings["disable_hdr_exposure"])
+
+    def test_current_marker_with_obsolete_wow64_export_is_regenerated(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self.service.lsfg_script_path = Path(temp_dir) / "wrapper"
+            self.service.lsfg_script_path.write_text(
+                "\n".join([
+                    self.service._WRAPPER_FORMAT_MARKER,
+                    *self.service._REQUIRED_WRAPPER_EXPORTS,
+                    "export PROTON_USE_WOW64=1",
+                ]),
+                encoding="utf-8",
+            )
+            self.service._get_profile_data = lambda: {}
+            self.service.update_lsfg_script_from_profile_data = (
+                lambda _profile_data: {"success": True}
+            )
+
+            self.assertTrue(self.service.migrate_launch_script_if_needed())
 
 
 if __name__ == "__main__":

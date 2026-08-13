@@ -35,6 +35,9 @@ class ConfigurationService(BaseService):
         "export VK_ADD_IMPLICIT_LAYER_PATH=",
         "lsfgvk_diagnostics_default=",
     )
+    _OBSOLETE_WRAPPER_EXPORTS = (
+        "PROTON_USE_WOW64",
+    )
 
     @staticmethod
     def _wrapper_settings_defaults() -> Dict[str, Any]:
@@ -423,6 +426,10 @@ class ConfigurationService(BaseService):
                 and all(
                     export in current_content
                     for export in self._REQUIRED_WRAPPER_EXPORTS
+                )
+                and not any(
+                    export in current_content
+                    for export in self._OBSOLETE_WRAPPER_EXPORTS
                 )
             )
             if wrapper_is_current:
