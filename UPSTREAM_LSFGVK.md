@@ -11,22 +11,23 @@ Update both in the same commit.
 | Release repository          | [`eugeniosegala/lsfg-vk-experimental`](https://github.com/eugeniosegala/lsfg-vk-experimental)                                                         |
 | Tracked branch              | `develop`                                                                                                                                             |
 | Last checked                | 2026-08-13                                                                                                                                            |
-| Integrated source commit    | `4777cb2115760fd0936f91f535becb6d17d0c329`                                                                                                            |
-| Commit date and subject     | 2026-08-13 — `feat: add automatic HDR color pipeline`                                                                                                |
-| Experimental prerelease tag | `v2.0.0-dev28-experimental.25` (reserved candidate tag; not published)                                                                                |
-| Release state               | Local HDR candidate only; neither engine nor Decky branch has been pushed or released                                                                |
+| Integrated source commit    | `4672521a8c762536c066331687e74fac07b597ed`                                                                                                            |
+| Commit date and subject     | 2026-08-13 — `fix: stabilize live configuration recovery`                                                                                            |
+| Experimental prerelease tag | `local-only-4672521-stability`                                                                                                                        |
+| Release state               | Local stability test candidate only; neither this engine checkpoint nor the Decky pin has been pushed or released                                    |
 | Upstream lineage            | [`PancakeTAS/lsfg-vk`](https://github.com/PancakeTAS/lsfg-vk) `2.0.0-dev28`                                                                           |
-| Release asset               | `lsfg-vk-2.0.0-dev28-experimental.25-linux.tar.xz` (local)                                                                                            |
-| Asset SHA-256               | `859aa47000bc4e6c5aef4cb2fa35950d288d466488dc13b82473215976f43c14`                                                                                    |
-| Asset URL                   | Reserved `.25` release URL; does not exist until the engine candidate is published                                                                   |
-| Flatpak archive             | `lsfg-vk-2.0.0-dev28-experimental.25-flatpaks.tar.xz` (local)                                                                                         |
-| Flatpak SHA-256             | `e2d7b432a8f29a4c241543fe9e8d0c14f7ad333396197a46e5cc55fc850a135b`                                                                                    |
+| Release asset               | `lsfg-vk-2.0.0-dev28-experimental.25-local-stability-linux.tar.xz` (embedded under the canonical `.25` name)                                          |
+| Asset SHA-256               | `0da91b54df1ace51c91352a4fc6a76168c2f3650a101342840b0a49520b670d5`                                                                                    |
+| Asset URL                   | `local-only://lsfg-vk-2.0.0-dev28-experimental.25-linux.tar.xz`; the archive must be supplied explicitly to the local packager                        |
+| Flatpak archive             | `lsfg-vk-2.0.0-dev28-experimental.25-local-stability-flatpaks.tar.xz` (local)                                                                         |
+| Flatpak SHA-256             | `ff9fdf2ec299f92570f139770f37b4f9ffb51926b170950c3f9f242cd122a7ce`                                                                                    |
 | Decky plugin version        | `0.13.0-experimental.25` (local candidate; not published)                                                                                             |
 | Decky plugin package ID     | `decky-lsfg-vk-experimental`                                                                                                                          |
 
-This integration is pinned to a committed local source checkpoint and locally built artifacts. The URLs and tags in
-`package.json` reserve the eventual release names but are not evidence of publication. Do not run the publishing script
-until SteamOS HDR testing passes, the Flatpak checksum is recorded, and the user explicitly authorizes publication.
+This integration is pinned to a committed local source checkpoint and locally built artifacts. The `local-only://`
+URLs require explicit archive paths during packaging, and the publishing script rejects this pin as an additional
+safety guard. Replace the local pin with a distinct published engine release only after SteamOS testing passes and the
+user explicitly authorizes publication.
 
 ## Integrated Flatpak support
 
@@ -198,6 +199,14 @@ Separately, the first isolated generated-image acquisition recovery stays in pla
 only a repeated recovery inside 15 seconds may request the existing guarded game-swapchain recreation. The five-second
 cross-context recreation cooldown remains intact. These changes are confined to Adaptive recovery policy and leave the
 known-good rendering, submission, shader, interpolation-timing, allocation, and Fixed 2x/3x/4x paths unchanged.
+
+The local `4672521` stability checkpoint builds on `.25` without adding a user-facing switch. Live CPU-policy edits are
+applied to the existing context, while structural changes are deferred to a safe replacement instead of destroying a
+context inside `vkQueuePresentKHR`. Context work and retirement waits are bounded, timed-out contexts are kept alive
+until their GPU work completes, and ordinary cleanup no longer performs a global device-idle wait. A timed-out backend
+temporarily presents native frames, probes completion without blocking subsequent presents, warms three temporal-history
+frames, and resumes generation automatically. Deterministic tests cover configuration classification, bounded recovery,
+and temporal frame-index continuity; native and all three Flatpak payloads were rebuilt from this exact commit.
 
 ### Flatpak payload hotfix
 
