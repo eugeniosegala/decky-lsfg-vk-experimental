@@ -12,7 +12,7 @@ from typing import Dict, Any, Optional
 
 from .base_service import BaseService
 from .constants import (
-    LIB_FILENAME, JSON_FILENAME, CLI_FILENAME, CLI_DIR, BIN_DIR,
+    LIB_FILENAME, JSON_FILENAME, JSON32_FILENAME, CLI_FILENAME, CLI_DIR, BIN_DIR,
     DIAGNOSTICS_HELPER_FILENAME,
 )
 from .config_schema import ConfigurationManager
@@ -26,7 +26,9 @@ class InstallationService(BaseService):
         super().__init__(logger)
         
         self.lib_file = self.local_lib_dir / LIB_FILENAME
+        self.lib32_file = self.local_lib32_dir / LIB_FILENAME
         self.json_file = self.local_share_dir / JSON_FILENAME
+        self.json32_file = self.local_share_dir / JSON32_FILENAME
         self.cli_file = self.user_home / CLI_DIR / CLI_FILENAME
         self.engine_state_file = self.local_lib_dir.parent / "installed-engine.json"
     
@@ -124,17 +126,21 @@ class InstallationService(BaseService):
             OSError: If file operations fail
         """
         destinations = {
-            LIB_FILENAME: self.local_lib_dir / LIB_FILENAME,
-            JSON_FILENAME: self.local_share_dir / JSON_FILENAME,
+            f"lib/{LIB_FILENAME}": self.lib_file,
+            f"lib32/{LIB_FILENAME}": self.lib32_file,
+            f"share/vulkan/implicit_layer.d/{JSON_FILENAME}": self.json_file,
+            f"share/vulkan/implicit_layer.d/{JSON32_FILENAME}": self.json32_file,
         }
         with tarfile.open(archive_path, "r:xz") as archive:
             with tempfile.TemporaryDirectory() as temp_dir:
                 temp_path = Path(temp_dir)
+                staged_files = {}
                 for member in archive.getmembers():
                     if not member.isfile():
                         continue
-                    filename = Path(member.name).name
-                    destination = destinations.get(filename)
+                    member_path = member.name.removeprefix("./")
+                    filename = Path(member_path).name
+                    destination = destinations.get(member_path)
                     if filename == CLI_FILENAME:
                         destination = self.cli_file
                     if destination is None:
@@ -142,47 +148,64 @@ class InstallationService(BaseService):
                     source = archive.extractfile(member)
                     if source is None:
                         continue
-                    temp_file = temp_path / filename
+                    # Use a generated staging name rather than the archive path;
+                    # this also keeps the two same-named architecture libraries
+                    # separate without trusting member path traversal.
+                    temp_file = temp_path / f"{len(staged_files)}-{filename}"
                     with source, temp_file.open("wb") as output:
                         shutil.copyfileobj(source, output)
+                    staged_files[destination] = (temp_file, filename)
+
+                missing = [
+                    str(path) for path in destinations.values()
+                    if path not in staged_files
+                ]
+                if missing:
+                    raise OSError(
+                        "Archive did not contain required lsfg-vk files: "
+                        + ", ".join(missing)
+                    )
+
+                for destination, (temp_file, filename) in staged_files.items():
                     destination.parent.mkdir(parents=True, exist_ok=True)
                     if filename == JSON_FILENAME:
-                        self._copy_and_fix_json_file(temp_file, destination)
+                        self._copy_and_fix_json_file(
+                            temp_file, destination, "../../lib/liblsfg-vk-layer.so", "64"
+                        )
+                    elif filename == JSON32_FILENAME:
+                        self._copy_and_fix_json_file(
+                            temp_file, destination, "../../lib32/liblsfg-vk-layer.so", "32"
+                        )
                     else:
                         shutil.copy2(temp_file, destination)
                         if filename == CLI_FILENAME:
                             destination.chmod(0o755)
                     self.log.info("Installed %s to %s", filename, destination)
-
-        missing = [str(path) for path in destinations.values() if not path.exists()]
-        if missing:
-            raise OSError("Archive did not contain required lsfg-vk files: " + ", ".join(missing))
     
-    def _copy_and_fix_json_file(self, src_file: Path, dst_file: Path) -> None:
-        """Copy JSON file and fix the library_path to use relative path
+    def _copy_and_fix_json_file(
+            self, src_file: Path, dst_file: Path,
+            library_path: str, library_arch: str) -> None:
+        """Copy a JSON manifest and point it at the private architecture path.
         
         Args:
             src_file: Source JSON file path
             dst_file: Destination JSON file path
         """
         try:
-            # Read the JSON file
-            with open(src_file, 'r') as f:
-                json_data = json.load(f)
-            
-            # The private manifest lives at <plugin-root>/vulkan/implicit_layer.d,
-            # so the bundled library is two levels up at <plugin-root>/lib.
-            if 'layer' in json_data and 'library_path' in json_data['layer']:
-                json_data['layer']['library_path'] = "../../lib/liblsfg-vk-layer.so"
-            
-            # Write the modified JSON file
-            with open(dst_file, 'w') as f:
-                json.dump(json_data, f, indent=2)
-                
-        except (json.JSONDecodeError, KeyError, OSError) as e:
-            self.log.error(f"Error fixing JSON file {src_file}: {e}")
-            # Fallback to simple copy if JSON modification fails
-            shutil.copy2(src_file, dst_file)
+            with src_file.open("r", encoding="utf-8") as source:
+                json_data = json.load(source)
+            layer = json_data.get("layer")
+            if not isinstance(layer, dict) or not isinstance(layer.get("library_path"), str):
+                raise ValueError("missing layer.library_path")
+
+            # Both manifests live at <plugin-root>/vulkan/implicit_layer.d.
+            layer["library_path"] = library_path
+            layer["library_arch"] = library_arch
+            with dst_file.open("w", encoding="utf-8") as output:
+                json.dump(json_data, output, indent=2)
+                output.write("\n")
+        except (json.JSONDecodeError, OSError, TypeError, ValueError) as error:
+            raise OSError(f"Invalid Vulkan layer manifest {src_file}: {error}") from error
     
     def _create_config_file(self) -> None:
         """Create or update this plugin's private TOML config with detected DLL path.
@@ -308,9 +331,14 @@ class InstallationService(BaseService):
         """
         try:
             lib_exists = self.lib_file.exists()
+            lib32_exists = self.lib32_file.exists()
             json_exists = self.json_file.exists()
+            json32_exists = self.json32_file.exists()
             script_exists = self.lsfg_launch_script_path.exists()
-            installed = lib_exists and json_exists and script_exists
+            installed = (
+                lib_exists and lib32_exists and json_exists and json32_exists
+                and script_exists
+            )
             expected = self._bundled_archive_metadata(Path(__file__).parent.parent.parent)
             state = self._read_engine_state()
             version_known = state is not None
@@ -321,7 +349,10 @@ class InstallationService(BaseService):
                 or state["sha256hash"] != expected["sha256hash"]
             )
             
-            self.log.info(f"Installation check: lib={lib_exists}, json={json_exists}, script={script_exists}")
+            self.log.info(
+                "Installation check: lib64=%s, lib32=%s, json64=%s, json32=%s, script=%s",
+                lib_exists, lib32_exists, json_exists, json32_exists, script_exists,
+            )
             
             return {
                 "installed": installed,
@@ -367,7 +398,11 @@ class InstallationService(BaseService):
         try:
             removed_files = []
             # Remove core lsfg-vk files, but preserve config file to maintain user's custom profiles
-            files_to_remove = [self.lib_file, self.json_file, self.cli_file, self.engine_state_file, self.lsfg_launch_script_path, self.diagnostics_script_path]
+            files_to_remove = [
+                self.lib_file, self.lib32_file, self.json_file, self.json32_file,
+                self.cli_file, self.engine_state_file, self.lsfg_launch_script_path,
+                self.diagnostics_script_path,
+            ]
             
             for file_path in files_to_remove:
                 if self._remove_if_exists(file_path):
@@ -402,8 +437,10 @@ class InstallationService(BaseService):
         """
         try:
             self.log.info("Checking for lsfg-vk files to clean up:")
-            self.log.info(f"  Library file: {self.lib_file}")
-            self.log.info(f"  JSON file: {self.json_file}")
+            self.log.info(f"  64-bit library file: {self.lib_file}")
+            self.log.info(f"  32-bit library file: {self.lib32_file}")
+            self.log.info(f"  64-bit JSON file: {self.json_file}")
+            self.log.info(f"  32-bit JSON file: {self.json32_file}")
             self.log.info(f"  Config file: {self.config_file_path} (preserved)")
             self.log.info(f"  CLI file: {self.cli_file}")
             self.log.info(f"  Launch script: {self.lsfg_launch_script_path}")
@@ -412,7 +449,11 @@ class InstallationService(BaseService):
             
             removed_files = []
             # Remove core lsfg-vk files, but preserve config file to maintain user's custom profiles
-            files_to_remove = [self.lib_file, self.json_file, self.cli_file, self.engine_state_file, self.lsfg_launch_script_path, self.lsfg_script_path, self.diagnostics_script_path]
+            files_to_remove = [
+                self.lib_file, self.lib32_file, self.json_file, self.json32_file,
+                self.cli_file, self.engine_state_file, self.lsfg_launch_script_path,
+                self.lsfg_script_path, self.diagnostics_script_path,
+            ]
             
             for file_path in files_to_remove:
                 try:

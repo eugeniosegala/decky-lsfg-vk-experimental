@@ -11,8 +11,6 @@
   "CONFIG_BASE_FPS_CAP_DESC": "Base framerate cap for DirectX games, before frame multiplier. (Requires game restart to apply)",
   "CONFIG_PERFORMANCE_MODE": "Performance Mode",
   "CONFIG_PERFORMANCE_MODE_DESC": "Uses a lighter FG model to reduce GPU overhead, at the cost of more visual artifacts.",
-  "CONFIG_ENABLE_WOW64": "Enable WOW64 for 32-bit games",
-  "CONFIG_ENABLE_WOW64_DESC": "Enables PROTON_USE_WOW64=1 for 32-bit games (Use with ProtonGE to fix crashing)",
   "CONFIG_DISABLE_STEAMDECK_MODE": "Disable Steam Deck Mode",
   "CONFIG_DISABLE_STEAMDECK_MODE_DESC": "Disables Steam Deck mode (Unlocks hidden settings in some games)",
   "CONFIG_ENABLE_ZINK": "Enable Zink for OpenGL Games",

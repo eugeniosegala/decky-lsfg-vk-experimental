@@ -244,15 +244,6 @@ export function ConfigurationSection({
 
           <PanelSectionRow>
             <ToggleField
-              label={t("CONFIG_ENABLE_WOW64", "Enable WOW64 for 32-bit games")}
-              description={t("CONFIG_ENABLE_WOW64_DESC", "Enables PROTON_USE_WOW64=1 for 32-bit games (Use with ProtonGE to fix crashing)")}
-              checked={config.enable_wow64}
-              onChange={(value) => onConfigChange('enable_wow64', value)}
-            />
-          </PanelSectionRow>
-
-          <PanelSectionRow>
-            <ToggleField
               label={t("CONFIG_DISABLE_STEAMDECK_MODE", "Disable Steam Deck Mode")}
               description={t("CONFIG_DISABLE_STEAMDECK_MODE_DESC", "Disables Steam Deck mode (Unlocks hidden settings in some games)")}
               checked={config.disable_steamdeck_mode}

@@ -11,8 +11,6 @@
   "CONFIG_BASE_FPS_CAP_DESC": "フレーム倍率適用前のDirectXゲームの基本フレームレート上限。（ゲームの再起動が必要）",
   "CONFIG_PERFORMANCE_MODE": "パフォーマンスモード",
   "CONFIG_PERFORMANCE_MODE_DESC": "軽量なフレーム生成モデルで GPU 負荷を下げますが、視覚的なアーティファクトが増える場合があります。",
-  "CONFIG_ENABLE_WOW64": "32ビットゲーム用WOW64を有効化",
-  "CONFIG_ENABLE_WOW64_DESC": "32ビットゲームにPROTON_USE_WOW64=1を有効化します（ProtonGEと併用してクラッシュを修正）",
   "CONFIG_DISABLE_STEAMDECK_MODE": "Steam Deckモードを無効化",
   "CONFIG_DISABLE_STEAMDECK_MODE_DESC": "Steam Deckモードを無効化します（一部ゲームの隠し設定を解放）",
   "CONFIG_ENABLE_ZINK": "OpenGLゲーム用Zinkを有効化",

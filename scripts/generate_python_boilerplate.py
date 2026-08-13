@@ -32,7 +32,6 @@ def get_env_var_name(field_name: str) -> str:
     env_map = {
         "dxvk_frame_rate": "DXVK_FRAME_RATE",
         "disable_hdr_exposure": "LSFGVK_DISABLE_HDR_EXPOSURE",
-        "enable_wow64": "PROTON_USE_WOW64", 
         "disable_steamdeck_mode": "SteamDeck",
         "enable_zink": "ZINK_ENABLE"
     }

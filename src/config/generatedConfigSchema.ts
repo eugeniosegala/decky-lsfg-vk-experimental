@@ -24,7 +24,6 @@ export const GPU = "gpu" as const;
 export const DISABLE_LSFGVK = "disable_lsfgvk" as const;
 export const DISABLE_HDR_EXPOSURE = "disable_hdr_exposure" as const;
 export const DXVK_FRAME_RATE = "dxvk_frame_rate" as const;
-export const ENABLE_WOW64 = "enable_wow64" as const;
 export const DISABLE_STEAMDECK_MODE = "disable_steamdeck_mode" as const;
 export const ENABLE_ZINK = "enable_zink" as const;
 
@@ -134,12 +133,6 @@ export const CONFIG_SCHEMA: Record<string, ConfigField> = {
     default: 0,
     description: "base framerate cap for DirectX games before frame multiplier"
   },
-  enable_wow64: {
-    name: "enable_wow64",
-    fieldType: ConfigFieldType.BOOLEAN,
-    default: false,
-    description: "enable PROTON_USE_WOW64=1 for 32-bit games (use with ProtonGE to fix crashing)"
-  },
   disable_steamdeck_mode: {
     name: "disable_steamdeck_mode",
     fieldType: ConfigFieldType.BOOLEAN,
@@ -172,7 +165,6 @@ export interface ConfigurationData {
   disable_lsfgvk: boolean;
   disable_hdr_exposure: boolean;
   dxvk_frame_rate: number;
-  enable_wow64: boolean;
   disable_steamdeck_mode: boolean;
   enable_zink: boolean;
 }
@@ -200,7 +192,6 @@ export function getDefaults(): ConfigurationData {
     disable_lsfgvk: false,
     disable_hdr_exposure: false,
     dxvk_frame_rate: 0,
-    enable_wow64: false,
     disable_steamdeck_mode: false,
     enable_zink: false,
   };
@@ -224,7 +215,6 @@ export function getFieldTypes(): Record<string, ConfigFieldType> {
     disable_lsfgvk: ConfigFieldType.BOOLEAN,
     disable_hdr_exposure: ConfigFieldType.BOOLEAN,
     dxvk_frame_rate: ConfigFieldType.INTEGER,
-    enable_wow64: ConfigFieldType.BOOLEAN,
     disable_steamdeck_mode: ConfigFieldType.BOOLEAN,
     enable_zink: ConfigFieldType.BOOLEAN,
   };

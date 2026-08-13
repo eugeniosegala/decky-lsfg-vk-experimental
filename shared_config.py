@@ -149,14 +149,6 @@ CONFIG_SCHEMA_DEF = {
         "location": "script"
     },
     
-    "enable_wow64": {
-        "name": "enable_wow64",
-        "fieldType": ConfigFieldType.BOOLEAN,
-        "default": False,
-        "description": "enable PROTON_USE_WOW64=1 for 32-bit games (use with ProtonGE to fix crashing)",
-        "location": "script"
-    },
-    
     "disable_steamdeck_mode": {
         "name": "disable_steamdeck_mode",
         "fieldType": ConfigFieldType.BOOLEAN,

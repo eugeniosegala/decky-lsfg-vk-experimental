@@ -11,8 +11,6 @@
   "CONFIG_BASE_FPS_CAP_DESC": "프레임 배율 적용 전 DirectX 게임의 기본 프레임 상한. (게임 재시작 필요)",
   "CONFIG_PERFORMANCE_MODE": "성능 모드",
   "CONFIG_PERFORMANCE_MODE_DESC": "더 가벼운 프레임 생성 모델로 GPU 부하를 낮추지만 시각적 아티팩트가 늘어날 수 있습니다.",
-  "CONFIG_ENABLE_WOW64": "32비트 게임용 WOW64 활성화",
-  "CONFIG_ENABLE_WOW64_DESC": "32비트 게임에 PROTON_USE_WOW64=1을 활성화합니다 (크래시 수정을 위해 ProtonGE와 함께 사용)",
   "CONFIG_DISABLE_STEAMDECK_MODE": "Steam Deck 모드 비활성화",
   "CONFIG_DISABLE_STEAMDECK_MODE_DESC": "Steam Deck 모드를 비활성화합니다 (일부 게임의 숨겨진 설정 잠금 해제)",
   "CONFIG_ENABLE_ZINK": "OpenGL 게임에 Zink 활성화",

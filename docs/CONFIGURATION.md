@@ -59,7 +59,7 @@ The `Lossless.dll` path and FP16 permission are shared globally because they app
 individual game.
 
 Decky also keeps the launcher compatibility options per profile—Disable LSFG-VK on Next Launch, Hide HDR from Game
-(Restart), Base FPS Cap, WoW64, Steam Deck Mode, and Zink. They are saved in this plugin's private profile state and
+(Restart), Base FPS Cap, Steam Deck Mode, and Zink. They are saved in this plugin's private profile state and
 are restored when you select that profile in Decky. They cannot follow **Active In** automatically: those variables must
 be set by the wrapper before lsfg-vk sees the game's process name. Select the profile manually before launching a game
 that needs one of those compatibility options, then restart the game after changing profiles.
@@ -78,8 +78,11 @@ that needs one of those compatibility options, then restart the game after chang
 
 ## Compatibility options
 
+The bundled engine includes matching 64-bit and 32-bit Vulkan layers. The Vulkan loader selects the correct layer for
+the game's process, so native 32-bit Vulkan games do not require a WoW64 launcher option. The CLI and configuration UI
+remain 64-bit because they are not loaded into the game process.
+
 - **Base FPS Cap:** Optionally caps the base DirectX framerate before multiplication.
-- **WoW64:** Enables `PROTON_USE_WOW64=1` for compatible 32-bit games, primarily as a ProtonGE crash workaround.
 - **Steam Deck Mode:** A per-game compatibility path.
 - **Zink:** Optional Vulkan-based OpenGL path for OpenGL games.
 

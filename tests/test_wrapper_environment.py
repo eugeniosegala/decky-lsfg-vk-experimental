@@ -17,6 +17,7 @@ sys.modules.setdefault("decky", SimpleNamespace(logger=_Logger()))
 
 from py_modules.lsfg_vk.configuration import ConfigurationService  # noqa: E402
 from py_modules.lsfg_vk.config_schema_generated import (  # noqa: E402
+    ALL_FIELDS,
     get_script_generation_logic,
 )
 
@@ -82,6 +83,11 @@ class WrapperEnvironmentTests(unittest.TestCase):
     def test_hdr_recovery_profile_generates_wrapper_export(self):
         lines = get_script_generation_logic()({"disable_hdr_exposure": True})
         self.assertIn("export LSFGVK_DISABLE_HDR_EXPOSURE=1", lines)
+
+    def test_wrapper_never_exports_obsolete_wow64_workaround(self):
+        self.assertNotIn("enable_wow64", ALL_FIELDS)
+        lines = get_script_generation_logic()({"enable_wow64": True})
+        self.assertNotIn("export PROTON_USE_WOW64=1", lines)
 
 
 if __name__ == "__main__":

@@ -27,7 +27,7 @@ from .types import ConfigurationResponse, ProfilesResponse, ProfileResponse
 class ConfigurationService(BaseService):
     """Service for managing TOML-based lsfg configuration"""
 
-    _WRAPPER_FORMAT_MARKER = "# decky-lsfg-vk-experimental-wrapper-format: 12"
+    _WRAPPER_FORMAT_MARKER = "# decky-lsfg-vk-experimental-wrapper-format: 13"
     _WRAPPER_PROFILE_SETTINGS_VERSION = 1
     _REQUIRED_WRAPPER_EXPORTS = (
         "export LSFGVK_PRESENT_ACQUIRE_TIMEOUT_MS=",
@@ -397,7 +397,9 @@ class ConfigurationService(BaseService):
     def migrate_launch_script_if_needed(self) -> bool:
         """Upgrade an installed generated wrapper without touching user data.
 
-        Wrapper format 12 adds an opt-in legacy-isolation recovery path for
+        Wrapper format 13 removes the obsolete PROTON_USE_WOW64 export now
+        that the engine ships architecture-matched Vulkan layers. Format 12
+        added an opt-in legacy-isolation recovery path for
         games that cannot start when Gamescope advertises HDR. Format 11 added
         the private experimental manifest ahead of the
         normal implicit-layer search path instead of replacing that path. This
@@ -431,7 +433,7 @@ class ConfigurationService(BaseService):
             if not result["success"]:
                 raise OSError(result.get("error") or "could not refresh launch wrapper")
 
-            self.log.info("Upgraded installed lsfg-vk experimental launch wrapper to format 12")
+            self.log.info("Upgraded installed lsfg-vk experimental launch wrapper to format 13")
             return True
         except OSError:
             raise

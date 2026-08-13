@@ -29,7 +29,6 @@ GPU = "gpu"
 DISABLE_LSFGVK = "disable_lsfgvk"
 DISABLE_HDR_EXPOSURE = "disable_hdr_exposure"
 DXVK_FRAME_RATE = "dxvk_frame_rate"
-ENABLE_WOW64 = "enable_wow64"
 DISABLE_STEAMDECK_MODE = "disable_steamdeck_mode"
 ENABLE_ZINK = "enable_zink"
 
@@ -52,7 +51,6 @@ class ConfigurationData(TypedDict):
     disable_lsfgvk: bool
     disable_hdr_exposure: bool
     dxvk_frame_rate: int
-    enable_wow64: bool
     disable_steamdeck_mode: bool
     enable_zink: bool
 
@@ -81,8 +79,6 @@ def get_script_parsing_logic():
                             script_values["dxvk_frame_rate"] = int(value)
                         except ValueError:
                             pass
-                if key == "PROTON_USE_WOW64":
-                        script_values["enable_wow64"] = value == "1"
                 if key == "SteamDeck":
                         script_values["disable_steamdeck_mode"] = value == "0"
                 if key == "__GLX_VENDOR_LIBRARY_NAME" and value == "mesa":
@@ -107,8 +103,6 @@ def get_script_generation_logic():
         dxvk_frame_rate = config.get("dxvk_frame_rate", 0)
         if dxvk_frame_rate > 0:
             lines.append(f"export DXVK_FRAME_RATE={dxvk_frame_rate}")
-        if config.get("enable_wow64", False):
-            lines.append("export PROTON_USE_WOW64=1")
         if config.get("disable_steamdeck_mode", False):
             lines.append("export SteamDeck=0")
         if config.get("enable_zink", False):
@@ -119,4 +113,4 @@ def get_script_generation_logic():
     return generate_script_lines
 
 
-ALL_FIELDS = ['dll', 'allow_fp16', 'frame_generation_enabled', 'multiplier', 'adaptive', 'target_fps', 'adaptive_max_multiplier', 'adaptive_stable_cadence', 'flow_scale', 'performance_mode', 'pacing', 'active_in', 'gpu', 'disable_lsfgvk', 'disable_hdr_exposure', 'dxvk_frame_rate', 'enable_wow64', 'disable_steamdeck_mode', 'enable_zink']
+ALL_FIELDS = ['dll', 'allow_fp16', 'frame_generation_enabled', 'multiplier', 'adaptive', 'target_fps', 'adaptive_max_multiplier', 'adaptive_stable_cadence', 'flow_scale', 'performance_mode', 'pacing', 'active_in', 'gpu', 'disable_lsfgvk', 'disable_hdr_exposure', 'dxvk_frame_rate', 'disable_steamdeck_mode', 'enable_zink']

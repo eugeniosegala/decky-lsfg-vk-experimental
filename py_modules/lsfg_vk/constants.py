@@ -6,6 +6,7 @@ from pathlib import Path
 
 EXPERIMENTAL_ROOT = ".local/share/decky-lsfg-vk-experimental"
 LOCAL_LIB = f"{EXPERIMENTAL_ROOT}/lib"
+LOCAL_LIB32 = f"{EXPERIMENTAL_ROOT}/lib32"
 VULKAN_LAYER_DIR = f"{EXPERIMENTAL_ROOT}/vulkan/implicit_layer.d"
 CONFIG_DIR = ".config/decky-lsfg-vk-experimental"
 
@@ -30,6 +31,7 @@ WRAPPER_PROFILE_SETTINGS_FILENAME = "profile-wrapper-settings.json"
 # package.json remote_binary record so the release pin has one source of truth.
 LIB_FILENAME = "liblsfg-vk-layer.so"
 JSON_FILENAME = "VkLayer_LSFGVK_frame_generation.json"
+JSON32_FILENAME = "VkLayer_LSFGVK_frame_generation.x86.json"
 CLI_FILENAME = "lsfg-vk-cli"
 CLI_DIR = f"{EXPERIMENTAL_ROOT}/bin"
 

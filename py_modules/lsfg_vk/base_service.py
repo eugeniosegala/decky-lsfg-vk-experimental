@@ -12,6 +12,7 @@ import decky
 
 from .constants import (
     LOCAL_LIB,
+    LOCAL_LIB32,
     VULKAN_LAYER_DIR,
     SCRIPT_NAME,
     DIAGNOSTICS_SCRIPT_NAME,
@@ -39,6 +40,7 @@ class BaseService:
             
         self.user_home = Path.home()
         self.local_lib_dir = self.user_home / LOCAL_LIB
+        self.local_lib32_dir = self.user_home / LOCAL_LIB32
         self.local_share_dir = self.user_home / VULKAN_LAYER_DIR
         self.lsfg_script_path = self.user_home / SCRIPT_NAME
         self.lsfg_launch_script_path = self.user_home / SCRIPT_NAME
@@ -50,12 +52,14 @@ class BaseService:
     def _ensure_directories(self) -> None:
         """Create necessary directories if they don't exist"""
         self.local_lib_dir.mkdir(parents=True, exist_ok=True)
+        self.local_lib32_dir.mkdir(parents=True, exist_ok=True)
         self.local_share_dir.mkdir(parents=True, exist_ok=True)
         self.config_dir.mkdir(parents=True, exist_ok=True)
         self.lsfg_script_path.parent.mkdir(parents=True, exist_ok=True)
         self.log.info(
-            "Ensured isolated directories exist: %s, %s, %s, %s",
+            "Ensured isolated directories exist: %s, %s, %s, %s, %s",
             self.local_lib_dir,
+            self.local_lib32_dir,
             self.local_share_dir,
             self.config_dir,
             self.lsfg_script_path.parent,
