@@ -7,6 +7,11 @@ output_path=""
 output_path_set=false
 engine_archive_path=""
 flatpak_archive_path=""
+local_engine_repo=""
+local_engine_mode=false
+local_engine_commit=""
+local_engine_dirty=false
+local_engine_label=""
 
 usage() {
   cat <<'EOF'
@@ -18,6 +23,10 @@ tag, pushes commits, or changes GitHub.
 Options:
   --engine-archive PATH   Use a local engine archive instead of downloading it.
   --flatpak-archive PATH  Use a local Flatpak archive instead of downloading it.
+  --local-engine-repo PATH
+                          Build and bundle the engine checkout at PATH. Its
+                          commit and generated checksums are recorded only in
+                          the ZIP; tracked package.json is not changed.
   -h, --help              Show this help.
 EOF
 }
@@ -60,6 +69,15 @@ while (($#)); do
       shift 2
       continue
       ;;
+    --local-engine-repo)
+      if (($# < 2)); then
+        echo "--local-engine-repo requires a path" >&2
+        exit 2
+      fi
+      local_engine_repo="$2"
+      shift 2
+      continue
+      ;;
     --help|-h)
       usage
       exit 0
@@ -82,12 +100,11 @@ while (($#)); do
   shift
 done
 
-for local_archive in "$engine_archive_path" "$flatpak_archive_path"; do
-  if [[ -n "$local_archive" && ! -f "$local_archive" ]]; then
-    echo "Local archive not found: $local_archive" >&2
-    exit 1
-  fi
-done
+if [[ -n "$local_engine_repo" &&
+      ( -n "$engine_archive_path" || -n "$flatpak_archive_path" ) ]]; then
+  echo "--local-engine-repo cannot be combined with archive override options" >&2
+  exit 2
+fi
 
 for command in curl node npm python3 tar zip unzip; do
   if ! command -v "$command" >/dev/null 2>&1; then
@@ -130,8 +147,62 @@ read -r archive_name archive_version archive_url archive_checksum flatpak_archiv
   ' "$project_dir/package.json"
 )
 
+if [[ -n "$local_engine_repo" ]]; then
+  local_engine_mode=true
+  if ! command -v git >/dev/null 2>&1; then
+    echo "Local engine packaging requires command: git" >&2
+    exit 1
+  fi
+  if [[ ! -d "$local_engine_repo" ]]; then
+    echo "Local engine repository not found: $local_engine_repo" >&2
+    exit 1
+  fi
+  local_engine_repo="$(cd "$local_engine_repo" && pwd)"
+  for required_path in VERSION scripts/package-local.sh scripts/package-flatpaks.sh; do
+    if [[ ! -f "$local_engine_repo/$required_path" ]]; then
+      echo "Local engine repository is missing $required_path: $local_engine_repo" >&2
+      exit 1
+    fi
+  done
+
+  local_engine_version="$(tr -d '[:space:]' < "$local_engine_repo/VERSION")"
+  if [[ "$local_engine_version" != "$archive_version" ]]; then
+    echo "Local engine VERSION does not match Decky's configured engine line" >&2
+    echo "Decky:  $archive_version" >&2
+    echo "Engine: $local_engine_version" >&2
+    exit 1
+  fi
+  local_engine_commit="$(git -C "$local_engine_repo" rev-parse HEAD)"
+  local_engine_short_commit="${local_engine_commit:0:7}"
+  local_engine_label="$local_engine_short_commit"
+  if [[ -n "$(git -C "$local_engine_repo" status --porcelain --untracked-files=normal)" ]]; then
+    local_engine_dirty=true
+    local_engine_label="$local_engine_label.dirty"
+  fi
+
+  engine_archive_path="$local_engine_repo/out/lsfg-vk-$archive_version-local.$local_engine_label-linux.tar.xz"
+  flatpak_archive_path="$local_engine_repo/out/lsfg-vk-$archive_version-local.$local_engine_label-flatpaks.tar.xz"
+  archive_name="$(basename "$engine_archive_path")"
+  flatpak_archive_name="$(basename "$flatpak_archive_path")"
+
+  echo "Building local engine checkout $local_engine_label..."
+  "$local_engine_repo/scripts/package-local.sh" "$engine_archive_path"
+  "$local_engine_repo/scripts/package-flatpaks.sh" "$flatpak_archive_path"
+fi
+
+for local_archive in "$engine_archive_path" "$flatpak_archive_path"; do
+  if [[ -n "$local_archive" && ! -f "$local_archive" ]]; then
+    echo "Local archive not found: $local_archive" >&2
+    exit 1
+  fi
+done
+
 if [[ "$output_path_set" == false ]]; then
-  output_path="$project_dir/out/Decky.LSFG-VK.Experimental.zip"
+  if [[ "$local_engine_mode" == true ]]; then
+    output_path="$project_dir/out/Decky.LSFG-VK.Experimental-local.$local_engine_label.zip"
+  else
+    output_path="$project_dir/out/Decky.LSFG-VK.Experimental.zip"
+  fi
 fi
 
 case "$output_path" in
@@ -171,7 +242,9 @@ else
 fi
 
 actual_checksum="$(${checksum_command[@]} "$package_dir/bin/$archive_name" | awk '{print $1}')"
-if [[ "$actual_checksum" != "$archive_checksum" ]]; then
+if [[ "$local_engine_mode" == true ]]; then
+  archive_checksum="$actual_checksum"
+elif [[ "$actual_checksum" != "$archive_checksum" ]]; then
   echo "Checksum mismatch for $archive_name" >&2
   echo "Expected: $archive_checksum" >&2
   echo "Actual:   $actual_checksum" >&2
@@ -189,7 +262,9 @@ if [[ -n "$flatpak_archive_name" ]]; then
   fi
 
   actual_flatpak_checksum="$(${checksum_command[@]} "$package_dir/bin/$flatpak_archive_name" | awk '{print $1}')"
-  if [[ "$actual_flatpak_checksum" != "$flatpak_archive_checksum" ]]; then
+  if [[ "$local_engine_mode" == true ]]; then
+    flatpak_archive_checksum="$actual_flatpak_checksum"
+  elif [[ "$actual_flatpak_checksum" != "$flatpak_archive_checksum" ]]; then
     echo "Checksum mismatch for $flatpak_archive_name" >&2
     echo "Expected: $flatpak_archive_checksum" >&2
     echo "Actual:   $actual_flatpak_checksum" >&2
@@ -214,6 +289,34 @@ echo "Assembling Decky archive..."
 cp "$project_dir/LICENSE" "$project_dir/README.md" "$project_dir/main.py" \
   "$project_dir/package.json" "$project_dir/plugin.json" "$project_dir/shared_config.py" \
   "$package_dir/"
+if [[ "$local_engine_mode" == true ]]; then
+  node -e '
+    const fs = require("node:fs");
+    const manifestPath = process.argv[1];
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+    const [binary] = manifest.remote_binary ?? [];
+    if (!binary) throw new Error("package.json has no remote_binary entry");
+    const [archiveName, engineVersion, archiveChecksum, sourceCommit,
+      sourceDirty, flatpakName, flatpakChecksum] = process.argv.slice(2);
+    const shortCommit = sourceCommit.slice(0, 7);
+    const localLabel = `${shortCommit}${sourceDirty === "true" ? ".dirty" : ""}`;
+    binary.name = archiveName;
+    binary.version = `${engineVersion}-local.${localLabel}`;
+    binary.release_tag = `local-worktree-${localLabel}`;
+    binary.source_commit = sourceCommit;
+    binary.local_worktree_dirty = sourceDirty === "true";
+    binary.url = `local-worktree://${archiveName}`;
+    binary.sha256hash = archiveChecksum;
+    if (binary.flatpak_bundle) {
+      binary.flatpak_bundle.name = flatpakName;
+      binary.flatpak_bundle.url = `local-worktree://${flatpakName}`;
+      binary.flatpak_bundle.sha256hash = flatpakChecksum;
+    }
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+  ' "$package_dir/package.json" "$archive_name" "$archive_version" \
+    "$archive_checksum" "$local_engine_commit" "$local_engine_dirty" \
+    "$flatpak_archive_name" "$flatpak_archive_checksum"
+fi
 cp -R "$project_dir/dist/." "$package_dir/dist/"
 cp -R "$project_dir/py_modules/." "$package_dir/py_modules/"
 

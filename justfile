@@ -1,6 +1,7 @@
 default:
-    echo "Available recipes: local-package, publish-package, build, test, clean, generate-schema"
+    echo "Available recipes: local-package, local-engine-package, publish-package, build, test, clean, generate-schema"
     echo "  just local-package    Build the Decky ZIP locally"
+    echo "  just local-engine-package  Build engine + Decky ZIP from ../lsfg-vk"
     echo "  just publish-package  Build, tag, push, and publish the GitHub prerelease"
 
 generate-schema:
@@ -11,6 +12,9 @@ build:
 
 local-package:
     scripts/package-local.sh
+
+local-engine-package engine_repo="../lsfg-vk":
+    scripts/package-local.sh --local-engine-repo "{{engine_repo}}"
 
 publish-package:
     scripts/publish-package.sh

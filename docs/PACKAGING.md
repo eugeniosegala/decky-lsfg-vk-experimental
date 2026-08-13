@@ -29,6 +29,26 @@ pnpm run package:local -- \
   /path/to/Decky.LSFG-VK.Experimental-local-test.zip
 ```
 
+### Build directly from a local engine checkout
+
+For day-to-day development, build both engine payloads and the Decky ZIP in one command:
+
+```bash
+pnpm run package:local-engine
+```
+
+That command expects the engine checkout at `../lsfg-vk`. For another location, invoke the packager directly:
+
+```bash
+scripts/package-local.sh --local-engine-repo /path/to/lsfg-vk
+```
+
+The engine's native and Flatpak packaging scripts run first, including their tests and dual-architecture layout
+checks. Decky then embeds those artifacts and writes their source commit, dirty-worktree marker, and calculated
+checksums into the generated ZIP's copy of `package.json`. The tracked Decky `package.json` remains unchanged, so this
+development path cannot alter the release pin. The ZIP is named with the local engine commit and `.dirty` when
+applicable. It does not tag, push, or publish either repository.
+
 ## Publish a GitHub prerelease
 
 Commit the intended version and release changes on a clean branch, authenticate once with

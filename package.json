@@ -7,6 +7,7 @@
     "build": "node scripts/build-frontend.mjs",
     "watch": "rollup -c -w",
     "package:local": "./scripts/package-local.sh",
+    "package:local-engine": "./scripts/package-local.sh --local-engine-repo ../lsfg-vk",
     "package:publish": "./scripts/publish-package.sh",
     "test": "python3 -m unittest discover -s tests -p 'test_*.py'"
   },
