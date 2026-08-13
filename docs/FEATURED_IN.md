@@ -19,6 +19,12 @@ more SteamOS users discover and evaluate the project.
 - [FSR 4.1 + LSFG-VK 2.0 on Steam Deck - Together! Test + Installation Setup Guide](https://www.youtube.com/watch?v=NJjgoa3zplg)
   by [Deck Madness](https://www.youtube.com/@deck_madness): a test and setup guide for combining FSR 4.1 with
   LSFG-VK 2.0 on Steam Deck.
+- [LSFG 🦆 2.0 - Нарешті без артефактів! Нова генерація кадрів на SteamOS](https://www.youtube.com/watch?v=lcsPZ1jQDhg)
+  by [👾BiGDeck👾_UA](https://www.youtube.com/@BiGDeck_UA): Ukrainian-language coverage of LSFG 2.0 and its
+  improved frame-generation image quality on SteamOS.
+- [How to Install LOSSLESS SCALING 2.0 on STEAM DECK / STEAM MACHINE](https://www.youtube.com/watch?v=1rGKvyA98FI)
+  by [HolyDeck](https://www.youtube.com/@HolySteamDeck): an installation guide for Lossless Scaling 2.0 on Steam Deck
+  and Steam Machine.
 
 ## Coverage includes
 
