@@ -99,8 +99,30 @@ read -r archive_name engine_version package_version github_repository has_flatpa
 
 notes_package_version="0.13.0-experimental.25"
 notes_engine_version="2.0.0-dev28-experimental.25"
+notes_previous_package_version="0.13.0-experimental.24"
+notes_previous_package_tag="v$notes_previous_package_version"
+notes_package_tag_pattern="v0.13.0-experimental.*"
 if [[ "$package_version" != "$notes_package_version" || "$engine_version" != "$notes_engine_version" ]]; then
   echo "Release notes still describe plugin $notes_package_version with engine $notes_engine_version. Update them before publishing." >&2
+  exit 1
+fi
+if ! git -C "$project_dir" rev-parse -q --verify "refs/tags/$notes_previous_package_tag" >/dev/null; then
+  echo "Release-note baseline tag $notes_previous_package_tag is missing." >&2
+  exit 1
+fi
+if ! git -C "$project_dir" merge-base --is-ancestor "$notes_previous_package_tag" HEAD; then
+  echo "Release-note baseline $notes_previous_package_tag is not an ancestor of HEAD." >&2
+  exit 1
+fi
+latest_previous_package_tag=""
+while IFS= read -r candidate_tag; do
+  if [[ "$candidate_tag" != "v$notes_package_version" ]]; then
+    latest_previous_package_tag="$candidate_tag"
+    break
+  fi
+done < <(git -C "$project_dir" tag --merged HEAD --list "$notes_package_tag_pattern" --sort=-version:refname)
+if [[ "$latest_previous_package_tag" != "$notes_previous_package_tag" ]]; then
+  echo "Release notes use $notes_previous_package_tag, but the latest prior tag is ${latest_previous_package_tag:-missing}. Update the baseline and change list before publishing." >&2
   exit 1
 fi
 if [[ "$archive_url" == local-only://* || "$release_tag" == local-only-* ]]; then
@@ -144,17 +166,17 @@ notes_file="$notes_dir/release-notes.md"
 printf '%s\n' \
   '> **Optional coexistence:** If you want to keep the original/public Decky LSFG-VK plugin installed, you can. Both plugins can remain installed and enabled. For native Steam/Proton games, choose exactly one launch wrapper: public `~/lsfg %command%` or experimental `~/.local/bin/lsfg-vk-experimental %command%`; never combine them. Flatpak apps, including Heroic, are selected through Flatpak setup instead.' \
   '' \
-  '## What’s new since experimental.21' \
+  "## What’s new since \`$notes_previous_package_version\`" \
   '' \
   '- **Engine update:** Bundles checksum-verified `lsfg-vk 2.0.0-dev28-experimental.25`. Complete the required in-plugin engine-update step after installing the ZIP.' \
   '- **Automatic HDR colour path:** Preserves Gamescope WSI discovery and supports SteamOS HDR10/PQ and linear scRGB frame generation without a plugin toggle. HDR10 is converted through linear scRGB around the model; unsupported HDR transfer functions use safe real-frame passthrough.' \
-  '- **64-bit and 32-bit Vulkan support:** Installs architecture-matched host and Flatpak layers. Vulkan selects the correct layer for each game process, so genuine 32-bit Vulkan games no longer need the old WoW64 option.' \
+  '- **64-bit and 32-bit Vulkan support:** Installs architecture-matched host and Flatpak layers. Vulkan selects the correct layer for each game process, so genuine 32-bit Vulkan games no longer need the old WoW64 option; existing wrappers are migrated away from stale `PROTON_USE_WOW64` exports.' \
   '- **Rare HDR startup recovery:** A per-profile **Hide HDR from Game (Restart)** workaround restores legacy isolated Vulkan discovery so a title that cannot start when HDR is advertised can boot in SDR.' \
-  '- **Stronger Adaptive recovery:** After a Steam-menu or focus interruption, Adaptive preserves the recovered real-frame baseline while restoring the previous generation level. If that level causes a sustained throughput collapse, it confirms the result with one second of real-only frames and returns to the lower proven level.' \
-  '- **Safer generated-image recovery:** A single generated-image acquisition recovery now stays in place and refreshes three history frames. Only a repeated recovery within 15 seconds may request guarded swapchain recreation, with a five-second cross-context cooldown.' \
-  '- **Maximum multiplier protection:** Smooth Cadence restoration, rescue, and recovery respect the selected Maximum Adaptive Multiplier.' \
-  '- **Live configuration:** Frame Generation, Adaptive Target, Maximum Adaptive Multiplier, Smooth Cadence, Flow Scale, and Performance Mode apply without a restart. Switching between Fixed and Adaptive, or increasing a Fixed multiplier beyond the capacity used when the game created its swapchain, requires a game restart.' \
-  '- **Live Frame Generation control:** Turn synthesis off or on immediately without changing the selected Fixed or Adaptive settings.' \
+  '- **Safer live reconfiguration and stall recovery:** Transient partial configuration writes are retried. Frame Generation and Adaptive Target, Maximum Multiplier, and Smooth Cadence can update in place when resources permit; resource-shape and model settings are deferred, so restart the game to guarantee those changes. A transient backend stall keeps native presentation active and warms temporal history before generation resumes.' \
+  '- **Private layer discovery migration:** The wrapper now prepends the experimental manifest while leaving normal implicit layers discoverable, and Flatpak cleanup recognises both the old isolated path and the new additive path.' \
+  '- **Diagnostic log presets:** Installs `~/.local/bin/lsfg-vk-experimental-diagnostics` with focused HDR, Adaptive, recovery, performance, lifecycle, startup, layer, and error filters.' \
+  '- **Local engine packaging:** Maintainers can build a Decky ZIP directly from a sibling lsfg-vk checkout. The generated ZIP records the exact commit, dirty state, filenames, and checksums without changing the tracked public release pin.' \
+  '- **Documentation:** Expands HDR, dual-architecture, diagnostics, Flatpak migration, local packaging, and community-coverage guidance.' \
   '' \
   'See the [Configuration guide](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/blob/main/docs/CONFIGURATION.md) and [Troubleshooting guide](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/blob/main/docs/TROUBLESHOOTING.md) for the full behaviour and per-game controls.' \
   '' \
