@@ -60,7 +60,7 @@ frame-generation changes, and keep the configuration that feels best for that ga
    [official Decky Loader installation guide](https://github.com/SteamDeckHomebrew/decky-loader#-installation), then
    return to Game Mode.
 2. **Install [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) from Steam.**
-3. **Download [Decky.LSFG-VK.Experimental-0.13.0-experimental.25.zip](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/releases/download/v0.13.0-experimental.25/Decky.LSFG-VK.Experimental-0.13.0-experimental.25.zip)**.
+3. **[Download the current experimental plugin ZIP](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/releases/download/v0.13.0-experimental.25/Decky.LSFG-VK.Experimental-0.13.0-experimental.25.zip)**.
 4. In Decky's settings cog, enable **Developer Mode**, then select **Developer > Install Plugin from Zip**.
 5. Open this plugin and select **Install Experimental LSFG-VK (developer build)**. This required step installs the
    engine bundled in the ZIP into the plugin's private location.
