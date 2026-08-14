@@ -5,8 +5,8 @@ where supported. Adaptive mode defaults to a **90 FPS** target with **Smooth Cad
 changed while a game is running, but the layer briefly resets its timing and stability calculations afterwards. Let it
 settle for a few seconds before judging performance. Fixed and Adaptive reserve one shared generated-frame capacity,
 so switching between them applies live when the selected multiplier/ceiling fits that capacity. The layer never forces
-the game to rebuild its swapchain for a UI change. A confirmed Gamescope HDR/SDR change rebuilds only LSFG's private
-colour resources after their in-flight work completes; real game frames pass through during that short transition.
+the game to rebuild its swapchain for a UI change. The engine includes a private HDR/SDR resource transition for future
+HDR work, but this Decky release keeps HDR exposure locked off and therefore remains on the SDR resource path.
 Other GPU-backend, flow-scale, or performance-mode changes that cannot be applied safely remain pending until the game
 naturally recreates its swapchain or is restarted.
 
@@ -98,23 +98,17 @@ remain 64-bit because they are not loaded into the game process.
 - **Zink:** Optional Vulkan-based OpenGL path for OpenGL games.
 
 Gamescope WSI and MangoHud controls are deliberately not shown. The wrapper enables this plugin's uniquely named
-experimental layer and disables both public LSFG identities for that game. Existing caller-supplied layer paths and
-`VK_INSTANCE_LAYERS` are preserved. With **Disable Experimental HDR (Restart)** on, the wrapper uses the proven private
-implicit-layer path and sets `DXVK_HDR=0`, keeping ordinary SDR independent from the developing HDR integration. With
-the option off, the wrapper restores SteamOS' normal implicit-layer discovery, enables Gamescope WSI, and sets
-`DXVK_HDR=1` so an HDR-capable game can enumerate HDR. It does not install or activate a custom Vulkan meta-layer.
-Gamescope normalizes its driver-facing colour space to sRGB, so the engine recovers HDR semantics only for exact
-packed-10-bit or float formats after Gamescope reports positive application HDR evidence.
+experimental layer and disables both public LSFG identities for that game. In this release, **Disable Experimental HDR
+(Restart)** is checked and read-only: the wrapper always uses the proven private implicit-layer path, exports
+`LSFGVK_DISABLE_HDR_EXPOSURE=1`, and sets `DXVK_HDR=0`. Existing profiles that previously opted into HDR are normalized
+back to this stable SDR boundary when loaded or saved.
 
-Experimental HDR frame generation is still in development, so **Disable Experimental HDR (Restart)** is enabled by
-default, retaining the proven SDR path. Leave it on for untested games. To test HDR, turn the option off for that
-game's Decky profile, enable HDR in SteamOS, restart the game, and select HDR in the game. This exposes HDR through the
-normal SteamOS path but does not force an SDR renderer into HDR. Output HDR capability is diagnostic information only;
-the engine waits for the game's live colour-space feedback or HDR metadata before changing colour resources. The
-engine recognizes Gamescope
-HDR10/PQ and linear-scRGB swapchain combinations and converts HDR10 to linear scRGB around frame generation. Unsupported
-transfer functions and initialization failures remain on real-frame passthrough. The blocking option restores
-private-only Vulkan discovery, so other global Vulkan layers are unavailable for that game while it is enabled. Use
+HDR frame generation remains under development. The pinned engine contains format classification, HDR10/PQ and
+linear-scRGB conversion, Gamescope feedback, packed-boundary transport, and safe-passthrough groundwork, but the Decky
+launcher does not expose that path in `.25`. In-game HDR controls may therefore be disabled; this is expected. A future
+release will unlock the control only after activation, presentation, colour, and performance are validated across
+games. The private-only discovery used by the current SDR boundary also makes other global Vulkan layers unavailable
+for that game. Use
 **Disable Experimental LSFG-VK on Next Launch** when the layer itself is the suspected cause. The plugin
 writes `pacing = 'none'` and does not expose a
 dual-GPU control. See

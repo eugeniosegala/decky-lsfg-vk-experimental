@@ -322,17 +322,18 @@ archive declared and checksum-pinned in
   recovery, and ensures restoration, rescue, and recovery respect the configured Maximum Adaptive Multiplier. The
   deterministic scheduler baseline, rendering path, shaders, interpolation timing, and Fixed scheduling remain unchanged.
 
-## v2.0.0-dev28-experimental.25 (local candidate)
+## v2.0.0-dev28-experimental.25
 
 - Source repository: `https://github.com/eugeniosegala/lsfg-vk-experimental`
-- Local pin label: `local-only-eb4ea9e-dual-arch` (not published)
-- Source commit: `eb4ea9ea41039d00ed483253efdc96a07ec4bf20`
+- Release tag: `v2.0.0-dev28-experimental.25`
+- Source commit: `5a293c428409a866bbe91be9eb54b49e71521e14`
 - Upstream lineage: `lsfg-vk 2.0.0-dev28`
-- Host archive: `lsfg-vk-2.0.0-dev28-experimental.25-local-dual-arch-linux.tar.xz`
-- Host SHA-256: `7433e48e8a782c5b49602518d1b8b787311b31af61c727f483fe28a456935c7d`
-- Flatpak archive: `lsfg-vk-2.0.0-dev28-experimental.25-local-dual-arch-flatpaks.tar.xz`
-- Flatpak SHA-256: `6cabcb5b3ff847f27b3ef9d4e6ea160f39c7454f10c22ee0af868439673e1fa1`
+- Host archive: `lsfg-vk-2.0.0-dev28-experimental.25-linux.tar.xz`
+- Host SHA-256: `ca72768003b85e32fe4c43cb54cb8c984f9ddd1c24a53771546309b4853806ec`
+- Flatpak archive: `lsfg-vk-2.0.0-dev28-experimental.25-flatpaks.tar.xz`
+- Flatpak SHA-256: `49a32ffe11bb5d88f6ad700dc3ffafb39e9d5511bb095f2c5bd04c455ab0806c`
 - Notes: Adds explicit swapchain colour classification, HDR10/PQ conversion through linear scRGB, direct linear-scRGB
   frame generation, safe live configuration recovery, and real-frame passthrough for unsupported HDR modes or
   frame-generation initialization failures. Host and Flatpak payloads include architecture-matched ELF64 and ELF32
-  Vulkan layers; the local Decky candidate preserves Gamescope WSI discovery and retains an SDR startup recovery.
+  Vulkan layers. Decky `.25` keeps this HDR foundation locked behind its required SDR safety boundary while validation
+  continues.

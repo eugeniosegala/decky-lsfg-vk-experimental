@@ -54,18 +54,18 @@
   "remote_binary_bundling": true,
   "remote_binary": [
     {
-      "name": "lsfg-vk-2.0.0-dev28-experimental.25-local-dual-arch-linux.tar.xz",
+      "name": "lsfg-vk-2.0.0-dev28-experimental.25-linux.tar.xz",
       "version": "2.0.0-dev28-experimental.25",
       "lineage_version": "2.0.0-dev28",
       "source_repository": "https://github.com/eugeniosegala/lsfg-vk-experimental",
-      "release_tag": "local-only-eb4ea9e-dual-arch",
-      "source_commit": "eb4ea9ea41039d00ed483253efdc96a07ec4bf20",
-      "url": "local-only://lsfg-vk-2.0.0-dev28-experimental.25-local-dual-arch-linux.tar.xz",
-      "sha256hash": "7433e48e8a782c5b49602518d1b8b787311b31af61c727f483fe28a456935c7d",
+      "release_tag": "v2.0.0-dev28-experimental.25",
+      "source_commit": "5a293c428409a866bbe91be9eb54b49e71521e14",
+      "url": "https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.25/lsfg-vk-2.0.0-dev28-experimental.25-linux.tar.xz",
+      "sha256hash": "ca72768003b85e32fe4c43cb54cb8c984f9ddd1c24a53771546309b4853806ec",
       "flatpak_bundle": {
-        "name": "lsfg-vk-2.0.0-dev28-experimental.25-local-dual-arch-flatpaks.tar.xz",
-        "url": "local-only://lsfg-vk-2.0.0-dev28-experimental.25-local-dual-arch-flatpaks.tar.xz",
-        "sha256hash": "6cabcb5b3ff847f27b3ef9d4e6ea160f39c7454f10c22ee0af868439673e1fa1"
+        "name": "lsfg-vk-2.0.0-dev28-experimental.25-flatpaks.tar.xz",
+        "url": "https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.25/lsfg-vk-2.0.0-dev28-experimental.25-flatpaks.tar.xz",
+        "sha256hash": "49a32ffe11bb5d88f6ad700dc3ffafb39e9d5511bb095f2c5bd04c455ab0806c"
       }
     }
   ]

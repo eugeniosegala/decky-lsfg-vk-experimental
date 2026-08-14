@@ -169,11 +169,11 @@ printf '%s\n' \
   "## What’s new since \`$notes_previous_package_version\`" \
   '' \
   '- **Engine update:** Bundles checksum-verified `lsfg-vk 2.0.0-dev28-experimental.25`. Complete the required in-plugin engine-update step after installing the ZIP.' \
-  '- **Experimental HDR support (per-game opt-in):** This is an experimental HDR path for SteamOS HDR10/PQ and linear scRGB frame generation through Gamescope. It is disabled by default while under development; enable it only for games where HDR has been tested successfully. HDR10 is converted through linear scRGB around the model, while unsupported transfer functions use safe real-frame passthrough.' \
+  '- **HDR foundation — in progress:** The bundled engine contains HDR10/PQ and linear-scRGB colour-pipeline groundwork, Gamescope feedback, packed HDR10 boundary transport, and safe passthrough. HDR activation and frame generation are not exposed by this Decky release while cross-game presentation, colour, and performance validation continues.' \
   '- **64-bit and 32-bit Vulkan support:** Installs architecture-matched host and Flatpak layers. Vulkan selects the correct layer for each game process, so genuine 32-bit Vulkan games no longer need the old WoW64 option; existing wrappers are migrated away from stale `PROTON_USE_WOW64` exports.' \
-  '- **Experimental HDR control:** **Disable Experimental HDR (Restart)** is enabled by default for the proven SDR path. Leave it on for untested games; turn it off only for games where HDR works well, then restart. It also bypasses other global Vulkan layers while enabled.' \
+  '- **Locked SDR safety boundary:** **Disable Experimental HDR (Restart)** is checked and read-only. The backend also overrides older saved opt-ins, exports `LSFGVK_DISABLE_HDR_EXPOSURE=1`, and sets `DXVK_HDR=0`, keeping `.25` on the stable isolated SDR path.' \
   '- **Safer live reconfiguration and stall recovery:** Transient partial configuration writes are retried. Frame Generation and Adaptive Target, Maximum Multiplier, and Smooth Cadence can update in place when resources permit; resource-shape and model settings are deferred, so restart the game to guarantee those changes. A transient backend stall keeps native presentation active and warms temporal history before generation resumes.' \
-  '- **Private layer discovery migration:** The wrapper now prepends the experimental manifest while leaving normal implicit layers discoverable, and Flatpak cleanup recognises both the old isolated path and the new additive path.' \
+  '- **Private layer discovery migration:** The `.25` wrapper regenerates older launchers and retains the uniquely named experimental layer on the proven isolated SDR path. Flatpak cleanup recognises both historical isolated and additive layouts.' \
   '- **Diagnostic log presets:** Installs `~/.local/bin/lsfg-vk-experimental-diagnostics` with focused HDR, Adaptive, recovery, performance, lifecycle, startup, layer, and error filters.' \
   '- **Local engine packaging:** Maintainers can build a Decky ZIP directly from a sibling lsfg-vk checkout. The generated ZIP records the exact commit, dirty state, filenames, and checksums without changing the tracked public release pin.' \
   '- **Documentation:** Expands HDR, dual-architecture, diagnostics, Flatpak migration, local packaging, and community-coverage guidance.' \
@@ -227,9 +227,11 @@ printf '%s\n' \
   '' \
   "## Known limitations of lsfg-vk $engine_version" \
   '' \
-  '- **Experimental HDR:** This is an experimental, per-game HDR path. HDR10/PQ and linear scRGB support remains under development and is disabled by default. Enable it only for a game that has been tested successfully. A game must still provide its own HDR renderer; unsupported transfer functions such as HLG or Dolby Vision use real-frame passthrough.' \
+  '- **HDR is in progress and unavailable in this Decky release:** The engine foundation is included, but the plugin locks HDR exposure off and does not provide a per-game opt-in. In-game HDR controls may be unavailable by design. A later release can unlock the path after activation, presentation, colour, and performance are validated across games.' \
+  '- **Adaptive targets are not hard frame limiters:** Adaptive varies generated-frame count toward an average target. It cannot reduce a native framerate already above the target, exceed the configured multiplier/GPU/compositor capacity, or guarantee an unreachable output rate.' \
+  '- **Image-quality and latency trade-offs remain game-dependent:** Higher multipliers and lower real-frame rates can increase ghosting and input latency. Smooth Cadence may improve motion consistency while reducing responsiveness.' \
   '' \
-  '- **Layer coexistence:** The wrapper enables the uniquely named private experimental layer and disables both known public LSFG identities for that game, while leaving normal implicit-layer discovery available for Gamescope WSI. Engine selection no longer depends on same-name search ordering.' \
+  '- **Layer coexistence:** The original and experimental Decky plugins may remain installed, but use exactly one wrapper per game. The experimental wrapper selects its uniquely named private layer, disables both public LSFG identities for that process, and uses isolated implicit-layer discovery while HDR is locked off; other global Vulkan layers are unavailable to that wrapped game.' \
   '' \
   '## Before you play' \
   '' \

@@ -21,7 +21,7 @@
 |:--:|---------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | 🖼️ | **Improved full-quality image** | In testing, v2 with **Performance Mode disabled** can show noticeably less ghosting than the older layer. Results remain game-dependent; Performance Mode is still useful when lower GPU overhead matters more than image quality.                                                                    |
 | 🎯 | **Adaptive Frame Generation**   | Optionally target 30–240 FPS while the layer varies generated frames up to a selected 2x–4x ceiling. It is disabled by default while it continues to be refined.                                                                                                                                      |
-| 🌈 | **Experimental HDR Support**    | Supports SteamOS HDR10/PQ and linear scRGB frame generation through Gamescope. It is disabled by default while under development; enable it only for games where HDR has been tested successfully. |
+| 🌈 | **HDR — in progress**          | The engine includes HDR10/PQ and linear-scRGB pipeline groundwork, but Decky keeps HDR exposure locked off while activation, presentation, colour, and performance are validated across games. |
 | 🧩 | **64-bit and 32-bit Vulkan**     | Ships architecture-matched host and Flatpak layers. Vulkan selects the correct library for each game process, so genuine 32-bit Vulkan games no longer depend on the WoW64 workaround. |
 | 🛡️ | **Gamescope recovery**          | Bounded presentation recovery preserves proven Adaptive state, ignores transient Steam-menu cadence, refreshes history, and resumes only after the game cadence is stable again. A validated 2x Adaptive setup also recovers from short gameplay hitches without entering the longer menu/focus path. |
 | ⏯️ | **Live frame-generation switch** | Turn frame generation on or off immediately without changing the selected Fixed or Adaptive settings. Turn it back on to resume with the same profile.                                                                                                                                                |
@@ -31,11 +31,11 @@
 
 This plugin installs a private, checksum-verified lsfg-vk v2 engine under a uniquely named, wrapper-scoped Vulkan layer and
 activates it only through its experimental launcher. The launcher disables both known public LSFG layer identities for
-that game, so the original plugin can remain installed without either implementation being chained accidentally. It
-keeps the experimental layer below Gamescope's Wine WSI bridge and recovers Gamescope-normalized HDR only from the
-validated packed-10-bit or float format when the session advertises HDR. It does not force Gamescope or any other layer
-to load. It uses the normal `Lossless.dll` from the Lossless Scaling Steam application; it does not install, copy, or
-modify that DLL.
+that game, so the original plugin can remain installed without either implementation being chained accidentally. This
+release keeps the launcher on the isolated SDR path. Although the pinned engine contains an HDR colour-pipeline
+foundation, Decky's HDR exposure block is locked on until the full Gamescope activation and presentation path is ready.
+It uses the normal `Lossless.dll` from the Lossless Scaling Steam application; it does not install, copy, or modify that
+DLL.
 
 The currently pinned engine, source commit, checksum, and upstream change record are in
 [UPSTREAM_LSFGVK.md](UPSTREAM_LSFGVK.md). Check the
@@ -93,9 +93,9 @@ The Steam launch wrapper cannot enter a Flatpak sandbox, so configure Heroic thr
    Leave **Arguments** empty. Do not use `%command%` in Heroic.
 4. Start that game normally from Heroic or its Steam shortcut.
 
-The wrapper applies only to the selected Heroic games. It enables the uniquely named experimental Flatpak layer,
-disables both known public LSFG identities for that game, and preserves the runtime's normal implicit-layer discovery.
-This is required for Gamescope WSI and HDR; selection no longer depends on ambiguous same-name search ordering.
+The wrapper applies only to the selected Heroic games. It enables the uniquely named experimental Flatpak layer and
+disables both known public LSFG identities for that game. While HDR is locked off, it uses the same isolated SDR layer
+discovery as native games; selection does not depend on ambiguous same-name search ordering.
 
 > [!IMPORTANT]
 > After installing a newer experimental plugin ZIP, return to **Flatpak Setup** and select **Update** for Heroic's

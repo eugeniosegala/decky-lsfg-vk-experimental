@@ -155,21 +155,20 @@ class WrapperEnvironmentTests(unittest.TestCase):
         settings = self.service._wrapper_settings_defaults()
         self.assertTrue(settings["disable_hdr_exposure"])
 
-    def test_explicit_hdr_test_opt_in_is_preserved(self):
+    def test_saved_hdr_test_opt_in_is_overridden(self):
         settings = self.service._normalize_wrapper_settings({
             "disable_hdr_exposure": False,
         })
-        self.assertFalse(settings["disable_hdr_exposure"])
+        self.assertTrue(settings["disable_hdr_exposure"])
 
-    def test_explicit_hdr_test_opt_in_reaches_engine(self):
+    def test_explicit_hdr_test_opt_in_remains_blocked(self):
         lines = self.service._experimental_hdr_activation_lines({
             "disable_hdr_exposure": False,
         })
         self.assertEqual(lines, [
-            "unset LSFGVK_DISABLE_HDR_EXPOSURE",
-            "export DXVK_HDR=1",
-            "unset DISABLE_GAMESCOPE_WSI",
-            "export ENABLE_GAMESCOPE_WSI=1",
+            "export LSFGVK_DISABLE_HDR_EXPOSURE=1",
+            "export DXVK_HDR=0",
+            "unset ENABLE_GAMESCOPE_WSI",
         ])
 
         values = self._evaluate(
@@ -186,9 +185,9 @@ class WrapperEnvironmentTests(unittest.TestCase):
             "VK_LAYER_existing_one:VK_LAYER_existing_two",
         )
         self.assertEqual(values["ENABLE"], "1")
-        self.assertEqual(values["ENABLE_GAMESCOPE"], "1")
-        self.assertEqual(values["HDR_EXPOSURE_DISABLED"], "")
-        self.assertEqual(values["DXVK_HDR"], "1")
+        self.assertEqual(values["ENABLE_GAMESCOPE"], "")
+        self.assertEqual(values["HDR_EXPOSURE_DISABLED"], "1")
+        self.assertEqual(values["DXVK_HDR"], "0")
         self.assertEqual(values["DISABLE_EXPERIMENTAL"], "")
         self.assertEqual(values["DISABLE_GAMESCOPE"], "")
 
@@ -212,12 +211,12 @@ class WrapperEnvironmentTests(unittest.TestCase):
         self.assertEqual(values["DISABLE_EXPERIMENTAL"], "")
         self.assertEqual(values["DISABLE_GAMESCOPE"], "")
 
-    def test_full_layer_disable_keeps_hdr_exposure_choice_independent(self):
+    def test_full_layer_disable_keeps_hdr_exposure_blocked(self):
         lines = self.service._experimental_hdr_activation_lines({
             "disable_hdr_exposure": False,
             "disable_lsfgvk": True,
         })
-        self.assertIn("export DXVK_HDR=1", lines)
+        self.assertIn("export DXVK_HDR=0", lines)
         self.assertNotIn("VK_INSTANCE_LAYERS", "\n".join(lines))
 
     def test_full_layer_disable_targets_only_experimental_identity(self):

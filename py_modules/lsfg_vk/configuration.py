@@ -32,7 +32,7 @@ from .types import ConfigurationResponse, ProfilesResponse, ProfileResponse
 class ConfigurationService(BaseService):
     """Service for managing TOML-based lsfg configuration"""
 
-    _WRAPPER_FORMAT_MARKER = "# decky-lsfg-vk-experimental-wrapper-format: 23"
+    _WRAPPER_FORMAT_MARKER = "# decky-lsfg-vk-experimental-wrapper-format: 24"
     _WRAPPER_PROFILE_SETTINGS_VERSION = 1
     _REQUIRED_WRAPPER_EXPORTS = (
         "export LSFGVK_PRESENT_ACQUIRE_TIMEOUT_MS=",
@@ -66,6 +66,10 @@ class ConfigurationService(BaseService):
             if field_name in raw_settings
         })
         validated = ConfigurationManager.validate_config(candidate)
+        # HDR remains an engine foundation in this release, not a supported
+        # Decky launch mode. Override old per-profile opt-ins as well as new UI
+        # writes so the generated wrapper always retains the proven SDR path.
+        validated[DISABLE_HDR_EXPOSURE] = True
         return {
             field_name: validated[field_name]
             for field_name in SCRIPT_ONLY_FIELDS
@@ -371,25 +375,17 @@ class ConfigurationService(BaseService):
 
     @staticmethod
     def _experimental_hdr_activation_lines(config: Dict[str, Any]) -> list[str]:
-        """Select a restart-time SDR or HDR exposure contract.
+        """Keep the packaged Decky launcher on its proven SDR contract.
 
-        SDR keeps the proven private implicit-layer path and explicitly tells
-        DXVK not to expose HDR. HDR restores SteamOS' normal Gamescope WSI
-        discovery and asks DXVK to expose HDR formats. Neither route forces the
-        engine's colour pipeline: the game must still select HDR and Gamescope
-        must report positive application evidence.
+        The engine contains HDR colour-pipeline groundwork, but cross-game HDR
+        activation and presentation are not release-ready. Ignore stale profile
+        opt-ins until a later Decky release deliberately unlocks this boundary.
         """
-        if config.get(DISABLE_HDR_EXPOSURE, True):
-            return [
-                "export LSFGVK_DISABLE_HDR_EXPOSURE=1",
-                "export DXVK_HDR=0",
-                "unset ENABLE_GAMESCOPE_WSI",
-            ]
+        del config
         return [
-            "unset LSFGVK_DISABLE_HDR_EXPOSURE",
-            "export DXVK_HDR=1",
-            "unset DISABLE_GAMESCOPE_WSI",
-            "export ENABLE_GAMESCOPE_WSI=1",
+            "export LSFGVK_DISABLE_HDR_EXPOSURE=1",
+            "export DXVK_HDR=0",
+            "unset ENABLE_GAMESCOPE_WSI",
         ]
 
     def _generate_layer_environment_lines(self) -> list[str]:
@@ -440,12 +436,9 @@ class ConfigurationService(BaseService):
     def migrate_launch_script_if_needed(self) -> bool:
         """Upgrade an installed generated wrapper without touching user data.
 
-        Wrapper format 23 removes the explicit HDR meta-layer and the
-        output-capability bootstrap. Default SDR retains the proven private
-        implicit-layer path and forces DXVK HDR exposure off. An opted-in HDR
-        launch instead preserves SteamOS' normal implicit discovery, enables
-        Gamescope WSI and DXVK HDR exposure, and waits for application HDR
-        evidence before the engine changes colour resources. Formats 19 to 22
+        Wrapper format 24 locks the packaged Decky release to the proven private
+        SDR path and forces DXVK HDR exposure off while HDR remains under
+        development. It also replaces saved opt-ins from format 23. Formats 19 to 22
         attempted to order components through VK_INSTANCE_LAYERS or a Vulkan
         meta-layer and could leave Gamescope or LSFG unattached.
         Format 15 forced only LSFG and could break Wine swapchain dispatch;
@@ -498,7 +491,7 @@ class ConfigurationService(BaseService):
             if not result["success"]:
                 raise OSError(result.get("error") or "could not refresh launch wrapper")
 
-            self.log.info("Upgraded installed lsfg-vk experimental launch wrapper to format 23")
+            self.log.info("Upgraded installed lsfg-vk experimental launch wrapper to format 24")
             return True
         except OSError:
             raise

@@ -131,14 +131,14 @@ CONFIG_SCHEMA_DEF = {
         "location": "script"
     },
 
-    # HDR frame generation is still under active development. Keep Gamescope
-    # HDR discovery blocked by default so ordinary users retain the proven SDR
-    # transport; testers can opt in per profile and restart the game.
+    # HDR frame generation is still under active development. The Decky .25
+    # package deliberately locks this safety boundary on so existing profiles
+    # cannot opt into the unfinished transport accidentally.
     "disable_hdr_exposure": {
         "name": "disable_hdr_exposure",
         "fieldType": ConfigFieldType.BOOLEAN,
         "default": True,
-        "description": "default isolated SDR launch; turn off only to test application-selected HDR",
+        "description": "required isolated SDR launch while HDR support is under development",
         "location": "script"
     },
 

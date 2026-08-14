@@ -10,28 +10,27 @@ Update both in the same commit.
 |-----------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Release repository          | [`eugeniosegala/lsfg-vk-experimental`](https://github.com/eugeniosegala/lsfg-vk-experimental)                                                         |
 | Tracked branch              | `develop`                                                                                                                                             |
-| Last checked                | 2026-08-13                                                                                                                                            |
-| Integrated source commit    | `eb4ea9ea41039d00ed483253efdc96a07ec4bf20`                                                                                                            |
-| Commit date and subject     | 2026-08-13 — `feat: ship dual-architecture Vulkan layers`                                                                                            |
-| Experimental prerelease tag | `local-only-eb4ea9e-dual-arch`                                                                                                                        |
-| Release state               | Local dual-architecture test candidate; neither this engine checkpoint nor the Decky pin has been pushed or released                                 |
+| Last checked                | 2026-08-14                                                                                                                                            |
+| Integrated source commit    | `5a293c428409a866bbe91be9eb54b49e71521e14`                                                                                                            |
+| Commit date and subject     | 2026-08-14 — `release: prepare experimental 25 foundation`                                                                                           |
+| Experimental prerelease tag | `v2.0.0-dev28-experimental.25`                                                                                                                        |
+| Release state               | Published engine prerelease; Decky `.25` is pinned to its immutable host and Flatpak assets for local package validation                            |
 | Upstream lineage            | [`PancakeTAS/lsfg-vk`](https://github.com/PancakeTAS/lsfg-vk) `2.0.0-dev28`                                                                           |
-| Release asset               | `lsfg-vk-2.0.0-dev28-experimental.25-local-dual-arch-linux.tar.xz` (local)                                                                             |
-| Asset SHA-256               | `7433e48e8a782c5b49602518d1b8b787311b31af61c727f483fe28a456935c7d`                                                                                    |
-| Asset URL                   | `local-only://lsfg-vk-2.0.0-dev28-experimental.25-local-dual-arch-linux.tar.xz`; supply the archive to the local packager                             |
-| Flatpak archive             | `lsfg-vk-2.0.0-dev28-experimental.25-local-dual-arch-flatpaks.tar.xz` (local)                                                                          |
-| Flatpak SHA-256             | `6cabcb5b3ff847f27b3ef9d4e6ea160f39c7454f10c22ee0af868439673e1fa1`                                                                                    |
-| Decky plugin version        | `0.13.0-experimental.25` (local candidate; not published)                                                                                             |
+| Release asset               | `lsfg-vk-2.0.0-dev28-experimental.25-linux.tar.xz`                                                                                                    |
+| Asset SHA-256               | `ca72768003b85e32fe4c43cb54cb8c984f9ddd1c24a53771546309b4853806ec`                                                                                    |
+| Asset URL                   | [`v2.0.0-dev28-experimental.25` host asset](https://github.com/eugeniosegala/lsfg-vk-experimental/releases/download/v2.0.0-dev28-experimental.25/lsfg-vk-2.0.0-dev28-experimental.25-linux.tar.xz) |
+| Flatpak archive             | `lsfg-vk-2.0.0-dev28-experimental.25-flatpaks.tar.xz`                                                                                                 |
+| Flatpak SHA-256             | `49a32ffe11bb5d88f6ad700dc3ffafb39e9d5511bb095f2c5bd04c455ab0806c`                                                                                    |
+| Decky plugin version        | `0.13.0-experimental.25` (local release candidate; not yet published)                                                                                  |
 | Decky plugin package ID     | `decky-lsfg-vk-experimental`                                                                                                                          |
 
-This integration is pinned to a committed local source checkpoint and locally built artifacts. The `local-only://`
-URLs require explicit archive paths during packaging, and the publishing script rejects this pin as an additional
-safety guard. Replace the local pin with a distinct published engine release only after SteamOS testing passes and the
-user explicitly authorizes publication.
+This integration is pinned to the published `.25` source tag and checksum-verified immutable assets. Local packaging
+downloads those exact files; the publishing script still requires a clean committed Decky worktree and explicit user
+authorization before it can create the Decky prerelease.
 
 ## Integrated Flatpak support
 
-Engine candidate `v2.0.0-dev28-experimental.25` includes separate experimental Flatpak runtime extensions for 23.08, 24.08,
+Engine release `v2.0.0-dev28-experimental.25` includes separate experimental Flatpak runtime extensions for 23.08, 24.08,
 and 25.08, each with 64-bit and 32-bit Vulkan layers. The Decky pin includes the checksum-verified host and Flatpak
 release assets. The local package script
 downloads, verifies, and embeds those three extensions. The plugin prepares a Flatpak app to access its private
@@ -45,21 +44,20 @@ that explicitly select it.
 | Supported runtimes   | Freedesktop `23.08`, `24.08`, and `25.08`                                                                         |
 | Coexistence design   | Dedicated ID and prefix; the experimental plugin selects it only for Flatpak apps explicitly enabled by the user. |
 
-The local Decky candidate embeds only checksum-pinned artifacts. The native archive and the three-runtime Flatpak
-archive were built and verified locally from the committed `.25` source.
+The Decky candidate embeds only checksum-pinned published artifacts. The engine publisher built and verified the native
+archive and all three Flatpak runtime bundles from source commit `5a293c4` before publishing them.
 
-### Experimental HDR support
+### HDR foundation (in progress)
 
-The `.25` candidate provides experimental SteamOS HDR10/PQ and linear-scRGB support when enabled for a tested game,
-converting HDR10 through linear scRGB around the frame-generation model. Ordinary 8-bit SDR and high-precision
-SDR remain separate modes. Unsupported or unvalidated HDR transfer functions, including HLG and Dolby Vision, bypass
-generated frames and present the game's real frames instead of guessing a conversion.
+The `.25` engine contains SteamOS HDR10/PQ and linear-scRGB colour-pipeline groundwork, conversion around the model,
+Gamescope feedback, packed HDR10 boundary transport, and safe real-frame passthrough. Cross-game HDR activation,
+presentation, colour, and performance are not yet release-ready.
 
-The experimental wrapper remains private but now uses additive Vulkan implicit-layer discovery by default, allowing
-Gamescope WSI to advertise the compositor's HDR formats. A per-profile **Disable Experimental HDR (Restart)** option
-defaults to the legacy private-only discovery path until HDR has been verified for that game.
-The existing **Disable Experimental LSFG-VK on Next Launch** workaround remains the last-resort recovery if the layer itself prevents
-a title from starting.
+Decky therefore locks **Disable Experimental HDR (Restart)** on and read-only for `.25`. The backend overrides older
+saved opt-ins, uses the private-only SDR discovery path, exports `LSFGVK_DISABLE_HDR_EXPOSURE=1`, and sets `DXVK_HDR=0`.
+The engine foundation remains integrated for future work without leaking its experimental transport into normal SDR.
+**Disable Experimental LSFG-VK on Next Launch** remains the last-resort recovery if the layer itself prevents a title
+from starting.
 
 ### Adaptive Frame Generation
 
@@ -201,13 +199,16 @@ only a repeated recovery inside 15 seconds may request the existing guarded game
 cross-context recreation cooldown remains intact. These changes are confined to Adaptive recovery policy and leave the
 known-good rendering, submission, shader, interpolation-timing, allocation, and Fixed 2x/3x/4x paths unchanged.
 
-The local `eb4ea9e` candidate includes the `4672521` stability checkpoint. Live CPU-policy edits are applied to the
+The published `.25` release carries the stability work first checkpointed at `4672521` and expanded through
+`5a293c4`. Live CPU-policy edits are applied to the
 existing context, while structural changes are deferred to a safe replacement instead of destroying a context inside
 `vkQueuePresentKHR`. Context work and retirement waits are bounded, timed-out contexts are kept alive until their GPU
 work completes, and ordinary cleanup no longer performs a global device-idle wait. The final checkpoint also packages
 architecture-matched ELF64 and ELF32 layers and manifests for native and Flatpak games, removing the old launcher-side
 WoW64 dependency. Deterministic tests cover configuration classification, bounded recovery, temporal frame-index
-continuity, and packaging layout; native and all three Flatpak payloads were rebuilt from this exact commit.
+continuity, and packaging layout. The published release also separates the proven ordered SDR transport from its HDR
+foundation and adds a hard `LSFGVK_DISABLE_HDR_EXPOSURE` boundary so launchers can retain SDR without entering the
+unfinished colour path. Native and all three Flatpak payloads were rebuilt from the tagged source commit.
 
 ### Flatpak payload hotfix
 
@@ -236,7 +237,7 @@ Flatpak extension layout and manifest path for all three supported runtimes befo
 2. Compare from the baseline commit above:
 
    ```bash
-   git -C /path/to/lsfg-vk-experimental log --oneline eb4ea9ea41039d00ed483253efdc96a07ec4bf20..origin/develop
+   git -C /path/to/lsfg-vk-experimental log --oneline 5a293c428409a866bbe91be9eb54b49e71521e14..origin/develop
    ```
 
 3. Review the fork's release notes, `docs/Configuration.md`, `docs/Flatpak-Guide.md`, host release asset, Flatpak
@@ -247,7 +248,7 @@ Flatpak extension layout and manifest path for all three supported runtimes befo
    packager and the installed plugin. When the release provides Flatpak support, add its checksum-verified
    `flatpak_bundle` record at the same time. Update this document and `third_party/lsfg-vk/README.md` to match the
    release metadata; copy reviewed archives into `third_party/lsfg-vk/` when retaining Git-backed recovery copies.
-5. Regenerate the schemas with `python3 scripts/generate_ts_schema.py`, then build the frontend with `pnpm run build`.
+5. Regenerate the schemas with `python3 scripts/generate_ts_schema.py`, then build the frontend with `npm run build`.
 6. Build a local Decky ZIP and verify its embedded archive checksum before publishing a new Decky prerelease.
 
 ## Scope note

@@ -4,7 +4,7 @@ import { RiArrowDownSFill, RiArrowUpSFill } from "react-icons/ri";
 import { ConfigurationData } from "../config/configSchema";
 import {
   ACTIVE_IN, ALLOW_FP16, DISABLE_LSFGVK, DLL, FLOW_SCALE, GPU, PERFORMANCE_MODE,
-  DXVK_FRAME_RATE, DISABLE_HDR_EXPOSURE, DISABLE_STEAMDECK_MODE, ENABLE_ZINK
+  DXVK_FRAME_RATE, DISABLE_STEAMDECK_MODE, ENABLE_ZINK
 } from "../config/generatedConfigSchema";
 import t from "../i18n/i18n";
 
@@ -236,9 +236,10 @@ export function ConfigurationSection({
           <PanelSectionRow>
             <ToggleField
               label={t("CONFIG_DISABLE_HDR_EXPOSURE", "Disable Experimental HDR (Restart)")}
-              description={t("CONFIG_DISABLE_HDR_EXPOSURE_DESC", "On (default) uses the isolated SDR path and disables DXVK HDR exposure. Turn it off only to test HDR; the game must then select HDR. Restart required.")}
-              checked={config.disable_hdr_exposure}
-              onChange={(value) => onConfigChange(DISABLE_HDR_EXPOSURE, value)}
+              description={t("CONFIG_DISABLE_HDR_EXPOSURE_DESC", "HDR is under development. This required setting keeps the stable SDR path active.")}
+              checked={true}
+              disabled={true}
+              onChange={() => undefined}
             />
           </PanelSectionRow>
 

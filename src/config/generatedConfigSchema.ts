@@ -125,7 +125,7 @@ export const CONFIG_SCHEMA: Record<string, ConfigField> = {
     name: "disable_hdr_exposure",
     fieldType: ConfigFieldType.BOOLEAN,
     default: true,
-    description: "default isolated SDR launch; turn off only to test application-selected HDR"
+    description: "required isolated SDR launch while HDR support is under development"
   },
   dxvk_frame_rate: {
     name: "dxvk_frame_rate",

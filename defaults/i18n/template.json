@@ -113,7 +113,7 @@
   "CONFIG_DISABLE_LSFGVK_NEXT_LAUNCH": "Disable Experimental LSFG-VK on Next Launch",
   "CONFIG_DISABLE_LSFGVK_NEXT_LAUNCH_DESC": "Troubleshooting only. Stops this experimental layer loading after restart. Use Frame Generation above for live on/off.",
   "CONFIG_DISABLE_HDR_EXPOSURE": "Disable Experimental HDR (Restart)",
-  "CONFIG_DISABLE_HDR_EXPOSURE_DESC": "On (default) uses the isolated SDR path and disables DXVK HDR exposure. Turn it off only to test HDR; the game must then select HDR. Restart required.",
+  "CONFIG_DISABLE_HDR_EXPOSURE_DESC": "HDR is under development. This required setting keeps the stable SDR path active.",
   "FRAME_GENERATION_ENABLED": "Frame Generation (Live On/Off)",
   "FRAME_GENERATION_ENABLED_DESC": "Live on/off. Leave it on to use Fixed or Adaptive Frame Generation. When off, neither mode generates frames; your settings stay saved.",
   "CONFIG_ALLOW_FP16": "Allow FP16",

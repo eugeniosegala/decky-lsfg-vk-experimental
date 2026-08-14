@@ -1,89 +1,35 @@
 # Troubleshooting
 
-## HDR
+## HDR (in progress)
 
-Experimental HDR frame generation is still developing and disabled by default. Leave **Disable Experimental HDR
-(Restart)** enabled for untested games. To test HDR, select the game's Decky profile, turn that option off, enable HDR
-in SteamOS and the game, and restart the game. Leave it off only for games where HDR works well.
-This is a restart-time exposure boundary rather than a live force-HDR switch: compatible games still select HDR
-themselves. The experimental wrapper preserves SteamOS' normal implicit discovery, enables Gamescope WSI, and sets
-`DXVK_HDR=1`. The engine still waits for positive application colour-space feedback or HDR metadata. An HDR-capable
-output alone is not application intent and cannot promote an SDR swapchain. Blocked/default SDR profiles instead use
-the isolated private path and `DXVK_HDR=0`.
+HDR exposure is intentionally unavailable in this Decky release. **Disable Experimental HDR (Restart)** is checked,
+read-only, and enforced by the backend even if an older profile stored the opposite value. The generated wrapper uses
+the isolated SDR path, exports `LSFGVK_DISABLE_HDR_EXPOSURE=1`, and sets `DXVK_HDR=0`. An HDR option being unavailable
+inside a game is therefore expected and is not evidence that the `.25` package installed incorrectly.
 
-HDR10 frame generation is decoded from BT.2020/PQ into linear scRGB for the model, then encoded back to BT.2020/PQ for
-presentation. Unsupported HDR encodings, including HLG and Dolby Vision, use the game's real frames rather than
-synthesizing frames with incorrect colours. This does not make HDR available in a game that has no HDR renderer, and a
-non-SteamOS compositor or GPU-driver HDR problem remains outside the plugin's colour pipeline.
+The pinned engine still contains the HDR10/PQ and linear-scRGB colour-pipeline foundation, Gamescope feedback resolver,
+packed HDR10 boundary transport, and safe-passthrough diagnostics. Those pieces remain useful for continued engine
+development, but Decky will not expose them until cross-game activation, presentation, colour, and performance have
+been validated. The diagnostics helper retains its `hdr` preset for that future testing; ordinary `.25` Decky runs
+should remain on SDR.
 
-For HDR10, the experimental engine automatically uses 32-bit packed boundary images when both Vulkan devices validate
-the required external-image and storage capabilities. This is not a lossy block-compression mode or a user setting:
-HDR10 already has 10-bit PQ precision at the game boundary, while PQ conversion, frame generation, and temporal working
-images remain linear 16-bit float. The smaller exchange images target VRAM pressure and boundary bandwidth on Steam
-Deck without changing the Adaptive scheduler.
-
-For a quick engine check, start the game from Steam and inspect its log for a line like:
-
-```text
-lsfg-vk: experimental layer active; identity=VK_LAYER_LSFGVK_experimental_frame_generation; build=2.0.0-dev28-experimental.25
-lsfg-vk: Gamescope application HDR feedback stabilized: active=1; activation_source=gamescope-app-colorspace; contexts_pending_private_transition=1
-lsfg-vk: swapchain colour pipeline transitioned in place: mode=hdr10-pq; transport=packed-hdr10-32-bit; application_device_supported=1; backend_device_supported=1
-lsfg-vk: HDR10 transport: mode=packed-10-bit; nominal_bytes=16384000; nominal_bytes_saved=16384000; application_device_supported=1; backend_device_supported=1
-```
-
-The first line is the authoritative build marker. With `VK_LOADER_DEBUG=layer`, the inserted LSFG layer must be
-`VK_LAYER_LSFGVK_experimental_frame_generation` from the plugin-private library. The wrapper sets `DISABLE_LSFGVK=1`
-and `DISABLE_LSFG=1`, so `VK_LAYER_LSFGVK_frame_generation` and `VK_LAYER_LS_frame_generation` may be listed as known
-manifests but must not be inserted into the game. If the build marker is absent, the HDR result does not test this
-experimental engine.
-
-In the loader's `vkCreateInstance layer callstack`, Gamescope WSI should remain above the experimental layer. Wine uses
-that position to translate its WSI handles before lower Vulkan layers receive swapchain calls. Gamescope deliberately
-changes its driver-facing swapchain copy to the sRGB colour space, so a working HDR trace can report `color-space=0`
-while selecting `mode=hdr10-pq; source=gamescope-normalized` (or `mode=scrgb-linear` for float input). If the log instead
-starts with `gamescope-hdr-pending`, that is the intentional real-frame safety state while the root-display feedback
-settles. It should be followed by `runtime-transition-applied` and the in-place colour-pipeline transition. If it remains
-pending, include the HDR preset in the report and confirm that SteamOS HDR is enabled and the game process has
-`DXVK_HDR=1`.
-
-For the current x86-64 experimental HDR test, the wrapper does not use `VK_INSTANCE_LAYERS` or a custom meta-layer.
-With `VK_LOADER_DEBUG=layer`, confirm that Gamescope WSI and
-`VK_LAYER_LSFGVK_experimental_frame_generation` are both inserted and that the LSFG build marker is present. If
-Gamescope creates swapchains but there is no `swapchain colour pipeline`, `runtime-state-applied`, or
-`swapchain-context-create` record, the experimental layer did not attach to the game's swapchain path. Re-enable the
-default SDR option to return to the isolated compatibility path while collecting the loader report.
-
-`mode=scrgb-linear` is also supported. `frame-generation=passthrough` includes a reason on the following line and is a
-safe compatibility result, not washed-out generated output.
-
-`HDR10 transport: mode=packed-10-bit` confirms that the compact path was selected. `nominal_bytes_saved` covers only
-the private source/output transport images for that context, not all LSFG allocations. `mode=rgba16f` with either
-support field at `0` means the device capability check kept the established float transport; it is useful evidence to
-include in an HDR performance report.
-
-The plugin does not force HDR on. If the game chooses an HDR format that LSFG has not validated, or LSFG cannot create
-the HDR frame-generation resources on that GPU, the engine keeps the game's native swapchain and presents real frames.
-If a game fails before reaching its menu, select its Decky profile, re-enable **Disable Experimental HDR (Restart)**,
-and restart it. That compatibility path uses the wrapper's previous isolated Vulkan discovery, preventing
-Gamescope WSI from advertising HDR so the game can boot in SDR. It also bypasses other global Vulkan layers for that
-game. Disable HDR in the game's settings, clear the Decky
-workaround, and test LSFG again. **Disable Experimental LSFG-VK on Next Launch** remains available if the LSFG layer itself is the
-problem.
+If the experimental LSFG layer itself prevents a title from starting, use **Disable Experimental LSFG-VK on Next
+Launch** and restart the game. That control is separate from the locked HDR safety boundary.
 
 ## Steam menu / Gamescope recovery
 
-The developing Gamescope HDR transport reserves generated destinations with timeout zero before scheduling model work.
-If no image is immediately available, the real game frame wins: LSFG schedules no synthetic work, presents natively,
-and retries on the next frame. It also polls private GPU work without blocking the game's present thread. The wrapper's
-50 ms acquisition ceiling remains only for the legacy non-Gamescope path. The proven SDR transport intentionally keeps
-its ordered FIFO and synchronous fence behaviour; applying the opportunistic HDR bypass to SDR caused generated frames
-to be skipped on ordinary one-frame overlap on Deck-class hardware.
+The engine's developing Gamescope HDR transport reserves generated destinations with timeout zero before scheduling
+model work, but that transport is not exposed by this Decky release. Current Decky launches use the proven SDR
+transport, which intentionally retains ordered FIFO and synchronous fence behaviour. Applying the opportunistic HDR
+bypass to SDR caused generated frames to be skipped on ordinary one-frame overlap on Deck-class hardware, so the two
+paths remain separate.
 
-Recovery never returns a fabricated out-of-date result merely to make the game rebuild its swapchain. Ordered SDR and
-Gamescope HDR deliberately use different policies. SDR refreshes two real history frames after a cadence discontinuity
+Recovery never returns a fabricated out-of-date result merely to make the game rebuild its swapchain. The engine keeps
+ordered SDR and its future Gamescope HDR path on different policies. SDR refreshes two real history frames after a cadence discontinuity
 and retains the last proven multiplier; sustained model-load collapse falls directly to the cheaper proven generated
-level, while validated 2x is retained rather than inserting a visible real-only second. HDR uses the more conservative
-bounded discontinuity recovery because a stall can also mean colour-transition or compositor-admission pressure. It
+level, while validated 2x is retained rather than inserting a visible real-only second. The inactive HDR foundation
+uses more conservative bounded discontinuity recovery because a stall can also mean colour-transition or
+compositor-admission pressure. It
 presents real frames until healthy base cadence has returned for one second, restores the proven level, or starts a
 clean ramp after the bounded timeout. This separation prevents HDR safety guards from degrading the established SDR
 path.
