@@ -105,12 +105,25 @@ SDR default. Heroic Flatpak launches explicitly keep Gamescope WSI ahead of the 
 presentation and frame limiting remain available. Existing profiles that previously opted into HDR are normalized back
 to this stable SDR boundary when loaded or saved.
 
+### HDR launch boundary
+
+These controls belong to different components and are deliberately kept separate:
+
+| Setting | Owner | Behaviour in this release |
+| --- | --- | --- |
+| `LSFGVK_DISABLE_HDR_EXPOSURE=1` | Experimental LSFG-VK layer | Blocks this layer's unfinished HDR exposure and transition path. It does not configure the game's renderer or system HDR. |
+| `DXVK_HDR` | DXVK | The wrapper unsets it instead of forcing `0`, leaving DXVK at its normal SDR default and avoiding a plugin-wide renderer override. |
+| `ENABLE_GAMESCOPE_WSI` | Gamescope | The wrapper preserves the launcher's value and keeps Gamescope's manifest available in Heroic. It never disables Gamescope to enforce LSFG's HDR boundary. |
+
+This means the plugin can keep its own HDR work disabled without changing DXVK policy or removing Gamescope's normal
+presentation and frame-limiting integration. Users should not add any of these variables manually for an ordinary SDR
+launch.
+
 HDR frame generation remains under development. The pinned engine contains format classification, HDR10/PQ and
 linear-scRGB conversion, Gamescope feedback, packed-boundary transport, and safe-passthrough groundwork, but the Decky
 launcher does not expose that path in `.25`. In-game HDR controls may therefore be disabled; this is expected. A future
 release will unlock the control only after activation, presentation, colour, and performance are validated across
-games. The private-only discovery used by the current SDR boundary also makes other global Vulkan layers unavailable
-for that game. Use
+games. Use
 **Disable Experimental LSFG-VK on Next Launch** when the layer itself is the suspected cause. The plugin
 writes `pacing = 'none'` and does not expose a
 dual-GPU control. See
