@@ -169,22 +169,28 @@ printf '%s\n' \
   "## What’s new since \`$notes_previous_package_version\`" \
   '' \
   '- **Engine update:** Bundles checksum-verified `lsfg-vk 2.0.0-dev28-experimental.25`. Complete the required in-plugin engine-update step after installing the ZIP.' \
-  '- **Automatic HDR colour path:** Preserves Gamescope WSI discovery and supports SteamOS HDR10/PQ and linear scRGB frame generation without a plugin toggle. HDR10 is converted through linear scRGB around the model; unsupported HDR transfer functions use safe real-frame passthrough.' \
+  '- **Experimental HDR support (per-game opt-in):** This is an experimental HDR path for SteamOS HDR10/PQ and linear scRGB frame generation through Gamescope. It is disabled by default while under development; enable it only for games where HDR has been tested successfully. HDR10 is converted through linear scRGB around the model, while unsupported transfer functions use safe real-frame passthrough.' \
   '- **64-bit and 32-bit Vulkan support:** Installs architecture-matched host and Flatpak layers. Vulkan selects the correct layer for each game process, so genuine 32-bit Vulkan games no longer need the old WoW64 option; existing wrappers are migrated away from stale `PROTON_USE_WOW64` exports.' \
-  '- **Rare HDR startup recovery:** A per-profile **Block HDR Detection (Restart)** workaround prevents Gamescope from advertising HDR formats, so a title that cannot start when HDR is detected can boot in SDR. It also bypasses other global Vulkan layers for that game.' \
+  '- **Experimental HDR control:** **Disable Experimental HDR (Restart)** is enabled by default for the proven SDR path. Leave it on for untested games; turn it off only for games where HDR works well, then restart. It also bypasses other global Vulkan layers while enabled.' \
   '- **Safer live reconfiguration and stall recovery:** Transient partial configuration writes are retried. Frame Generation and Adaptive Target, Maximum Multiplier, and Smooth Cadence can update in place when resources permit; resource-shape and model settings are deferred, so restart the game to guarantee those changes. A transient backend stall keeps native presentation active and warms temporal history before generation resumes.' \
   '- **Private layer discovery migration:** The wrapper now prepends the experimental manifest while leaving normal implicit layers discoverable, and Flatpak cleanup recognises both the old isolated path and the new additive path.' \
   '- **Diagnostic log presets:** Installs `~/.local/bin/lsfg-vk-experimental-diagnostics` with focused HDR, Adaptive, recovery, performance, lifecycle, startup, layer, and error filters.' \
   '- **Local engine packaging:** Maintainers can build a Decky ZIP directly from a sibling lsfg-vk checkout. The generated ZIP records the exact commit, dirty state, filenames, and checksums without changing the tracked public release pin.' \
   '- **Documentation:** Expands HDR, dual-architecture, diagnostics, Flatpak migration, local packaging, and community-coverage guidance.' \
   '' \
-  '## In-game considerations' \
+  '## 🎮 In-game considerations' \
   '' \
-  'Every game, renderer, and display setup behaves differently. Try Fixed and Adaptive Frame Generation, enable or disable the game’s V-Sync, and compare fullscreen, borderless, and windowed modes. Change one setting at a time and keep the configuration that feels best for that game.' \
+  '> [!TIP]' \
+  '> **Try the game’s V-Sync setting first.** In many games it can materially improve frame pacing and the perceived smoothness of frame generation. Test it both enabled and disabled before making deeper adjustments.' \
+  '' \
+  'Every game, renderer, and display setup behaves differently. Also compare Fixed and Adaptive Frame Generation, then fullscreen, borderless, and windowed modes. Change one setting at a time and keep the configuration that feels best for that game.' \
   '' \
   'See the [Configuration guide](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/blob/main/docs/CONFIGURATION.md) and [Troubleshooting guide](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/blob/main/docs/TROUBLESHOOTING.md) for the full behaviour and per-game controls.' \
   '' \
   '> ⚠️ **Required engine-update step:** Installing the ZIP updates the plugin files, but does **not** by itself replace the private LSFG-VK layer. Open this plugin and select **Install Experimental LSFG-VK (developer build)** to install the version bundled in the new ZIP.' \
+  '' \
+  '> [!IMPORTANT]' \
+  '> **Preferred clean update:** To prevent Decky retaining a previous plugin backend or bundled payload, especially when moving between local test ZIPs, uninstall **this experimental plugin** from Decky, install the newer ZIP, restart your Steam Deck or Steam Machine, then select **Install Experimental LSFG-VK (developer build)** in the plugin.' \
   '' \
   > "$notes_file"
 
@@ -211,18 +217,17 @@ printf '%s\n' \
   '## Updating an existing experimental installation' \
   '' \
   '1. Quit any game currently using `~/.local/bin/lsfg-vk-experimental`.' \
-  '2. Download the newer ZIP from [this fork’s releases](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/releases).' \
-  '3. In Game Mode, open Decky Loader’s settings, then choose **Developer** > **Install Plugin from Zip** and select it.' \
-  '4. Reload the plugin from Decky. If it does not reload automatically, restart your Steam Deck or Steam Machine.' \
-  '5. ⚠️ **Required:** Open this plugin and select **Install Experimental LSFG-VK (developer build)** to install the version bundled in the new ZIP. Installing the ZIP updates the plugin files, but does **not** by itself replace the private LSFG-VK layer. Do not skip this step.' \
+  '2. Uninstall **this experimental plugin** from Decky, then download the newer ZIP from [this fork’s releases](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/releases).' \
+  '3. In Game Mode, open Decky Loader’s settings, choose **Developer** > **Install Plugin from Zip**, then select the newer ZIP.' \
+  '4. Restart your Steam Deck or Steam Machine.' \
+  '5. ⚠️ **Required:** Open this plugin and select **Install Experimental LSFG-VK (developer build)** to install the version bundled in the new ZIP.' \
   '6. If you use Heroic, select **Flatpak Setup**, then select **Update** for Heroic’s matching runtime extension (usually **25.08**). This replaces its Flatpak layer with the engine bundled in the new ZIP; Heroic preparation and per-game Wrapper commands remain unchanged.' \
-  '7. If Decky does not show or reload the update, use the reinstall-and-restart fallback above, then repeat step 5.' \
   '' \
-  'Existing experimental profiles, Steam launch options, and Heroic per-game Wrapper command settings are retained. The engine files are deliberately replaced, not stacked. Prepare Heroic again only after changing the configured `Lossless.dll` location or disabling its Flatpak preparation. The public/original plugin may remain installed, but use exactly one plugin wrapper per game.' \
+  'Experimental profiles and Steam launch options are retained. The private native engine and launcher are re-created in step 5; shared Flatpak extensions are retained, then refreshed in step 6. The public/original plugin may remain installed, but use exactly one plugin wrapper per game.' \
   '' \
   "## Known limitations of lsfg-vk $engine_version" \
   '' \
-  '- **HDR scope:** SteamOS HDR10/PQ and linear scRGB are supported automatically. A game must still provide its own HDR renderer, and unsupported transfer functions such as HLG or Dolby Vision use real-frame passthrough.' \
+  '- **Experimental HDR:** This is an experimental, per-game HDR path. HDR10/PQ and linear scRGB support remains under development and is disabled by default. Enable it only for a game that has been tested successfully. A game must still provide its own HDR renderer; unsupported transfer functions such as HLG or Dolby Vision use real-frame passthrough.' \
   '' \
   '- **Layer coexistence:** The wrapper enables the uniquely named private experimental layer and disables both known public LSFG identities for that game, while leaving normal implicit-layer discovery available for Gamescope WSI. Engine selection no longer depends on same-name search ordering.' \
   '' \

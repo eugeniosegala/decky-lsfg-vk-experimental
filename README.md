@@ -21,7 +21,7 @@
 |:--:|---------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | 🖼️ | **Improved full-quality image** | In testing, v2 with **Performance Mode disabled** can show noticeably less ghosting than the older layer. Results remain game-dependent; Performance Mode is still useful when lower GPU overhead matters more than image quality.                                                                    |
 | 🎯 | **Adaptive Frame Generation**   | Optionally target 30–240 FPS while the layer varies generated frames up to a selected 2x–4x ceiling. It is disabled by default while it continues to be refined.                                                                                                                                      |
-| 🌈 | **Automatic HDR colour path**   | Preserves Gamescope WSI discovery and lets the engine process SteamOS HDR10/PQ and linear scRGB swapchains in the model's linear HDR space—without a plugin HDR switch. |
+| 🌈 | **Experimental HDR Support**    | Supports SteamOS HDR10/PQ and linear scRGB frame generation through Gamescope. It is disabled by default while under development; enable it only for games where HDR has been tested successfully. |
 | 🧩 | **64-bit and 32-bit Vulkan**     | Ships architecture-matched host and Flatpak layers. Vulkan selects the correct library for each game process, so genuine 32-bit Vulkan games no longer depend on the WoW64 workaround. |
 | 🛡️ | **Gamescope recovery**          | Bounded presentation recovery preserves proven Adaptive state, ignores transient Steam-menu cadence, refreshes history, and resumes only after the game cadence is stable again. A validated 2x Adaptive setup also recovers from short gameplay hitches without entering the longer menu/focus path. |
 | ⏯️ | **Live frame-generation switch** | Turn frame generation on or off immediately without changing the selected Fixed or Adaptive settings. Turn it back on to resume with the same profile.                                                                                                                                                |
@@ -42,12 +42,15 @@ The currently pinned engine, source commit, checksum, and upstream change record
 [latest experimental release notes](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/releases) for
 build-specific known issues.
 
-## In-game considerations
+## 🎮 In-game considerations
 
-Every game, renderer, and display setup behaves differently. For the best experience, try Fixed and Adaptive Frame
-Generation, enable or disable the game's V-Sync, and compare fullscreen, borderless, and windowed modes. Change one
-setting at a time, restart after major display or frame-generation changes, and keep the configuration that feels best
-for that game.
+> [!TIP]
+> **Try the game's V-Sync setting first.** In many games it can materially improve frame pacing and the perceived
+> smoothness of frame generation. Test it both enabled and disabled before making deeper adjustments.
+
+Every game, renderer, and display setup behaves differently. Also compare Fixed and Adaptive Frame Generation, then
+fullscreen, borderless, and windowed modes. Change one setting at a time, restart after major display or
+frame-generation changes, and keep the configuration that feels best for that game.
 
 ## Install and use
 
@@ -101,18 +104,23 @@ This is required for Gamescope WSI and HDR; selection no longer depends on ambig
 
 ### Updating
 
-Install a newer ZIP **in place**; do not normally uninstall the plugin first.
+> [!IMPORTANT]
+> **Preferred clean update:** To avoid Decky retaining a previous plugin backend or bundled payload, especially when
+> moving between local test ZIPs, uninstall **this experimental plugin** from Decky, install the newer ZIP, restart your
+> Steam Deck or Steam Machine, then open the plugin and select **Install Experimental LSFG-VK (developer build)**.
 
-1. Quit games using the experimental wrapper, then install the newer ZIP through **Developer > Install Plugin from
-   Zip**.
-2. Reload the plugin. If it does not reload, restart your Steam Deck or Steam Machine.
-3. **Required:** select **Install Experimental LSFG-VK (developer build)** to replace the private native engine with the
-   version bundled in the ZIP.
-4. If you use Heroic, open **Flatpak Setup** and select **Update** for Heroic's matching runtime extension, usually
+1. Quit games using the experimental wrapper.
+2. Uninstall **this experimental plugin** from Decky, then install the newer ZIP through **Developer > Install Plugin
+   from Zip**.
+3. Restart your Steam Deck or Steam Machine.
+4. Open the plugin and select **Install Experimental LSFG-VK (developer build)** to install the private native engine
+   bundled in the ZIP.
+5. If you use Heroic, open **Flatpak Setup** and select **Update** for Heroic's matching runtime extension, usually
    **25.08**. This updates its Flatpak engine without changing Heroic preparation or per-game Wrapper commands.
 
-Profiles, Steam launch options, and Heroic Wrapper commands are retained. If Decky fails to load the update, use the
-reinstall-and-restart fallback above, then repeat the required engine-install step.
+Profiles and Steam launch options are retained. The private native engine and launcher are re-created in step 4; shared
+Flatpak extensions are retained, then refreshed in step 5. An in-place ZIP update still works in many cases, but use
+the clean path above if Decky reports an archive error or fails to reload the plugin.
 
 ## Documentation
 

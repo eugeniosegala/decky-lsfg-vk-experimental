@@ -48,16 +48,16 @@ that explicitly select it.
 The local Decky candidate embeds only checksum-pinned artifacts. The native archive and the three-runtime Flatpak
 archive were built and verified locally from the committed `.25` source.
 
-### Automatic HDR colour path
+### Experimental HDR support
 
-The `.25` candidate classifies swapchain format and colour space together. It supports SteamOS HDR10/PQ and linear
-scRGB, converting HDR10 through linear scRGB around the frame-generation model. Ordinary 8-bit SDR and high-precision
+The `.25` candidate provides experimental SteamOS HDR10/PQ and linear-scRGB support when enabled for a tested game,
+converting HDR10 through linear scRGB around the frame-generation model. Ordinary 8-bit SDR and high-precision
 SDR remain separate modes. Unsupported or unvalidated HDR transfer functions, including HLG and Dolby Vision, bypass
 generated frames and present the game's real frames instead of guessing a conversion.
 
 The experimental wrapper remains private but now uses additive Vulkan implicit-layer discovery by default, allowing
-Gamescope WSI to advertise the compositor's HDR formats. A per-profile **Block HDR Detection (Restart)** workaround
-intentionally restores the legacy private-only discovery path for rare games that cannot start when HDR is exposed.
+Gamescope WSI to advertise the compositor's HDR formats. A per-profile **Disable Experimental HDR (Restart)** option
+defaults to the legacy private-only discovery path until HDR has been verified for that game.
 The existing **Disable Experimental LSFG-VK on Next Launch** workaround remains the last-resort recovery if the layer itself prevents
 a title from starting.
 

@@ -23,6 +23,9 @@ from py_modules.lsfg_vk.constants import (  # noqa: E402
     EXPERIMENTAL_LAYER_ENABLE_ENV,
     EXPERIMENTAL_LAYER_BUILD_MARKER,
     EXPERIMENTAL_LAYER_NAME,
+    GAMESCOPE_WSI_LAYER_NAME_64,
+    HDR_META_JSON_FILENAME_64,
+    HDR_META_LAYER_NAME_64,
     JSON32_FILENAME,
     JSON_FILENAME,
     LIB_FILENAME,
@@ -45,6 +48,9 @@ class DualArchInstallationTests(unittest.TestCase):
         self.service.user_vulkan_layer_dir = registered_dir
         self.service.registered_json_file = registered_dir / JSON_FILENAME
         self.service.registered_json32_file = registered_dir / JSON32_FILENAME
+        explicit_dir = self.root / "registered/vulkan/explicit_layer.d"
+        self.service.user_vulkan_explicit_layer_dir = explicit_dir
+        self.service.hdr_meta_json_file = explicit_dir / HDR_META_JSON_FILENAME_64
         self.service.cli_file = self.root / "bin/lsfg-vk-cli"
 
     def tearDown(self):
@@ -130,6 +136,29 @@ class DualArchInstallationTests(unittest.TestCase):
         self.assertFalse(legacy64.exists())
         self.assertFalse(legacy32.exists())
         self.assertTrue(unrelated.exists())
+
+    def test_installs_ordered_x86_64_hdr_meta_layer(self):
+        self.service._extract_and_install_files(self._archive(include_32bit=False))
+        self.service._register_layer_manifests()
+        self.service._install_hdr_meta_layer_manifest()
+
+        manifest = json.loads(
+            self.service.hdr_meta_json_file.read_text(encoding="utf-8")
+        )
+        self.assertEqual(manifest["file_format_version"], "1.1.1")
+        self.assertEqual(manifest["layer"]["name"], HDR_META_LAYER_NAME_64)
+        self.assertNotIn("library_path", manifest["layer"])
+        self.assertEqual(
+            manifest["layer"]["component_layers"],
+            [GAMESCOPE_WSI_LAYER_NAME_64, EXPERIMENTAL_LAYER_NAME],
+        )
+
+    def test_meta_layer_migration_is_idempotent(self):
+        self.service._extract_and_install_files(self._archive(include_32bit=False))
+        self.service._register_layer_manifests()
+
+        self.assertTrue(self.service.migrate_hdr_meta_layer_if_needed())
+        self.assertFalse(self.service.migrate_hdr_meta_layer_if_needed())
 
     def test_installs_64bit_only_archive_and_removes_stale_32bit_files(self):
         self.service.lib32_file.parent.mkdir(parents=True, exist_ok=True)

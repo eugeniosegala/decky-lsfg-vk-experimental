@@ -10,6 +10,9 @@ more SteamOS users discover and evaluate the project.
 - [Adaptive Frame Gen Is HERE For The Steam Deck And It's AMAZING! (Easy Guide)](https://www.youtube.com/watch?v=d47zViCRxE8)
   by [Gaming On Steam](https://www.youtube.com/@gaming_onsteam): an easy guide to Adaptive Frame Generation on Steam
   Deck.
+- [Adaptive Frame Generation fürs Steam Deck – Mehr FPS mit neuesten Decky Plugin! - Lossless Scaling!](https://www.youtube.com/watch?v=2X5k4QjJObQ)
+  by [Steam Deck Checker](https://www.youtube.com/@SteamDeckChecker): German-language coverage of Adaptive Frame
+  Generation and the latest Decky plugin.
 - [Новый плагин Lossless Scaling V.2 уже на Steam Deck](https://www.youtube.com/watch?v=ALDWl7w8dX8)
   by [Андрей-Канал Солянка](https://www.youtube.com/@Andrey_6777): Russian-language coverage of the new Lossless
   Scaling v2 plugin on Steam Deck.

@@ -31,14 +31,18 @@ class WrapperEnvironmentTests(unittest.TestCase):
         self.service = ConfigurationService(logger=_Logger())
         self.service.local_share_dir = Path("/private/lsfg/implicit_layer.d")
 
-    def _evaluate(self, extra_environment=None):
+    def _evaluate(self, extra_environment=None, config=None):
         lines = self.service._generate_layer_environment_lines()
+        if config is not None:
+            lines.extend(self.service._experimental_hdr_activation_lines(config))
         script = "\n".join(lines + [
             'printf "ADD=%s\\n" "${VK_ADD_IMPLICIT_LAYER_PATH:-}"',
             'printf "IMPLICIT=%s\\n" "${VK_IMPLICIT_LAYER_PATH:-}"',
             'printf "ENABLE=%s\\n" "${ENABLE_LSFGVK_EXPERIMENTAL:-}"',
             'printf "DISABLE_PUBLIC=%s\\n" "${DISABLE_LSFGVK:-}"',
             'printf "DISABLE_LEGACY=%s\\n" "${DISABLE_LSFG:-}"',
+            'printf "DISABLE_EXPERIMENTAL=%s\\n" "${DISABLE_LSFGVK_EXPERIMENTAL:-}"',
+            'printf "DISABLE_GAMESCOPE=%s\\n" "${DISABLE_GAMESCOPE_WSI:-}"',
             'printf "INSTANCE=%s\\n" "${VK_INSTANCE_LAYERS:-}"',
         ])
         environment = {
@@ -152,6 +156,57 @@ class WrapperEnvironmentTests(unittest.TestCase):
             "disable_hdr_exposure": False,
         })
         self.assertFalse(settings["disable_hdr_exposure"])
+
+    def test_explicit_hdr_test_opt_in_reaches_engine(self):
+        lines = self.service._experimental_hdr_activation_lines({
+            "disable_hdr_exposure": False,
+        })
+        self.assertEqual(lines, [
+            "export LSFGVK_EXPERIMENTAL_HDR=1",
+            "unset ENABLE_GAMESCOPE_WSI",
+            "unset ENABLE_LSFGVK_EXPERIMENTAL",
+            'export VK_INSTANCE_LAYERS="'
+            'VK_LAYER_DECKY_LSFGVK_experimental_hdr_stack_x86_64'
+            '${VK_INSTANCE_LAYERS:+:$VK_INSTANCE_LAYERS}"',
+        ])
+
+        values = self._evaluate(
+            {
+                "VK_INSTANCE_LAYERS":
+                    "VK_LAYER_existing_one:VK_LAYER_existing_two",
+                "ENABLE_GAMESCOPE_WSI": "1",
+                "ENABLE_LSFGVK_EXPERIMENTAL": "1",
+            },
+            {"disable_hdr_exposure": False},
+        )
+        self.assertEqual(
+            values["INSTANCE"],
+            "VK_LAYER_DECKY_LSFGVK_experimental_hdr_stack_x86_64:"
+            "VK_LAYER_existing_one:VK_LAYER_existing_two",
+        )
+        self.assertEqual(values["ENABLE"], "")
+        self.assertEqual(values["DISABLE_EXPERIMENTAL"], "")
+        self.assertEqual(values["DISABLE_GAMESCOPE"], "")
+
+    def test_default_sdr_profile_never_exports_hdr_bootstrap(self):
+        lines = self.service._experimental_hdr_activation_lines({
+            "disable_hdr_exposure": True,
+        })
+        self.assertEqual(lines, [])
+        values = self._evaluate(
+            {"VK_INSTANCE_LAYERS": "VK_LAYER_existing"},
+            {"disable_hdr_exposure": True},
+        )
+        self.assertEqual(values["INSTANCE"], "VK_LAYER_existing")
+        self.assertEqual(values["DISABLE_EXPERIMENTAL"], "")
+        self.assertEqual(values["DISABLE_GAMESCOPE"], "")
+
+    def test_full_layer_disable_does_not_activate_hdr_meta_layer(self):
+        lines = self.service._experimental_hdr_activation_lines({
+            "disable_hdr_exposure": False,
+            "disable_lsfgvk": True,
+        })
+        self.assertEqual(lines, [])
 
     def test_full_layer_disable_targets_only_experimental_identity(self):
         lines = get_script_generation_logic()({"disable_lsfgvk": True})

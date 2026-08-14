@@ -430,6 +430,12 @@ class Plugin:
             decky.logger.warning("Could not remove obsolete vkBasalt exports: %s", error)
 
         try:
+            if self.installation_service.migrate_hdr_meta_layer_if_needed():
+                decky.logger.info("Installed the deterministic experimental HDR meta-layer")
+        except OSError as error:
+            decky.logger.warning("Could not install the experimental HDR meta-layer: %s", error)
+
+        try:
             if self.configuration_service.migrate_launch_script_if_needed():
                 decky.logger.info("Upgraded installed experimental launch wrapper to the current format")
         except OSError as error:

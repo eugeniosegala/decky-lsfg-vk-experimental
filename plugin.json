@@ -4,7 +4,7 @@
   "flags": [],
   "api_version": 1,
   "publish": {
-    "tags": ["installer", "vulkan", "lsfg", "framegen", "lossless", "scaling"],
+    "tags": ["installer", "vulkan", "lsfg", "framegen", "lossless", "scaling", "steam-machine"],
     "description": "Experimental lsfg-vk compatibility-layer features for Steam OS.",
     "image": "https://raw.githubusercontent.com/eugeniosegala/decky-lsfg-vk-experimental/refs/heads/main/assets/Decky_LSFG-VK_Master_1.png"
   }

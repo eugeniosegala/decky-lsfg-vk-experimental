@@ -125,7 +125,7 @@ export const CONFIG_SCHEMA: Record<string, ConfigField> = {
     name: "disable_hdr_exposure",
     fieldType: ConfigFieldType.BOOLEAN,
     default: true,
-    description: "keep developing HDR support blocked by default; disable and restart only for HDR testing"
+    description: "disable experimental HDR by default; turn off only for games verified with HDR"
   },
   dxvk_frame_rate: {
     name: "dxvk_frame_rate",

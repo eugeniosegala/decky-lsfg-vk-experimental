@@ -235,8 +235,8 @@ export function ConfigurationSection({
         <>
           <PanelSectionRow>
             <ToggleField
-              label={t("CONFIG_DISABLE_HDR_EXPOSURE", "Block Experimental HDR (Recommended, Restart)")}
-              description={t("CONFIG_DISABLE_HDR_EXPOSURE_DESC", "HDR frame generation is still in development and some games may have startup, colour, loading, or performance problems. Keep this enabled for the proven SDR path. Disable it and restart the game only when testing HDR. This also bypasses other global Vulkan layers for that game.")}
+              label={t("CONFIG_DISABLE_HDR_EXPOSURE", "Disable Experimental HDR (Restart)")}
+              description={t("CONFIG_DISABLE_HDR_EXPOSURE_DESC", "Experimental HDR is still in development and is disabled by default. Leave this on for untested games. Turn it off only for games where HDR works well, then restart.")}
               checked={config.disable_hdr_exposure}
               onChange={(value) => onConfigChange(DISABLE_HDR_EXPOSURE, value)}
             />

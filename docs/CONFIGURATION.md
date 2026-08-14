@@ -65,8 +65,8 @@ The following settings are profile-based and support that automatic match:
 The `Lossless.dll` path and FP16 permission are shared globally because they apply to the installed engine, not to an
 individual game.
 
-Decky also keeps the launcher compatibility options per profile—Disable Experimental LSFG-VK on Next Launch, Block
-Experimental HDR (Recommended, Restart), Base FPS Cap, Steam Deck Mode, and Zink. They are saved in this plugin's private profile state and
+Decky also keeps the launcher compatibility options per profile—Disable Experimental LSFG-VK on Next Launch, Disable
+Experimental HDR (Restart), Base FPS Cap, Steam Deck Mode, and Zink. They are saved in this plugin's private profile state and
 are restored when you select that profile in Decky. They cannot follow **Active In** automatically: those variables must
 be set by the wrapper before lsfg-vk sees the game's process name. Select the profile manually before launching a game
 that needs one of those compatibility options, then restart the game after changing profiles.
@@ -100,15 +100,24 @@ remain 64-bit because they are not loaded into the game process.
 Gamescope WSI and MangoHud controls are deliberately not shown. The wrapper enables this plugin's uniquely named
 experimental layer and disables both public LSFG identities for that game. Normal implicit-layer discovery remains
 available, so Vulkan can still discover Gamescope WSI when SteamOS enables it. Existing caller-supplied layer paths are
-preserved. The wrapper does not modify `VK_INSTANCE_LAYERS`: the experimental layer stays below Gamescope's Wine WSI
-bridge so Wine translates its dispatchable handles before LSFG sees them. Gamescope normalizes the driver-facing colour
-space to sRGB, so the engine recovers HDR semantics only for its exact packed-10-bit or float HDR formats while the
-Gamescope session advertises HDR. Engine selection still does not depend on ambiguous manifest search ordering.
+preserved. Default SDR does not modify `VK_INSTANCE_LAYERS`. When a profile explicitly enables the developing HDR path,
+the current x86-64 test wrapper enables a plugin-owned Vulkan meta-layer whose ordered components are Gamescope WSI then
+experimental LSFG. That keeps Gamescope's Wine WSI bridge application-facing and ensures LSFG receives its translated
+swapchain handles. The wrapper withholds the variables that automatically activate the unordered standalone implicit
+instances for that process; Vulkan activates the same component manifests explicitly through the meta-layer in
+deterministic order. It deliberately does not set the components' hard-disable variables, because the SteamOS loader
+also applies those gates to meta-layer components. This avoids relying on implicit-manifest
+enumeration or on duplicate component names in `VK_INSTANCE_LAYERS`, both of which left the already-enabled discovery
+order unchanged in captured SteamOS traces. Gamescope normalizes the driver-facing colour space to sRGB, so the engine
+recovers HDR semantics only for its exact packed-10-bit or float HDR formats while the Gamescope session advertises HDR.
 
-HDR frame generation is still in development, and some games may have startup, colour, loading, or performance problems.
-The plugin therefore defaults **Block Experimental HDR (Recommended, Restart)** to enabled, retaining the proven SDR
-path. To test HDR, select the game's Decky profile, disable that option, enable HDR in SteamOS and the game, then restart
-the game. Compatible games are detected automatically; there is no force-HDR mode. The engine recognizes Gamescope
+Experimental HDR frame generation is still in development, so **Disable Experimental HDR (Restart)** is enabled by
+default, retaining the proven SDR path. Leave it on for untested games. If HDR works well for a particular game, turn
+the option off for that game's Decky profile, enable HDR in SteamOS and the game, then restart the game. Turning it off
+also marks that launch as an explicit experimental-HDR test. This lets the engine recover
+Gamescope-normalized HDR formats when the compositor leaves its cached app-HDR Boolean property unset, but only while
+the Gamescope output itself is HDR; blocked/default SDR profiles never authorize that compatibility path. Compatible
+games are otherwise detected automatically; there is no force-HDR mode. The engine recognizes Gamescope
 HDR10/PQ and linear-scRGB swapchain combinations and converts HDR10 to linear scRGB around frame generation. Unsupported
 transfer functions and initialization failures remain on real-frame passthrough. The blocking option restores
 private-only Vulkan discovery, so other global Vulkan layers are unavailable for that game while it is enabled. Use

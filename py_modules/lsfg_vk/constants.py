@@ -9,6 +9,7 @@ LOCAL_LIB = f"{EXPERIMENTAL_ROOT}/lib"
 LOCAL_LIB32 = f"{EXPERIMENTAL_ROOT}/lib32"
 VULKAN_LAYER_DIR = f"{EXPERIMENTAL_ROOT}/vulkan/implicit_layer.d"
 USER_VULKAN_LAYER_DIR = ".local/share/vulkan/implicit_layer.d"
+USER_VULKAN_EXPLICIT_LAYER_DIR = ".local/share/vulkan/explicit_layer.d"
 CONFIG_DIR = ".config/decky-lsfg-vk-experimental"
 
 SCRIPT_NAME = ".local/bin/lsfg-vk-experimental"
@@ -28,6 +29,14 @@ WRAPPER_PROFILE_SETTINGS_FILENAME = "profile-wrapper-settings.json"
 # package.json remote_binary record so the release pin has one source of truth.
 LIB_FILENAME = "liblsfg-vk-layer.so"
 EXPERIMENTAL_LAYER_NAME = "VK_LAYER_LSFGVK_experimental_frame_generation"
+# The current lightweight HDR test package is x86-64 only. Gamescope must be
+# the application-facing WSI bridge and LSFG must follow it so LSFG receives
+# Gamescope's translated swapchain handles. A private explicit meta-layer is
+# used because Vulkan deliberately leaves standalone implicit-manifest order
+# undefined.
+GAMESCOPE_WSI_LAYER_NAME_64 = "VK_LAYER_FROG_gamescope_wsi_x86_64"
+HDR_META_LAYER_NAME_64 = "VK_LAYER_DECKY_LSFGVK_experimental_hdr_stack_x86_64"
+HDR_META_JSON_FILENAME_64 = "VkLayer_DECKY_LSFGVK_experimental_hdr_stack.x86_64.json"
 EXPERIMENTAL_LAYER_ENABLE_ENV = "ENABLE_LSFGVK_EXPERIMENTAL"
 EXPERIMENTAL_LAYER_DISABLE_ENV = "DISABLE_LSFGVK_EXPERIMENTAL"
 EXPERIMENTAL_LAYER_BUILD_MARKER = (

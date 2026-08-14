@@ -18,6 +18,7 @@ from .constants import (
     DIAGNOSTICS_HELPER_FILENAME, EXPERIMENTAL_LAYER_NAME,
     EXPERIMENTAL_LAYER_ENABLE_ENV, EXPERIMENTAL_LAYER_DISABLE_ENV,
     EXPERIMENTAL_LAYER_BUILD_MARKER, LEGACY_PRIVATE_JSON_FILENAMES,
+    GAMESCOPE_WSI_LAYER_NAME_64, HDR_META_LAYER_NAME_64,
 )
 from .config_schema import ConfigurationManager
 from .types import InstallationResponse, UninstallationResponse, InstallationCheckResponse
@@ -67,6 +68,7 @@ class InstallationService(BaseService):
             # a wrapper-only additive search path can select a public layer
             # with the same historical name instead of this private payload.
             self._register_layer_manifests()
+            self._install_hdr_meta_layer_manifest()
             self._remove_legacy_private_manifests()
             
             self._create_config_file()
@@ -325,6 +327,54 @@ class InstallationService(BaseService):
         else:
             self._remove_if_exists(self.registered_json32_file)
 
+    @staticmethod
+    def _hdr_meta_layer_manifest() -> Dict[str, Any]:
+        """Describe the deterministic x86-64 Gamescope -> LSFG HDR stack.
+
+        Vulkan meta-layer order is call-chain order: the first component is
+        closest to the application. API 1.3 is the common floor supported by
+        the SteamOS Gamescope layer and this experimental LSFG layer.
+        """
+        return {
+            "file_format_version": "1.1.1",
+            "layer": {
+                "name": HDR_META_LAYER_NAME_64,
+                "type": "GLOBAL",
+                "api_version": "1.3.0",
+                "implementation_version": "1",
+                "description": (
+                    "Decky LSFG-VK experimental x86-64 HDR layer ordering"
+                ),
+                "component_layers": [
+                    GAMESCOPE_WSI_LAYER_NAME_64,
+                    EXPERIMENTAL_LAYER_NAME,
+                ],
+            },
+        }
+
+    def _install_hdr_meta_layer_manifest(self) -> None:
+        """Install the inactive-by-default explicit HDR meta-layer."""
+        self.user_vulkan_explicit_layer_dir.mkdir(parents=True, exist_ok=True)
+        content = json.dumps(
+            self._hdr_meta_layer_manifest(),
+            indent=2,
+            sort_keys=False,
+        ) + "\n"
+        self._write_file(self.hdr_meta_json_file, content, 0o644)
+
+    def migrate_hdr_meta_layer_if_needed(self) -> bool:
+        """Create or refresh the meta-layer for an existing engine install."""
+        if not self.lib_file.exists() or not self.registered_json_file.exists():
+            return False
+        expected = self._hdr_meta_layer_manifest()
+        try:
+            if json.loads(self.hdr_meta_json_file.read_text(encoding="utf-8")) == expected:
+                return False
+        except (OSError, json.JSONDecodeError, TypeError):
+            pass
+        self._install_hdr_meta_layer_manifest()
+        return True
+
     def _remove_legacy_private_manifests(self) -> None:
         """Remove only obsolete manifests inside this plugin's private directory."""
         for filename in LEGACY_PRIVATE_JSON_FILENAMES:
@@ -391,6 +441,8 @@ class InstallationService(BaseService):
         config_service = ConfigurationService(logger=self.log)
         config_service.user_home = self.user_home
         config_service.local_share_dir = self.local_share_dir
+        config_service.user_vulkan_explicit_layer_dir = self.user_vulkan_explicit_layer_dir
+        config_service.hdr_meta_json_file = self.hdr_meta_json_file
         config_service.config_dir = self.config_dir
         config_service.config_file_path = self.config_file_path
         config_service.lsfg_script_path = self.lsfg_launch_script_path
@@ -459,9 +511,11 @@ class InstallationService(BaseService):
             json32_exists = self.json32_file.exists()
             registered_json_exists = self.registered_json_file.exists()
             registered_json32_exists = self.registered_json32_file.exists()
+            hdr_meta_json_exists = self.hdr_meta_json_file.exists()
             script_exists = self.lsfg_launch_script_path.exists()
             installed = (
-                lib_exists and json_exists and registered_json_exists and script_exists
+                lib_exists and json_exists and registered_json_exists
+                and hdr_meta_json_exists and script_exists
             )
             expected = self._bundled_archive_metadata(Path(__file__).parent.parent.parent)
             expects_32bit = "32" in expected.get("architectures", ["64", "32"])
@@ -480,9 +534,11 @@ class InstallationService(BaseService):
             
             self.log.info(
                 "Installation check: lib64=%s, lib32=%s, private-json64=%s, "
-                "private-json32=%s, registered-json64=%s, registered-json32=%s, script=%s",
+                "private-json32=%s, registered-json64=%s, registered-json32=%s, "
+                "hdr-meta-json64=%s, script=%s",
                 lib_exists, lib32_exists, json_exists, json32_exists,
-                registered_json_exists, registered_json32_exists, script_exists,
+                registered_json_exists, registered_json32_exists,
+                hdr_meta_json_exists, script_exists,
             )
             
             return {
@@ -532,6 +588,7 @@ class InstallationService(BaseService):
             files_to_remove = [
                 self.lib_file, self.lib32_file, self.json_file, self.json32_file,
                 self.registered_json_file, self.registered_json32_file,
+                self.hdr_meta_json_file,
                 self.cli_file, self.engine_state_file, self.lsfg_launch_script_path,
                 self.diagnostics_script_path,
             ]
@@ -588,6 +645,7 @@ class InstallationService(BaseService):
             files_to_remove = [
                 self.lib_file, self.lib32_file, self.json_file, self.json32_file,
                 self.registered_json_file, self.registered_json32_file,
+                self.hdr_meta_json_file,
                 self.cli_file, self.engine_state_file, self.lsfg_launch_script_path,
                 self.lsfg_script_path, self.diagnostics_script_path,
             ]
