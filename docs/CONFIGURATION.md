@@ -5,15 +5,19 @@ where supported. Adaptive mode defaults to a **90 FPS** target with **Smooth Cad
 changed while a game is running, but the layer briefly resets its timing and stability calculations afterwards. Let it
 settle for a few seconds before judging performance. Fixed and Adaptive reserve one shared generated-frame capacity,
 so switching between them applies live when the selected multiplier/ceiling fits that capacity. The layer never forces
-the game to rebuild its swapchain for a UI change. GPU-backend, flow-scale, performance-mode, or HDR resource changes
-that cannot be applied safely remain pending until the game naturally recreates its swapchain or is restarted.
+the game to rebuild its swapchain for a UI change. A confirmed Gamescope HDR/SDR change rebuilds only LSFG's private
+colour resources after their in-flight work completes; real game frames pass through during that short transition.
+Other GPU-backend, flow-scale, or performance-mode changes that cannot be applied safely remain pending until the game
+naturally recreates its swapchain or is restarted.
 
 ## Frame-generation mode
 
 - **Frame Generation:** The first control switches frame generation on or off immediately, without changing the selected
   Fixed or Adaptive settings. Turn it back on to resume with those settings.
 - **FPS Multiplier:** Fixed 2x, 3x, or 4x generation. lsfg-vk v2 has no fixed 0x multiplier; use the live **Frame
-  Generation** switch instead.
+  Generation** switch instead. Under Gamescope, the engine uses the confirmed display refresh as a delivery budget:
+  it suppresses synthetic frames that cannot be scanned out rather than letting a nominal 2x/3x/4x sequence run above
+  the display rate. This does not cap the game's real frames.
 - **Adaptive Frame Generation:** Optional mode that estimates the real frame rate and schedules zero to three generated
   frames to approach the selected target. It replaces the fixed multiplier controls for that profile. Target, ceiling,
   and Smooth Cadence changes apply live; expect a short settling period while Adaptive recalculates its timing.

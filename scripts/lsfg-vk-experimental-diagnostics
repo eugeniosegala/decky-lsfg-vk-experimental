@@ -125,7 +125,7 @@ for preset in "${presets[@]}"; do
     hdr)
       add_pattern 'lsfg-vk: (swapchain colour pipeline|HDR10 transport|frame generation disabled for this swapchain|frame generation is off for this swapchain|LSFG frame-generation initialization failed)'
       add_pattern 'lsfg-vk: Gamescope application HDR feedback'
-      add_pattern 'lsfg-vk: present diagnostics: operation=(runtime-transition-pending|runtime-state-applied)'
+      add_pattern 'lsfg-vk: present diagnostics: operation=(runtime-transition-pending|runtime-transition-applied|runtime-state-applied|gamescope-refresh-rate-applied)'
       ;;
     config)
       add_pattern 'lsfg-vk: (updated lsfg-vk configuration in place|configuration changes requiring GPU resource reconstruction|global backend construction changed)'
@@ -133,13 +133,13 @@ for preset in "${presets[@]}"; do
       ;;
     adaptive)
       add_pattern 'lsfg-vk: present diagnostics: operation=adaptive-'
-      add_pattern 'lsfg-vk: present diagnostics: operation=(runtime-transition-pending|runtime-state-applied)'
+      add_pattern 'lsfg-vk: present diagnostics: operation=(runtime-transition-pending|runtime-transition-applied|runtime-state-applied|generated-delivery-miss|gamescope-refresh-rate-applied)'
       ;;
     recovery)
-      add_pattern 'lsfg-vk: present diagnostics: operation=(skip-generated-frames|resume-generated-frames|generated-image-recovered|history-warmup|swapchain-recreation-suppressed)'
+      add_pattern 'lsfg-vk: present diagnostics: operation=(skip-generated-frames|resume-generated-frames|generated-image-recovered|generated-delivery-miss|history-warmup|swapchain-recreation-suppressed|runtime-transition-pending|runtime-transition-applied)'
       ;;
     performance)
-      add_pattern 'lsfg-vk: present diagnostics: operation=(fixed-plan|present-|schedule-|submit-|acquire-|wait-|copy-|render-)'
+      add_pattern 'lsfg-vk: present diagnostics: operation=(fixed-plan|generated-delivery-miss|gamescope-refresh-rate-applied|present-|schedule-|submit-|acquire-|wait-|copy-|render-)'
       ;;
     lifecycle)
       add_pattern 'lsfg-vk: present diagnostics: operation=swapchain-context-(create|destroy)'

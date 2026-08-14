@@ -22,7 +22,8 @@ For a quick engine check, start the game from Steam and inspect its log for a li
 
 ```text
 lsfg-vk: experimental layer active; identity=VK_LAYER_LSFGVK_experimental_frame_generation; build=2.0.0-dev28-experimental.25
-lsfg-vk: swapchain colour pipeline: format=64; color-space=0; mode=hdr10-pq; source=gamescope-normalized; transport=packed-hdr10-32-bit; frame-generation=supported
+lsfg-vk: Gamescope application HDR feedback stabilized: active=1; contexts_pending_private_transition=1
+lsfg-vk: swapchain colour pipeline transitioned in place: mode=hdr10-pq; transport=packed-hdr10-32-bit; application_device_supported=1; backend_device_supported=1
 lsfg-vk: HDR10 transport: mode=packed-10-bit; nominal_bytes=16384000; nominal_bytes_saved=16384000; application_device_supported=1; backend_device_supported=1
 ```
 
@@ -36,7 +37,10 @@ In the loader's `vkCreateInstance layer callstack`, Gamescope WSI should remain 
 that position to translate its WSI handles before lower Vulkan layers receive swapchain calls. Gamescope deliberately
 changes its driver-facing swapchain copy to the sRGB colour space, so a working HDR trace can report `color-space=0`
 while selecting `mode=hdr10-pq; source=gamescope-normalized` (or `mode=scrgb-linear` for float input). If the log instead
-selects `sdr-high-precision`, confirm that SteamOS HDR is enabled and the game process has `DXVK_HDR=1`.
+starts with `gamescope-hdr-pending`, that is the intentional real-frame safety state while the root-display feedback
+settles. It should be followed by `runtime-transition-applied` and the in-place colour-pipeline transition. If it remains
+pending, include the HDR preset in the report and confirm that SteamOS HDR is enabled and the game process has
+`DXVK_HDR=1`.
 
 `mode=scrgb-linear` is also supported. `frame-generation=passthrough` includes a reason on the following line and is a
 safe compatibility result, not washed-out generated output.
@@ -57,9 +61,10 @@ problem. A separate everyday HDR switch is intentionally avoided.
 
 ## Steam menu / Gamescope recovery
 
-The experimental wrapper enables a 50 ms bound when Gamescope does not release an extra generated-frame image. Rather
-than waiting indefinitely, lsfg-vk presents the real game frame, keeps temporal history current, and probes for an
-available generated image at a bounded rate.
+The experimental wrapper supplies a 50 ms absolute safety ceiling, while the engine automatically tightens the actual
+Gamescope generated-image deadline to 75% of one confirmed display slot (clamped to 1–12 ms). It reserves an image
+before scheduling expensive model work. If the image cannot arrive while it is still useful, lsfg-vk presents the real
+game frame, keeps temporal history current, and probes for an available generated image at a bounded rate.
 
 Recovery is always in place: the layer never returns a fabricated out-of-date result merely to make the game rebuild
 its swapchain. It refreshes real-frame history, retains the last proven generation level, and delays higher probes. A
@@ -153,11 +158,11 @@ diagnostics or change the game configuration.
 If the helper is unavailable, these raw commands provide the two most common reports:
 
 ```bash
-# HDR selection and safe fallback.
-grep -aE 'lsfg-vk: (Gamescope application HDR feedback|swapchain colour pipeline|HDR10 transport|frame generation disabled|LSFG frame-generation initialization failed)|lsfg-vk: present diagnostics: operation=(runtime-transition-pending|runtime-state-applied)' ~/.config/decky-lsfg-vk-experimental/present-diagnostics.log | tail -n 200
+# HDR selection, private transition, and safe fallback.
+grep -aE 'lsfg-vk: (Gamescope application HDR feedback|swapchain colour pipeline|HDR10 transport|frame generation disabled|LSFG frame-generation initialization failed)|lsfg-vk: present diagnostics: operation=(runtime-transition-pending|runtime-transition-applied|runtime-state-applied|gamescope-refresh-rate-applied)' ~/.config/decky-lsfg-vk-experimental/present-diagnostics.log | tail -n 200
 
 # Adaptive policy and Gamescope recovery.
-grep -aE 'lsfg-vk: present diagnostics: operation=(runtime-transition-pending|runtime-state-applied|fixed-plan|adaptive-|skip-generated-frames|resume-generated-frames|generated-image-recovered|history-warmup|swapchain-recreation-suppressed|swapchain-context-create|swapchain-context-destroy)' ~/.config/decky-lsfg-vk-experimental/present-diagnostics.log | tail -n 800
+grep -aE 'lsfg-vk: present diagnostics: operation=(runtime-transition-pending|runtime-transition-applied|runtime-state-applied|gamescope-refresh-rate-applied|generated-delivery-miss|fixed-plan|adaptive-|skip-generated-frames|resume-generated-frames|generated-image-recovered|history-warmup|swapchain-recreation-suppressed|swapchain-context-create|swapchain-context-destroy)' ~/.config/decky-lsfg-vk-experimental/present-diagnostics.log | tail -n 800
 ```
 
 Remove the temporary Steam launch variables or Heroic environment rows afterwards: diagnostics can generate substantial
