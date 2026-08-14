@@ -168,6 +168,7 @@ export function Content() {
             dllDetectionStatus={dllDetectionStatus}
             isInstalled={isInstalled}
             installationStatus={installationStatus}
+            topMargin="16px"
           />
         </>
       )}
