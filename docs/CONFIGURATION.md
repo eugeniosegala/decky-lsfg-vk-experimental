@@ -14,8 +14,9 @@ naturally recreates its swapchain or is restarted.
 
 - **Frame Generation (Live On/Off):** Leave this control on to use either Fixed or Adaptive Frame Generation. When
   it is off, neither mode generates frames; your selected mode and settings remain saved for when you turn it back on.
-- **FPS Multiplier:** Fixed 2x, 3x, or 4x generation. lsfg-vk v2 has no fixed 0x multiplier; use the live **Frame
-  Generation** switch instead. Under Gamescope, the engine uses the confirmed display refresh as a delivery budget:
+- **FPS Multiplier:** Fixed 2x, 3x, or 4x generation. Use the live **Frame Generation** switch to pass through real
+  frames without changing the selected mode. Under Gamescope, the engine uses the confirmed display refresh as a
+  delivery budget:
   it suppresses synthetic frames that cannot be scanned out rather than letting a nominal 2x/3x/4x sequence run above
   the display rate. This does not cap the game's real frames.
 - **Adaptive Frame Generation:** Optional mode that estimates the real frame rate and schedules zero to three generated
