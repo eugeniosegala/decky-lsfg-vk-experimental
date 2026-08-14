@@ -171,7 +171,7 @@ printf '%s\n' \
   '- **Engine update:** Bundles checksum-verified `lsfg-vk 2.0.0-dev28-experimental.25`. Complete the required in-plugin engine-update step after installing the ZIP.' \
   '- **Automatic HDR colour path:** Preserves Gamescope WSI discovery and supports SteamOS HDR10/PQ and linear scRGB frame generation without a plugin toggle. HDR10 is converted through linear scRGB around the model; unsupported HDR transfer functions use safe real-frame passthrough.' \
   '- **64-bit and 32-bit Vulkan support:** Installs architecture-matched host and Flatpak layers. Vulkan selects the correct layer for each game process, so genuine 32-bit Vulkan games no longer need the old WoW64 option; existing wrappers are migrated away from stale `PROTON_USE_WOW64` exports.' \
-  '- **Rare HDR startup recovery:** A per-profile **Hide HDR from Game (Restart)** workaround restores legacy isolated Vulkan discovery so a title that cannot start when HDR is advertised can boot in SDR.' \
+  '- **Rare HDR startup recovery:** A per-profile **Block HDR Detection (Restart)** workaround prevents Gamescope from advertising HDR formats, so a title that cannot start when HDR is detected can boot in SDR. It also bypasses other global Vulkan layers for that game.' \
   '- **Safer live reconfiguration and stall recovery:** Transient partial configuration writes are retried. Frame Generation and Adaptive Target, Maximum Multiplier, and Smooth Cadence can update in place when resources permit; resource-shape and model settings are deferred, so restart the game to guarantee those changes. A transient backend stall keeps native presentation active and warms temporal history before generation resumes.' \
   '- **Private layer discovery migration:** The wrapper now prepends the experimental manifest while leaving normal implicit layers discoverable, and Flatpak cleanup recognises both the old isolated path and the new additive path.' \
   '- **Diagnostic log presets:** Installs `~/.local/bin/lsfg-vk-experimental-diagnostics` with focused HDR, Adaptive, recovery, performance, lifecycle, startup, layer, and error filters.' \
@@ -220,7 +220,7 @@ printf '%s\n' \
   '' \
   '- **HDR scope:** SteamOS HDR10/PQ and linear scRGB are supported automatically. A game must still provide its own HDR renderer, and unsupported transfer functions such as HLG or Dolby Vision use real-frame passthrough.' \
   '' \
-  '- **Layer coexistence:** The wrapper adds the private experimental manifest before normal implicit-layer discovery so Gamescope WSI remains available. If the public LSFG-VK manifest is also installed, Vulkan keeps the first same-named layer and the private experimental payload wins. Other enabled implicit layers may now be discoverable for that game.' \
+  '- **Layer coexistence:** The wrapper enables the uniquely named private experimental layer and disables both known public LSFG identities for that game, while leaving normal implicit-layer discovery available for Gamescope WSI. Engine selection no longer depends on same-name search ordering.' \
   '' \
   '## Before you play' \
   '' \

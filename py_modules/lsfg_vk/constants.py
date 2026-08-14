@@ -8,6 +8,7 @@ EXPERIMENTAL_ROOT = ".local/share/decky-lsfg-vk-experimental"
 LOCAL_LIB = f"{EXPERIMENTAL_ROOT}/lib"
 LOCAL_LIB32 = f"{EXPERIMENTAL_ROOT}/lib32"
 VULKAN_LAYER_DIR = f"{EXPERIMENTAL_ROOT}/vulkan/implicit_layer.d"
+USER_VULKAN_LAYER_DIR = ".local/share/vulkan/implicit_layer.d"
 CONFIG_DIR = ".config/decky-lsfg-vk-experimental"
 
 SCRIPT_NAME = ".local/bin/lsfg-vk-experimental"
@@ -19,19 +20,26 @@ DIAGNOSTICS_HELPER_FILENAME = "lsfg-vk-experimental-diagnostics"
 # availability before scheduling inference and periodically reuses this bound
 # to avoid missing the compositor's image-release window indefinitely.
 PRESENT_ACQUIRE_TIMEOUT_MS = 50
-# After Adaptive recovers from a genuine generated-image timeout, ask the
-# application to rebuild its game-owned swapchain. This clears presentation
-# state that cannot be reset by recreating only the internal LSFG context.
-PRESENT_RECOVERY_RECREATE = 1
 CONFIG_FILENAME = "conf.toml"
 # The engine reads conf.toml directly, so Decky-only launcher settings must be
 # stored separately rather than adding unknown keys to an upstream profile.
 WRAPPER_PROFILE_SETTINGS_FILENAME = "profile-wrapper-settings.json"
-# Bundled upstream payload filenames. The archive name is read from the packaged
+# Bundled experimental payload filenames. The archive name is read from the packaged
 # package.json remote_binary record so the release pin has one source of truth.
 LIB_FILENAME = "liblsfg-vk-layer.so"
-JSON_FILENAME = "VkLayer_LSFGVK_frame_generation.json"
-JSON32_FILENAME = "VkLayer_LSFGVK_frame_generation.x86.json"
+EXPERIMENTAL_LAYER_NAME = "VK_LAYER_LSFGVK_experimental_frame_generation"
+EXPERIMENTAL_LAYER_ENABLE_ENV = "ENABLE_LSFGVK_EXPERIMENTAL"
+EXPERIMENTAL_LAYER_DISABLE_ENV = "DISABLE_LSFGVK_EXPERIMENTAL"
+EXPERIMENTAL_LAYER_BUILD_MARKER = (
+    b"lsfg-vk: experimental layer active; identity="
+    b"VK_LAYER_LSFGVK_experimental_frame_generation; build="
+)
+JSON_FILENAME = "VkLayer_LSFGVK_experimental_frame_generation.json"
+JSON32_FILENAME = "VkLayer_LSFGVK_experimental_frame_generation.x86.json"
+LEGACY_PRIVATE_JSON_FILENAMES = (
+    "VkLayer_LSFGVK_frame_generation.json",
+    "VkLayer_LSFGVK_frame_generation.x86.json",
+)
 CLI_FILENAME = "lsfg-vk-cli"
 CLI_DIR = f"{EXPERIMENTAL_ROOT}/bin"
 

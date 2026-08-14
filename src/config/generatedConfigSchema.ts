@@ -119,13 +119,13 @@ export const CONFIG_SCHEMA: Record<string, ConfigField> = {
     name: "disable_lsfgvk",
     fieldType: ConfigFieldType.BOOLEAN,
     default: false,
-    description: "disable lsfg-vk on the next launch (requires a game restart)"
+    description: "troubleshooting: prevent the experimental layer loading after restart"
   },
   disable_hdr_exposure: {
     name: "disable_hdr_exposure",
     fieldType: ConfigFieldType.BOOLEAN,
     default: false,
-    description: "hide Gamescope HDR formats for startup recovery until disabled"
+    description: "emergency SDR startup path for games that fail when SteamOS HDR is detected"
   },
   dxvk_frame_rate: {
     name: "dxvk_frame_rate",

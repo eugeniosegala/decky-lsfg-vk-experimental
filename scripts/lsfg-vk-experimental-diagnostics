@@ -18,9 +18,10 @@ private log does not exist.
 
 Presets:
   hdr          HDR/scRGB selection, passthrough, and initialization
+  config       Decky reloads and pending/applied safe runtime transitions
   adaptive     Adaptive policy, stabilization, ramp, rescue, and cadence
-  recovery     generated-image fallback, history warm-up, and recreation
-  performance  slow presentation, copy, scheduling, and submission operations
+  recovery     generated-image fallback, history warm-up, and in-place recovery
+  performance  fixed-rate telemetry plus slow presentation and GPU operations
   lifecycle    swapchain creation/destruction and colour-pipeline selection
   startup      layer discovery, context creation, HDR selection, and failures
   layers       Vulkan-loader, Gamescope WSI, and LSFG layer discovery
@@ -42,7 +43,7 @@ EOF
 }
 
 list_presets() {
-  printf '%s\n' hdr adaptive recovery performance lifecycle startup layers errors all
+  printf '%s\n' hdr config adaptive recovery performance lifecycle startup layers errors all
 }
 
 while (($#)); do
@@ -114,38 +115,53 @@ add_pattern() {
   pattern+="($1)"
 }
 
+# Every report should identify the exact engine that produced it. This makes a
+# missing experimental layer visible even when the user selects only a focused
+# preset such as HDR or performance.
+add_pattern 'lsfg-vk: experimental layer active; identity=VK_LAYER_LSFGVK_experimental_frame_generation; build='
+
 for preset in "${presets[@]}"; do
   case "$preset" in
     hdr)
       add_pattern 'lsfg-vk: (swapchain colour pipeline|frame generation disabled for this swapchain|frame generation is off for this swapchain|LSFG frame-generation initialization failed)'
+      add_pattern 'lsfg-vk: Gamescope application HDR feedback'
+      add_pattern 'lsfg-vk: present diagnostics: operation=(runtime-transition-pending|runtime-state-applied)'
+      ;;
+    config)
+      add_pattern 'lsfg-vk: (updated lsfg-vk configuration in place|configuration changes requiring GPU resource reconstruction|global backend construction changed)'
+      add_pattern 'lsfg-vk: present diagnostics: operation=(runtime-transition-pending|runtime-state-applied)'
       ;;
     adaptive)
       add_pattern 'lsfg-vk: present diagnostics: operation=adaptive-'
+      add_pattern 'lsfg-vk: present diagnostics: operation=(runtime-transition-pending|runtime-state-applied)'
       ;;
     recovery)
-      add_pattern 'lsfg-vk: present diagnostics: operation=(skip-generated-frames|resume-generated-frames|generated-image-recovered|history-warmup|request-swapchain-recreation|swapchain-recreation-suppressed)'
+      add_pattern 'lsfg-vk: present diagnostics: operation=(skip-generated-frames|resume-generated-frames|generated-image-recovered|history-warmup|swapchain-recreation-suppressed)'
       ;;
     performance)
-      add_pattern 'lsfg-vk: present diagnostics: operation=(present-|schedule-|submit-|acquire-|wait-|copy-|render-)'
+      add_pattern 'lsfg-vk: present diagnostics: operation=(fixed-plan|present-|schedule-|submit-|acquire-|wait-|copy-|render-)'
       ;;
     lifecycle)
       add_pattern 'lsfg-vk: present diagnostics: operation=swapchain-context-(create|destroy)'
+      add_pattern 'lsfg-vk: present diagnostics: operation=(runtime-transition-pending|runtime-state-applied)'
       add_pattern 'lsfg-vk: (swapchain colour pipeline|frame generation disabled for this swapchain|frame generation is off for this swapchain|LSFG frame-generation initialization failed)'
       ;;
     startup)
-      add_pattern '(VK_LAYER_LSFGVK_frame_generation|VkLayer_LSFGVK_frame_generation|Gamescope WSI|Vulkan Loader|<Loader>|<Device>)'
+      add_pattern '(VK_LAYER_LSFGVK(_experimental)?_frame_generation|VK_LAYER_LS_frame_generation|VkLayer_LSFGVK(_experimental)?_frame_generation|Gamescope WSI|Vulkan Loader|<Loader>|<Device>)'
       add_pattern 'lsfg-vk: present diagnostics: operation=swapchain-context-create'
+      add_pattern 'lsfg-vk: Gamescope application HDR feedback'
+      add_pattern 'lsfg-vk: present diagnostics: operation=(runtime-transition-pending|runtime-state-applied)'
       add_pattern 'lsfg-vk: (swapchain colour pipeline|frame generation disabled for this swapchain|frame generation is off for this swapchain|LSFG frame-generation initialization failed)'
       ;;
     layers)
-      add_pattern '(VK_LAYER_LSFGVK_frame_generation|VkLayer_LSFGVK_frame_generation|Gamescope WSI|Vulkan Loader|<Loader>|<Device>)'
+      add_pattern '(VK_LAYER_LSFGVK(_experimental)?_frame_generation|VK_LAYER_LS_frame_generation|VkLayer_LSFGVK(_experimental)?_frame_generation|Gamescope WSI|Vulkan Loader|<Loader>|<Device>)'
       ;;
     errors)
       add_pattern 'lsfg-vk:.*(failed|failure|error|timeout|fallback|passthrough|disabled|VK_ERROR|VK_TIMEOUT|VK_NOT_READY|device lost)'
       add_pattern '(Vulkan Loader|Gamescope WSI).*(ERROR|Error|error|WARNING|Warning|warning)'
       ;;
     all|everything)
-      add_pattern '(lsfg-vk:|VK_LAYER_LSFGVK_frame_generation|VkLayer_LSFGVK_frame_generation|Gamescope WSI|Vulkan Loader|<Loader>|<Device>)'
+      add_pattern '(lsfg-vk:|VK_LAYER_LSFGVK(_experimental)?_frame_generation|VK_LAYER_LS_frame_generation|VkLayer_LSFGVK(_experimental)?_frame_generation|Gamescope WSI|Vulkan Loader|<Loader>|<Device>)'
       ;;
     *)
       echo "Unknown preset: $preset" >&2

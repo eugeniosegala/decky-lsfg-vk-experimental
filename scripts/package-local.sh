@@ -12,6 +12,7 @@ local_engine_mode=false
 local_engine_commit=""
 local_engine_dirty=false
 local_engine_label=""
+local_plugin_label=""
 
 usage() {
   cat <<'EOF'
@@ -106,7 +107,7 @@ if [[ -n "$local_engine_repo" &&
   exit 2
 fi
 
-for command in curl node npm python3 tar zip unzip; do
+for command in curl node npm python3 strings tar zip unzip; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "Required command not found: $command" >&2
     exit 1
@@ -180,6 +181,14 @@ if [[ -n "$local_engine_repo" ]]; then
     local_engine_label="$local_engine_label.dirty"
   fi
 
+  # A local Decky build must have a plugin version distinct from the previous
+  # package, otherwise Decky can keep the already-loaded Python backend and
+  # leave an older generated launch wrapper in place. Include a short hash of
+  # the tracked Decky worktree diff as well as the engine source identity.
+  local_plugin_fingerprint="$({ git -C "$project_dir" diff --binary HEAD || true; } |
+    "${checksum_command[@]}" | awk '{print substr($1, 1, 8)}')"
+  local_plugin_label="$local_engine_label.$local_plugin_fingerprint"
+
   engine_archive_path="$local_engine_repo/out/lsfg-vk-$archive_version-local.$local_engine_label-linux.tar.xz"
   flatpak_archive_path="$local_engine_repo/out/lsfg-vk-$archive_version-local.$local_engine_label-flatpaks.tar.xz"
   archive_name="$(basename "$engine_archive_path")"
@@ -199,7 +208,7 @@ done
 
 if [[ "$output_path_set" == false ]]; then
   if [[ "$local_engine_mode" == true ]]; then
-    output_path="$project_dir/out/Decky.LSFG-VK.Experimental-local.$local_engine_label.zip"
+    output_path="$project_dir/out/Decky.LSFG-VK.Experimental-local.$local_plugin_label.zip"
   else
     output_path="$project_dir/out/Decky.LSFG-VK.Experimental.zip"
   fi
@@ -251,6 +260,34 @@ elif [[ "$actual_checksum" != "$archive_checksum" ]]; then
   exit 1
 fi
 
+for manifest_path in \
+  "./share/vulkan/implicit_layer.d/VkLayer_LSFGVK_experimental_frame_generation.json" \
+  "./share/vulkan/implicit_layer.d/VkLayer_LSFGVK_experimental_frame_generation.x86.json"; do
+  if ! tar -tf "$package_dir/bin/$archive_name" | grep -Fx "$manifest_path" >/dev/null; then
+    echo "Engine archive is missing $manifest_path" >&2
+    exit 1
+  fi
+  manifest_content="$(tar -xJOf "$package_dir/bin/$archive_name" "$manifest_path")"
+  if [[ "$manifest_content" != *'"name": "VK_LAYER_LSFGVK_experimental_frame_generation"'* ||
+        "$manifest_content" != *'"ENABLE_LSFGVK_EXPERIMENTAL": "1"'* ||
+        "$manifest_content" != *'"DISABLE_LSFGVK_EXPERIMENTAL": "1"'* ]]; then
+    echo "Engine archive has invalid experimental layer gating in $manifest_path" >&2
+    exit 1
+  fi
+done
+
+for layer_binary_path in \
+  "./lib/liblsfg-vk-layer.so" \
+  "./lib32/liblsfg-vk-layer.so"; do
+  verification_binary="$staging_dir/$(basename "$(dirname "$layer_binary_path")")-liblsfg-vk-layer.so"
+  tar -xJOf "$package_dir/bin/$archive_name" "$layer_binary_path" > "$verification_binary"
+  if ! strings "$verification_binary" |
+      grep -F "lsfg-vk: experimental layer active; identity=VK_LAYER_LSFGVK_experimental_frame_generation; build=$archive_version" >/dev/null; then
+    echo "Engine archive has no matching experimental build marker in $layer_binary_path" >&2
+    exit 1
+  fi
+done
+
 if [[ -n "$flatpak_archive_name" ]]; then
   if [[ -n "$flatpak_archive_path" ]]; then
     echo "Using local experimental Flatpak extensions..."
@@ -297,7 +334,7 @@ if [[ "$local_engine_mode" == true ]]; then
     const [binary] = manifest.remote_binary ?? [];
     if (!binary) throw new Error("package.json has no remote_binary entry");
     const [archiveName, engineVersion, archiveChecksum, sourceCommit,
-      sourceDirty, flatpakName, flatpakChecksum] = process.argv.slice(2);
+      sourceDirty, flatpakName, flatpakChecksum, localPluginLabel] = process.argv.slice(2);
     const shortCommit = sourceCommit.slice(0, 7);
     const localLabel = `${shortCommit}${sourceDirty === "true" ? ".dirty" : ""}`;
     binary.name = archiveName;
@@ -312,10 +349,11 @@ if [[ "$local_engine_mode" == true ]]; then
       binary.flatpak_bundle.url = `local-worktree://${flatpakName}`;
       binary.flatpak_bundle.sha256hash = flatpakChecksum;
     }
+    manifest.version = `${manifest.version}.local.${localPluginLabel}`;
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
   ' "$package_dir/package.json" "$archive_name" "$archive_version" \
     "$archive_checksum" "$local_engine_commit" "$local_engine_dirty" \
-    "$flatpak_archive_name" "$flatpak_archive_checksum"
+    "$flatpak_archive_name" "$flatpak_archive_checksum" "$local_plugin_label"
 fi
 cp -R "$project_dir/dist/." "$package_dir/dist/"
 cp -R "$project_dir/py_modules/." "$package_dir/py_modules/"

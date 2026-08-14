@@ -29,8 +29,12 @@
 
 ## What it is
 
-This plugin installs a private, checksum-verified lsfg-vk v2 engine and activates it only through its experimental
-launcher. It uses the normal `Lossless.dll` from the Lossless Scaling Steam application; it does not install, copy, or
+This plugin installs a private, checksum-verified lsfg-vk v2 engine under a uniquely named, wrapper-scoped Vulkan layer and
+activates it only through its experimental launcher. The launcher disables both known public LSFG layer identities for
+that game, so the original plugin can remain installed without either implementation being chained accidentally. It
+keeps the experimental layer below Gamescope's Wine WSI bridge and recovers Gamescope-normalized HDR only from the
+validated packed-10-bit or float format when the session advertises HDR. It does not force Gamescope or any other layer
+to load. It uses the normal `Lossless.dll` from the Lossless Scaling Steam application; it does not install, copy, or
 modify that DLL.
 
 The currently pinned engine, source commit, checksum, and upstream change record are in
@@ -79,9 +83,9 @@ The Steam launch wrapper cannot enter a Flatpak sandbox, so configure Heroic thr
    Leave **Arguments** empty. Do not use `%command%` in Heroic.
 4. Start that game normally from Heroic or its Steam shortcut.
 
-The wrapper applies only to the selected Heroic games. It puts the isolated experimental Flatpak layer first, while
-preserving the runtime's normal implicit-layer discovery. This is required for Gamescope WSI and HDR. If the public
-LSFG-VK layer is also visible, Vulkan keeps the first same-named layer, so the private experimental payload wins.
+The wrapper applies only to the selected Heroic games. It enables the uniquely named experimental Flatpak layer,
+disables both known public LSFG identities for that game, and preserves the runtime's normal implicit-layer discovery.
+This is required for Gamescope WSI and HDR; selection no longer depends on ambiguous same-name search ordering.
 
 > [!IMPORTANT]
 > After installing a newer experimental plugin ZIP, return to **Flatpak Setup** and select **Update** for Heroic's
@@ -107,8 +111,7 @@ reinstall-and-restart fallback above, then repeat the required engine-install st
 
 - [Configuration guide](docs/CONFIGURATION.md): fixed and Adaptive modes, quality/performance settings, profiles, and
   compatibility options.
-- [Troubleshooting](docs/TROUBLESHOOTING.md): Gamescope recovery behaviour, the per-game recovery fallback, and
-  diagnostic logs.
+- [Troubleshooting](docs/TROUBLESHOOTING.md): Gamescope recovery behaviour, HDR compatibility, and diagnostic logs.
 - [Local packaging and publishing](docs/PACKAGING.md): build a ZIP for a Steam machine or publish a prerelease.
 - [Upstream engine record](UPSTREAM_LSFGVK.md): pinned source, checksums, and carried changes.
 

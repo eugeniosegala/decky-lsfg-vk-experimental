@@ -15,18 +15,32 @@ non-SteamOS compositor or GPU-driver HDR problem remains outside the plugin's co
 For a quick engine check, start the game from Steam and inspect its log for a line like:
 
 ```text
-lsfg-vk: swapchain colour pipeline: format=64; color-space=1000104008; mode=hdr10-pq; frame-generation=supported
+lsfg-vk: experimental layer active; identity=VK_LAYER_LSFGVK_experimental_frame_generation; build=2.0.0-dev28-experimental.25
+lsfg-vk: swapchain colour pipeline: format=64; color-space=0; mode=hdr10-pq; source=gamescope-normalized; frame-generation=supported
 ```
+
+The first line is the authoritative build marker. With `VK_LOADER_DEBUG=layer`, the inserted LSFG layer must be
+`VK_LAYER_LSFGVK_experimental_frame_generation` from the plugin-private library. The wrapper sets `DISABLE_LSFGVK=1`
+and `DISABLE_LSFG=1`, so `VK_LAYER_LSFGVK_frame_generation` and `VK_LAYER_LS_frame_generation` may be listed as known
+manifests but must not be inserted into the game. If the build marker is absent, the HDR result does not test this
+experimental engine.
+
+In the loader's `vkCreateInstance layer callstack`, Gamescope WSI should remain above the experimental layer. Wine uses
+that position to translate its WSI handles before lower Vulkan layers receive swapchain calls. Gamescope deliberately
+changes its driver-facing swapchain copy to the sRGB colour space, so a working HDR trace can report `color-space=0`
+while selecting `mode=hdr10-pq; source=gamescope-normalized` (or `mode=scrgb-linear` for float input). If the log instead
+selects `sdr-high-precision`, confirm that SteamOS HDR is enabled and the game process has `DXVK_HDR=1`.
 
 `mode=scrgb-linear` is also supported. `frame-generation=passthrough` includes a reason on the following line and is a
 safe compatibility result, not washed-out generated output.
 
 The plugin does not force HDR on. If the game chooses an HDR format that LSFG has not validated, or LSFG cannot create
 the HDR frame-generation resources on that GPU, the engine keeps the game's native swapchain and presents real frames.
-If a game still fails before reaching its menu, select its Decky profile, enable **Hide HDR from Game (Restart)**,
+If a game still fails before reaching its menu, select its Decky profile, enable **Block HDR Detection (Restart)**,
 and restart it. That emergency compatibility path uses the wrapper's previous isolated Vulkan discovery, preventing
-Gamescope WSI from advertising HDR so the game can boot in SDR. Disable HDR in the game's settings, clear the Decky
-workaround, and test LSFG again. **Disable LSFG-VK on Next Launch** remains available if the LSFG layer itself is the
+Gamescope WSI from advertising HDR so the game can boot in SDR. It also bypasses other global Vulkan layers for that
+game. Disable HDR in the game's settings, clear the Decky
+workaround, and test LSFG again. **Disable Experimental LSFG-VK on Next Launch** remains available if the LSFG layer itself is the
 problem. A separate everyday HDR switch is intentionally avoided.
 
 ## Steam menu / Gamescope recovery
@@ -35,13 +49,13 @@ The experimental wrapper enables a 50 ms bound when Gamescope does not release a
 than waiting indefinitely, lsfg-vk presents the real game frame, keeps temporal history current, and probes for an
 available generated image at a bounded rate.
 
-In Adaptive mode, a successful recovery can request a game-owned Vulkan swapchain rebuild. The replacement context warms
-real-frame history, retains the last proven generation level, and delays higher probes. A hard cadence stall now enters
-a bounded discontinuity recovery first: Adaptive presents real frames until the healthy base cadence has returned for
-one second, then restores the proven level. If that does not happen within five seconds, it starts a clean ramp from
+Recovery is always in place: the layer never returns a fabricated out-of-date result merely to make the game rebuild
+its swapchain. It refreshes real-frame history, retains the last proven generation level, and delays higher probes. A
+hard cadence stall enters a bounded discontinuity recovery first: Adaptive presents real frames until the healthy base
+cadence has returned for one second, then restores the proven level. If that does not happen within five seconds, it starts a clean ramp from
 zero. A sustained gameplay cadence drop uses a shorter one-second stabilization and then rebases at the new rate instead
-of waiting for the old rate to return. The first image recovery in a hard-discontinuity window refreshes history without
-immediately rebuilding the swapchain; a repeated stall can still use the guarded rebuild. This targets accumulated
+of waiting for the old rate to return. Image recovery in a hard-discontinuity window refreshes history without
+invalidating the game-owned swapchain, including after repeated stalls. This targets accumulated
 latency, unstable restarts, and repeated load spikes after Steam-menu transitions. A short drop toward the base rate,
 pause, or flicker can still occur during recovery.
 
@@ -58,18 +72,6 @@ newly accepted higher multiplier later causes a sustained real-frame collapse, t
 without generated-frame work. It returns to the lower proven multiplier only when that measurement recovers the prior
 rate; otherwise it keeps the higher multiplier because the game scene itself became more demanding. This prevents an
 unnecessary 3x load from remaining slower than a capable fixed 2x path while avoiding false backoff in heavy scenes.
-
-### Per-game recovery fallback
-
-If a particular game pauses, flickers, or handles the rebuild poorly after closing the Steam menu, disable only the
-swapchain-rebuild stage for that game. The 50 ms bound and history-only real-frame fallback remain enabled:
-
-```text
-LSFGVK_PRESENT_RECOVERY_RECREATE=0 ~/.local/bin/lsfg-vk-experimental %command%
-```
-
-Use that command in the game's **Steam Properties > Launch Options**. Remove it to return to the default guarded
-recovery path.
 
 ## Collecting diagnostics
 
@@ -107,13 +109,16 @@ presets to produce a smaller report:
 # Was HDR10/PQ or linear scRGB selected? Did HDR initialize or use passthrough?
 ~/.local/bin/lsfg-vk-experimental-diagnostics hdr
 
+# Did a Decky change apply live or wait safely for natural recreation?
+~/.local/bin/lsfg-vk-experimental-diagnostics config
+
 # Target selection, stabilization, cadence, ramp, load shedding, bridge and rescue.
 ~/.local/bin/lsfg-vk-experimental-diagnostics adaptive
 
-# Generated-image timeout, real-frame fallback, history warm-up and recreation.
+# Generated-image timeout, real-frame fallback, history warm-up and in-place recovery.
 ~/.local/bin/lsfg-vk-experimental-diagnostics recovery
 
-# Slow acquire, fence, scheduling, copy, submission and presentation operations.
+# Fixed multiplier/input-output telemetry plus slow GPU/presentation operations.
 ~/.local/bin/lsfg-vk-experimental-diagnostics performance
 
 # Vulkan layer discovery, Gamescope WSI, swapchain context and colour selection.
@@ -123,7 +128,7 @@ presets to produce a smaller report:
 ~/.local/bin/lsfg-vk-experimental-diagnostics errors
 
 # Combine related views without collecting unrelated Adaptive policy traffic.
-~/.local/bin/lsfg-vk-experimental-diagnostics hdr recovery errors
+~/.local/bin/lsfg-vk-experimental-diagnostics hdr config adaptive recovery performance errors
 
 # Every relevant LSFG, Vulkan-loader, and Gamescope WSI line from the run.
 ~/.local/bin/lsfg-vk-experimental-diagnostics --lines 2000 all > ~/lsfg-report.txt
@@ -137,10 +142,10 @@ If the helper is unavailable, these raw commands provide the two most common rep
 
 ```bash
 # HDR selection and safe fallback.
-grep -aE 'lsfg-vk: (swapchain colour pipeline|frame generation disabled|LSFG frame-generation initialization failed)' ~/.config/decky-lsfg-vk-experimental/present-diagnostics.log | tail -n 100
+grep -aE 'lsfg-vk: (Gamescope application HDR feedback|swapchain colour pipeline|frame generation disabled|LSFG frame-generation initialization failed)|lsfg-vk: present diagnostics: operation=(runtime-transition-pending|runtime-state-applied)' ~/.config/decky-lsfg-vk-experimental/present-diagnostics.log | tail -n 200
 
 # Adaptive policy and Gamescope recovery.
-grep -aE 'lsfg-vk: present diagnostics: operation=(adaptive-|skip-generated-frames|resume-generated-frames|generated-image-recovered|history-warmup|request-swapchain-recreation|swapchain-recreation-suppressed|swapchain-context-create|swapchain-context-destroy)' ~/.config/decky-lsfg-vk-experimental/present-diagnostics.log | tail -n 800
+grep -aE 'lsfg-vk: present diagnostics: operation=(runtime-transition-pending|runtime-state-applied|fixed-plan|adaptive-|skip-generated-frames|resume-generated-frames|generated-image-recovered|history-warmup|swapchain-recreation-suppressed|swapchain-context-create|swapchain-context-destroy)' ~/.config/decky-lsfg-vk-experimental/present-diagnostics.log | tail -n 800
 ```
 
 Remove the temporary Steam launch variables or Heroic environment rows afterwards: diagnostics can generate substantial

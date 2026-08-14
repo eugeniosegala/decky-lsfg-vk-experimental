@@ -123,7 +123,7 @@ export function ConfigurationSection({
           <PanelSectionRow>
             <SliderField
               label={`${t("CONFIG_FLOW_SCALE", "Flow Scale")} (${Math.round(config.flow_scale * 100)}%)`}
-              description={t("CONFIG_FLOW_SCALE_DESC", "Lowers internal motion estimation resolution, improving performance slightly")}
+              description={t("CONFIG_FLOW_SCALE_DESC", "Lowers internal motion estimation resolution, improving performance slightly.")}
               value={config.flow_scale}
               min={0.25}
               max={1.0}
@@ -134,8 +134,17 @@ export function ConfigurationSection({
 
           <PanelSectionRow>
             <ToggleField
-              label={t("CONFIG_DISABLE_LSFGVK_NEXT_LAUNCH", "Disable LSFG-VK on Next Launch")}
-              description={t("CONFIG_DISABLE_LSFGVK_NEXT_LAUNCH_DESC", "Disables the entire LSFG-VK layer on the next game launch. Requires a game restart. Use Frame Generation above for live on/off.")}
+              label={t("CONFIG_PERFORMANCE_MODE", "Performance Mode")}
+              description={t("CONFIG_PERFORMANCE_MODE_DESC", "Uses a lighter FG model to reduce GPU overhead, at the cost of more visual artifacts.")}
+              checked={config.performance_mode}
+              onChange={(value) => onConfigChange(PERFORMANCE_MODE, value)}
+            />
+          </PanelSectionRow>
+
+          <PanelSectionRow>
+            <ToggleField
+              label={t("CONFIG_DISABLE_LSFGVK_NEXT_LAUNCH", "Disable Experimental LSFG-VK on Next Launch")}
+              description={t("CONFIG_DISABLE_LSFGVK_NEXT_LAUNCH_DESC", "Troubleshooting only. Stops this experimental layer loading after restart. Use Frame Generation above for live on/off.")}
               checked={config.disable_lsfgvk}
               onChange={(value) => onConfigChange(DISABLE_LSFGVK, value)}
             />
@@ -144,7 +153,7 @@ export function ConfigurationSection({
           <PanelSectionRow>
             <SliderField
               label={`${t("CONFIG_BASE_FPS_CAP", "Base FPS Cap")}${config.dxvk_frame_rate > 0 ? ` (${config.dxvk_frame_rate} FPS)` : ` (${t("CONFIG_BASE_FPS_CAP_OFF", "Off")})`}`}
-              description={t("CONFIG_BASE_FPS_CAP_DESC", "Base framerate cap for DirectX games, before frame multiplier. (Requires game restart to apply)")}
+              description={t("CONFIG_BASE_FPS_CAP_DESC", "Base framerate cap for DirectX games, before frame multiplication. Requires a game restart to apply.")}
               value={config.dxvk_frame_rate}
               min={0}
               max={60}
@@ -156,7 +165,7 @@ export function ConfigurationSection({
           <PanelSectionRow>
             <ToggleField
               label={t("CONFIG_ALLOW_FP16", "Allow FP16")}
-              description={t("CONFIG_ALLOW_FP16_DESC", "Improves performance on AMD; disable for older NVIDIA GPUs")}
+              description={t("CONFIG_ALLOW_FP16_DESC", "Improves performance on AMD; disable for older NVIDIA GPUs.")}
               checked={config.allow_fp16}
               onChange={(value) => onConfigChange(ALLOW_FP16, value)}
             />
@@ -166,7 +175,7 @@ export function ConfigurationSection({
             <div style={{ paddingTop: "12px" }}>
               <TextField
                 label={t("CONFIG_GPU", "GPU")}
-                description={t("CONFIG_GPU_DESC", "Optional GPU name, vendor:device ID, or PCI bus ID")}
+                description={t("CONFIG_GPU_DESC", "Optional GPU name, vendor:device ID, or PCI bus ID.")}
                 value={config.gpu}
                 onChange={(event) => onConfigChange(GPU, event.currentTarget.value)}
               />
@@ -179,15 +188,6 @@ export function ConfigurationSection({
               description={t("CONFIG_ACTIVE_IN_DESC", "Executable/process names, separated by commas. This automatically matches the lsfg-vk engine profile; wrapper-only compatibility options use the selected Decky profile.")}
               value={config.active_in}
               onChange={(event) => onConfigChange(ACTIVE_IN, event.currentTarget.value)}
-            />
-          </PanelSectionRow>
-
-          <PanelSectionRow>
-            <ToggleField
-              label={t("CONFIG_PERFORMANCE_MODE", "Performance Mode")}
-              description={t("CONFIG_PERFORMANCE_MODE_DESC", "Uses a lighter FG model to reduce GPU overhead, at the cost of more visual artifacts.")}
-              checked={config.performance_mode}
-              onChange={(value) => onConfigChange(PERFORMANCE_MODE, value)}
             />
           </PanelSectionRow>
         </>
@@ -235,8 +235,8 @@ export function ConfigurationSection({
         <>
           <PanelSectionRow>
             <ToggleField
-              label={t("CONFIG_DISABLE_HDR_EXPOSURE", "Hide HDR from Game (Restart)")}
-              description={t("CONFIG_DISABLE_HDR_EXPOSURE_DESC", "Emergency startup recovery. Keeps Gamescope HDR hidden from this game until you turn this off. Requires a game restart.")}
+              label={t("CONFIG_DISABLE_HDR_EXPOSURE", "Block HDR Detection (Restart)")}
+              description={t("CONFIG_DISABLE_HDR_EXPOSURE_DESC", "Emergency startup workaround for a game that fails when SteamOS HDR is detected. Prevents Gamescope from advertising HDR formats, so the game starts in SDR. Also bypasses other global Vulkan layers for that game. Turn it off after changing the game's HDR setting.")}
               checked={config.disable_hdr_exposure}
               onChange={(value) => onConfigChange(DISABLE_HDR_EXPOSURE, value)}
             />
@@ -245,7 +245,7 @@ export function ConfigurationSection({
           <PanelSectionRow>
             <ToggleField
               label={t("CONFIG_DISABLE_STEAMDECK_MODE", "Disable Steam Deck Mode")}
-              description={t("CONFIG_DISABLE_STEAMDECK_MODE_DESC", "Disables Steam Deck mode (Unlocks hidden settings in some games)")}
+              description={t("CONFIG_DISABLE_STEAMDECK_MODE_DESC", "Disables Steam Deck mode. Unlocks hidden settings in some games.")}
               checked={config.disable_steamdeck_mode}
               onChange={(value) => onConfigChange(DISABLE_STEAMDECK_MODE, value)}
             />
@@ -254,7 +254,7 @@ export function ConfigurationSection({
           <PanelSectionRow>
             <ToggleField
               label={t("CONFIG_ENABLE_ZINK", "Enable Zink for OpenGL Games")}
-              description={t("CONFIG_ENABLE_ZINK_DESC", "Use Vulkan-based OpenGL implementation for OpenGL games (may cause crashes or freezes with some games)")}
+              description={t("CONFIG_ENABLE_ZINK_DESC", "Uses the Vulkan-based OpenGL implementation for OpenGL games. May cause crashes or freezes in some games.")}
               checked={config.enable_zink}
               onChange={(value) => onConfigChange(ENABLE_ZINK, value)}
             />

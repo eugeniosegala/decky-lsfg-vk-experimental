@@ -70,7 +70,7 @@ def get_script_parsing_logic():
                 value = value.strip()
 
                 # Auto-generated parsing logic:
-                if key == "DISABLE_LSFGVK":
+                if key == "DISABLE_LSFGVK_EXPERIMENTAL":
                         script_values["disable_lsfgvk"] = value == "1"
                 if key == "LSFGVK_DISABLE_HDR_EXPOSURE":
                         script_values["disable_hdr_exposure"] = value == "1"
@@ -97,7 +97,7 @@ def get_script_generation_logic():
     def generate_script_lines(config):
         lines = []
         if config.get("disable_lsfgvk", False):
-            lines.append("export DISABLE_LSFGVK=1")
+            lines.append("export DISABLE_LSFGVK_EXPERIMENTAL=1")
         if config.get("disable_hdr_exposure", False):
             lines.append("export LSFGVK_DISABLE_HDR_EXPOSURE=1")
         dxvk_frame_rate = config.get("dxvk_frame_rate", 0)

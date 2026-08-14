@@ -7,13 +7,17 @@ import traceback
 import tarfile
 import tempfile
 import json
+import os
+import hashlib
 from pathlib import Path
 from typing import Dict, Any, Optional
 
 from .base_service import BaseService
 from .constants import (
     LIB_FILENAME, JSON_FILENAME, JSON32_FILENAME, CLI_FILENAME, CLI_DIR, BIN_DIR,
-    DIAGNOSTICS_HELPER_FILENAME,
+    DIAGNOSTICS_HELPER_FILENAME, EXPERIMENTAL_LAYER_NAME,
+    EXPERIMENTAL_LAYER_ENABLE_ENV, EXPERIMENTAL_LAYER_DISABLE_ENV,
+    EXPERIMENTAL_LAYER_BUILD_MARKER, LEGACY_PRIVATE_JSON_FILENAMES,
 )
 from .config_schema import ConfigurationManager
 from .types import InstallationResponse, UninstallationResponse, InstallationCheckResponse
@@ -47,10 +51,23 @@ class InstallationService(BaseService):
                 error_msg = f"Bundled lsfg-vk archive not found at {archive_path}"
                 self.log.error(error_msg)
                 return self._error_response(InstallationResponse, error_msg, message="")
+
+            self._validate_archive_checksum(
+                archive_path,
+                archive_metadata["sha256hash"],
+            )
             
             self._ensure_directories()
             
             self._extract_and_install_files(archive_path)
+
+            # Register a uniquely named, wrapper-scoped manifest in Vulkan's normal
+            # per-user discovery directory. Steam's Pressure Vessel snapshots
+            # that directory before the per-game wrapper starts, so relying on
+            # a wrapper-only additive search path can select a public layer
+            # with the same historical name instead of this private payload.
+            self._register_layer_manifests()
+            self._remove_legacy_private_manifests()
             
             self._create_config_file()
             
@@ -88,7 +105,11 @@ class InstallationService(BaseService):
                 raise ValueError("remote_binary name must be a filename")
             if not isinstance(version, str) or not version:
                 raise ValueError("remote_binary version must be a non-empty string")
-            if not isinstance(checksum, str) or len(checksum) != 64:
+            if (
+                not isinstance(checksum, str)
+                or len(checksum) != 64
+                or any(character not in "0123456789abcdefABCDEF" for character in checksum)
+            ):
                 raise ValueError("remote_binary sha256hash must be a SHA-256 checksum")
             return {"name": archive_name, "version": version, "sha256hash": checksum}
         except (OSError, json.JSONDecodeError, TypeError, ValueError, KeyError) as exc:
@@ -102,6 +123,20 @@ class InstallationService(BaseService):
             "sha256hash": archive_metadata["sha256hash"],
         }
         self._write_file(self.engine_state_file, json.dumps(state, indent=2) + "\n", 0o644)
+
+    @staticmethod
+    def _validate_archive_checksum(archive_path: Path, expected_checksum: str) -> None:
+        """Reject a bundled payload that differs from the package manifest."""
+        digest = hashlib.sha256()
+        with archive_path.open("rb") as archive:
+            for chunk in iter(lambda: archive.read(1024 * 1024), b""):
+                digest.update(chunk)
+        actual_checksum = digest.hexdigest()
+        if actual_checksum.lower() != expected_checksum.lower():
+            raise OSError(
+                "Bundled lsfg-vk archive checksum mismatch: "
+                f"expected {expected_checksum.lower()}, got {actual_checksum}"
+            )
 
     def _read_engine_state(self) -> Optional[Dict[str, str]]:
         """Return the plugin-managed payload record, if one exists."""
@@ -166,6 +201,11 @@ class InstallationService(BaseService):
                         + ", ".join(missing)
                     )
 
+                self._validate_layer_binary_identity(
+                    staged_files[self.lib_file][0],
+                    staged_files[self.lib32_file][0],
+                )
+
                 for destination, (temp_file, filename) in staged_files.items():
                     destination.parent.mkdir(parents=True, exist_ok=True)
                     if filename == JSON_FILENAME:
@@ -181,6 +221,15 @@ class InstallationService(BaseService):
                         if filename == CLI_FILENAME:
                             destination.chmod(0o755)
                     self.log.info("Installed %s to %s", filename, destination)
+
+    @staticmethod
+    def _validate_layer_binary_identity(*layer_binaries: Path) -> None:
+        """Reject payloads that cannot prove they are the isolated build."""
+        for layer_binary in layer_binaries:
+            if EXPERIMENTAL_LAYER_BUILD_MARKER not in layer_binary.read_bytes():
+                raise OSError(
+                    f"Experimental layer build marker is missing from {layer_binary}"
+                )
     
     def _copy_and_fix_json_file(
             self, src_file: Path, dst_file: Path,
@@ -198,14 +247,55 @@ class InstallationService(BaseService):
             if not isinstance(layer, dict) or not isinstance(layer.get("library_path"), str):
                 raise ValueError("missing layer.library_path")
 
-            # Both manifests live at <plugin-root>/vulkan/implicit_layer.d.
+            layer["name"] = EXPERIMENTAL_LAYER_NAME
+            layer["description"] = "Lossless Scaling experimental frame generation layer"
             layer["library_path"] = library_path
             layer["library_arch"] = library_arch
-            with dst_file.open("w", encoding="utf-8") as output:
-                json.dump(json_data, output, indent=2)
-                output.write("\n")
+            layer["enable_environment"] = {
+                EXPERIMENTAL_LAYER_ENABLE_ENV: "1",
+            }
+            layer["disable_environment"] = {
+                EXPERIMENTAL_LAYER_DISABLE_ENV: "1",
+            }
+            dst_file.parent.mkdir(parents=True, exist_ok=True)
+            file_descriptor, temporary_name = tempfile.mkstemp(
+                prefix=f".{dst_file.name}.",
+                dir=dst_file.parent,
+            )
+            temporary_path = Path(temporary_name)
+            try:
+                with os.fdopen(file_descriptor, "w", encoding="utf-8") as output:
+                    json.dump(json_data, output, indent=2)
+                    output.write("\n")
+                    output.flush()
+                    os.fsync(output.fileno())
+                temporary_path.chmod(0o644)
+                temporary_path.replace(dst_file)
+            finally:
+                temporary_path.unlink(missing_ok=True)
         except (json.JSONDecodeError, OSError, TypeError, ValueError) as error:
             raise OSError(f"Invalid Vulkan layer manifest {src_file}: {error}") from error
+
+    def _register_layer_manifests(self) -> None:
+        """Register gated manifests without activating the private layer globally."""
+        self.user_vulkan_layer_dir.mkdir(parents=True, exist_ok=True)
+        self._copy_and_fix_json_file(
+            self.json_file,
+            self.registered_json_file,
+            str(self.lib_file),
+            "64",
+        )
+        self._copy_and_fix_json_file(
+            self.json32_file,
+            self.registered_json32_file,
+            str(self.lib32_file),
+            "32",
+        )
+
+    def _remove_legacy_private_manifests(self) -> None:
+        """Remove only obsolete manifests inside this plugin's private directory."""
+        for filename in LEGACY_PRIVATE_JSON_FILENAMES:
+            self._remove_if_exists(self.local_share_dir / filename)
     
     def _create_config_file(self) -> None:
         """Create or update this plugin's private TOML config with detected DLL path.
@@ -334,9 +424,12 @@ class InstallationService(BaseService):
             lib32_exists = self.lib32_file.exists()
             json_exists = self.json_file.exists()
             json32_exists = self.json32_file.exists()
+            registered_json_exists = self.registered_json_file.exists()
+            registered_json32_exists = self.registered_json32_file.exists()
             script_exists = self.lsfg_launch_script_path.exists()
             installed = (
                 lib_exists and lib32_exists and json_exists and json32_exists
+                and registered_json_exists and registered_json32_exists
                 and script_exists
             )
             expected = self._bundled_archive_metadata(Path(__file__).parent.parent.parent)
@@ -350,8 +443,10 @@ class InstallationService(BaseService):
             )
             
             self.log.info(
-                "Installation check: lib64=%s, lib32=%s, json64=%s, json32=%s, script=%s",
-                lib_exists, lib32_exists, json_exists, json32_exists, script_exists,
+                "Installation check: lib64=%s, lib32=%s, private-json64=%s, "
+                "private-json32=%s, registered-json64=%s, registered-json32=%s, script=%s",
+                lib_exists, lib32_exists, json_exists, json32_exists,
+                registered_json_exists, registered_json32_exists, script_exists,
             )
             
             return {
@@ -360,7 +455,7 @@ class InstallationService(BaseService):
                 "json_exists": json_exists,
                 "script_exists": script_exists,
                 "lib_path": str(self.lib_file),
-                "json_path": str(self.json_file),
+                "json_path": str(self.registered_json_file),
                 "script_path": str(self.lsfg_launch_script_path),
                 "installed_engine_version": installed_version,
                 "expected_engine_version": expected["version"],
@@ -400,9 +495,14 @@ class InstallationService(BaseService):
             # Remove core lsfg-vk files, but preserve config file to maintain user's custom profiles
             files_to_remove = [
                 self.lib_file, self.lib32_file, self.json_file, self.json32_file,
+                self.registered_json_file, self.registered_json32_file,
                 self.cli_file, self.engine_state_file, self.lsfg_launch_script_path,
                 self.diagnostics_script_path,
             ]
+            files_to_remove.extend(
+                self.local_share_dir / filename
+                for filename in LEGACY_PRIVATE_JSON_FILENAMES
+            )
             
             for file_path in files_to_remove:
                 if self._remove_if_exists(file_path):
@@ -451,9 +551,14 @@ class InstallationService(BaseService):
             # Remove core lsfg-vk files, but preserve config file to maintain user's custom profiles
             files_to_remove = [
                 self.lib_file, self.lib32_file, self.json_file, self.json32_file,
+                self.registered_json_file, self.registered_json32_file,
                 self.cli_file, self.engine_state_file, self.lsfg_launch_script_path,
                 self.lsfg_script_path, self.diagnostics_script_path,
             ]
+            files_to_remove.extend(
+                self.local_share_dir / filename
+                for filename in LEGACY_PRIVATE_JSON_FILENAMES
+            )
             
             for file_path in files_to_remove:
                 try:

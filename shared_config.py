@@ -127,17 +127,17 @@ CONFIG_SCHEMA_DEF = {
         "name": "disable_lsfgvk",
         "fieldType": ConfigFieldType.BOOLEAN,
         "default": False,
-        "description": "disable lsfg-vk on the next launch (requires a game restart)",
+        "description": "troubleshooting: prevent the experimental layer loading after restart",
         "location": "script"
     },
 
-    # Emergency launcher recovery, not an engine HDR toggle. This restores
-    # private-only Vulkan discovery before the game enumerates HDR formats.
+    # Emergency launcher recovery, not an engine HDR toggle. This blocks
+    # Gamescope HDR discovery before the game enumerates formats.
     "disable_hdr_exposure": {
         "name": "disable_hdr_exposure",
         "fieldType": ConfigFieldType.BOOLEAN,
         "default": False,
-        "description": "hide Gamescope HDR formats for startup recovery until disabled",
+        "description": "emergency SDR startup path for games that fail when SteamOS HDR is detected",
         "location": "script"
     },
 

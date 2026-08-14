@@ -234,7 +234,7 @@ export function Content() {
       </PanelSectionRow>
 
       <PanelSectionRow>
-        <div style={{ marginTop: "8px" }}>
+        <div>
           <ButtonItem
             layout="below"
             onClick={handleShowFlatpaks}

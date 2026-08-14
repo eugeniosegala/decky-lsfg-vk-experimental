@@ -56,9 +56,9 @@ SDR remain separate modes. Unsupported or unvalidated HDR transfer functions, in
 generated frames and present the game's real frames instead of guessing a conversion.
 
 The experimental wrapper remains private but now uses additive Vulkan implicit-layer discovery by default, allowing
-Gamescope WSI to advertise the compositor's HDR formats. A per-profile **Hide HDR from Game (Restart)** workaround
+Gamescope WSI to advertise the compositor's HDR formats. A per-profile **Block HDR Detection (Restart)** workaround
 intentionally restores the legacy private-only discovery path for rare games that cannot start when HDR is exposed.
-The existing **Disable LSFG-VK on Next Launch** workaround remains the last-resort recovery if the layer itself prevents
+The existing **Disable Experimental LSFG-VK on Next Launch** workaround remains the last-resort recovery if the layer itself prevents
 a title from starting.
 
 ### Adaptive Frame Generation

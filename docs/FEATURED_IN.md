@@ -7,6 +7,9 @@ more SteamOS users discover and evaluate the project.
 
 - [Lossless Scaling V.2 Plugin Is Here For The Steam Deck & It's Awesome!](https://www.youtube.com/watch?v=74YnVgd5Jzw)
   by [Gaming On Steam](https://www.youtube.com/@gaming_onsteam): an overview of the v2 plugin on Steam Deck.
+- [Adaptive Frame Gen Is HERE For The Steam Deck And It's AMAZING! (Easy Guide)](https://www.youtube.com/watch?v=d47zViCRxE8)
+  by [Gaming On Steam](https://www.youtube.com/@gaming_onsteam): an easy guide to Adaptive Frame Generation on Steam
+  Deck.
 - [Новый плагин Lossless Scaling V.2 уже на Steam Deck](https://www.youtube.com/watch?v=ALDWl7w8dX8)
   by [Андрей-Канал Солянка](https://www.youtube.com/@Andrey_6777): Russian-language coverage of the new Lossless
   Scaling v2 plugin on Steam Deck.

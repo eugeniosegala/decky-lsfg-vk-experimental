@@ -17,9 +17,9 @@ from .config_schema_generated import ConfigurationData, get_script_generation_lo
 from .constants import (
     ARMADA_DEVICE_ENV,
     ARMADA_GAME_LAUNCH,
+    EXPERIMENTAL_LAYER_ENABLE_ENV,
     FLATPAK_IMPLICIT_LAYER_DIR,
     PRESENT_ACQUIRE_TIMEOUT_MS,
-    PRESENT_RECOVERY_RECREATE,
 )
 from .types import ConfigurationResponse, ProfilesResponse, ProfileResponse
 
@@ -27,16 +27,19 @@ from .types import ConfigurationResponse, ProfilesResponse, ProfileResponse
 class ConfigurationService(BaseService):
     """Service for managing TOML-based lsfg configuration"""
 
-    _WRAPPER_FORMAT_MARKER = "# decky-lsfg-vk-experimental-wrapper-format: 13"
+    _WRAPPER_FORMAT_MARKER = "# decky-lsfg-vk-experimental-wrapper-format: 17"
     _WRAPPER_PROFILE_SETTINGS_VERSION = 1
     _REQUIRED_WRAPPER_EXPORTS = (
         "export LSFGVK_PRESENT_ACQUIRE_TIMEOUT_MS=",
-        "export LSFGVK_PRESENT_RECOVERY_RECREATE=",
-        "export VK_ADD_IMPLICIT_LAYER_PATH=",
+        f"export {EXPERIMENTAL_LAYER_ENABLE_ENV}=1",
+        "export DISABLE_LSFGVK=1",
+        "export DISABLE_LSFG=1",
         "lsfgvk_diagnostics_default=",
     )
     _OBSOLETE_WRAPPER_EXPORTS = (
         "PROTON_USE_WOW64",
+        "VK_INSTANCE_LAYERS",
+        "LSFGVK_PRESENT_RECOVERY_RECREATE",
     )
 
     @staticmethod
@@ -360,25 +363,32 @@ class ConfigurationService(BaseService):
         return "\n".join(lines) + "\n"
 
     def _generate_layer_environment_lines(self) -> list[str]:
-        """Select the matching isolated manifest for host or Flatpak launches.
+        """Activate only the registered experimental layer for this game.
 
         The same wrapper is used in Steam launch options and as Heroic's
-        per-game wrapper command. Flatpak applications cannot use the host
-        manifest, so detect the mounted experimental extension at runtime.
-        No Flatpak application-wide Vulkan environment override is needed.
+        per-game wrapper command. Host launches use the uniquely named, gated
+        manifest installed in Vulkan's normal per-user directory so Pressure
+        Vessel can register it before this wrapper starts. Flatpak launches
+        still add their mounted runtime-extension directory at process start.
         """
         diagnostics_log_path = self.config_dir / "present-diagnostics.log"
         return [
             f'export LSFGVK_PRESENT_ACQUIRE_TIMEOUT_MS="${{LSFGVK_PRESENT_ACQUIRE_TIMEOUT_MS:-{PRESENT_ACQUIRE_TIMEOUT_MS}}}"',
-            f'export LSFGVK_PRESENT_RECOVERY_RECREATE="${{LSFGVK_PRESENT_RECOVERY_RECREATE:-{PRESENT_RECOVERY_RECREATE}}}"',
+            f"export {EXPERIMENTAL_LAYER_ENABLE_ENV}=1",
+            "export DISABLE_LSFGVK=1",
+            "export DISABLE_LSFG=1",
             f"if [ -d {shlex.quote(FLATPAK_IMPLICIT_LAYER_DIR)} ]; then",
             f"    lsfgvk_implicit_layer_dir={shlex.quote(FLATPAK_IMPLICIT_LAYER_DIR)}",
-            "else",
+            'elif [ "${LSFGVK_DISABLE_HDR_EXPOSURE:-0}" != "0" ]; then',
             f"    lsfgvk_implicit_layer_dir={shlex.quote(str(self.local_share_dir))}",
+            "else",
+            '    lsfgvk_implicit_layer_dir=""',
             "fi",
             'if [ "${LSFGVK_DISABLE_HDR_EXPOSURE:-0}" != "0" ]; then',
             '    export VK_IMPLICIT_LAYER_PATH="$lsfgvk_implicit_layer_dir"',
             '    unset VK_ADD_IMPLICIT_LAYER_PATH',
+            'elif [ -z "$lsfgvk_implicit_layer_dir" ]; then',
+            "    : # Host manifest is registered before Pressure Vessel starts.",
             'elif [ -n "${VK_IMPLICIT_LAYER_PATH:-}" ]; then',
             '    export VK_IMPLICIT_LAYER_PATH="$lsfgvk_implicit_layer_dir:$VK_IMPLICIT_LAYER_PATH"',
             'elif [ -n "${VK_ADD_IMPLICIT_LAYER_PATH:-}" ]; then',
@@ -400,19 +410,31 @@ class ConfigurationService(BaseService):
     def migrate_launch_script_if_needed(self) -> bool:
         """Upgrade an installed generated wrapper without touching user data.
 
-        Wrapper format 13 removes the obsolete PROTON_USE_WOW64 export now
+        Wrapper formats 16 and 17 keep the experimental layer in its normal implicit
+        position below Gamescope WSI. This preserves Wine's WSI handle bridge;
+        the engine recovers Gamescope-normalized HDR from the validated format
+        and session signal instead of forcing a call-chain reorder. Format 15
+        attempted that reorder through VK_INSTANCE_LAYERS and is intentionally
+        regenerated because it can break Wine swapchain dispatch. Format 14
+        activated a uniquely named, wrapper-scoped experimental
+        manifest from Vulkan's normal per-user registry. It disables both
+        public LSFG layer identities for this game and no longer relies on
+        additive search ordering that Pressure Vessel resolves before the
+        wrapper starts. Format 13 removed the obsolete PROTON_USE_WOW64 export
+        now
         that the engine ships architecture-matched Vulkan layers. Format 12
         added an opt-in legacy-isolation recovery path for
         games that cannot start when Gamescope advertises HDR. Format 11 added
-        the private experimental manifest ahead of the
-        normal implicit-layer search path instead of replacing that path. This
-        keeps the experimental layer isolated from the same-named public layer
-        while preserving Gamescope WSI discovery for HDR-capable games. It
-        retains format 10's automatic Active In matching, selected-profile
-        compatibility settings, plugin-private diagnostics log, Adaptive
-        game-owned swapchain recreation behaviour, explicit caller overrides,
-        validated 50 ms acquisition timeout, and experimental Flatpak manifest
-        selection. Validate the required exports as well as the marker so an
+        the private experimental manifest ahead of the normal implicit-layer
+        search path instead of replacing that path. Format 14 supersedes that
+        ordering-based selection while preserving Gamescope WSI discovery for
+        HDR-capable games. It
+        Format 17 retains format 10's automatic Active In matching, selected-profile
+        compatibility settings, plugin-private diagnostics log, in-place
+        presentation recovery, explicit caller overrides, validated 50 ms
+        acquisition timeout, and experimental Flatpak manifest selection.
+        Format 17 removes the obsolete layer-initiated swapchain-recreation
+        export. Validate the required exports as well as the marker so an
         intermediate locally generated wrapper cannot be mistaken for the
         completed format.
         """
@@ -440,7 +462,7 @@ class ConfigurationService(BaseService):
             if not result["success"]:
                 raise OSError(result.get("error") or "could not refresh launch wrapper")
 
-            self.log.info("Upgraded installed lsfg-vk experimental launch wrapper to format 13")
+            self.log.info("Upgraded installed lsfg-vk experimental launch wrapper to format 17")
             return True
         except OSError:
             raise

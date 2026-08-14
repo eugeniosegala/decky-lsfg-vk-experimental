@@ -258,7 +258,7 @@ class Plugin:
         return {
             "launch_option": "~/.local/bin/lsfg-vk-experimental %command%",
             "instructions": "Add this to your game's launch options in Steam Properties",
-            "explanation": "The isolated launcher is created during installation and selects this plugin's private Vulkan layer and configuration"
+            "explanation": "The isolated launcher is created during installation, enables this plugin's uniquely named private Vulkan layer, disables public LSFG layers for this game, and selects the private configuration"
         }
 
     async def get_config_file_content(self) -> Dict[str, Any]:
