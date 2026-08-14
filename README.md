@@ -21,7 +21,7 @@
 |:--:|---------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | 🖼️ | **Improved full-quality image** | In testing, v2 with **Performance Mode disabled** can show noticeably less ghosting than the older layer. Results remain game-dependent; Performance Mode is still useful when lower GPU overhead matters more than image quality.                                                                    |
 | 🎯 | **Adaptive Frame Generation**   | Optionally target 30–240 FPS while the layer varies generated frames up to a selected 2x–4x ceiling. It is disabled by default while it continues to be refined.                                                                                                                                      |
-| 🌈 | **HDR — in progress**          | The engine includes HDR10/PQ and linear-scRGB pipeline groundwork, but Decky keeps HDR exposure locked off while activation, presentation, colour, and performance are validated across games. |
+| 🌈 | **HDR: in progress**            | The engine includes HDR10/PQ and linear-scRGB pipeline groundwork, but Decky keeps HDR exposure locked off while activation, presentation, colour, and performance are validated across games. |
 | 🧩 | **64-bit and 32-bit Vulkan**     | Ships architecture-matched host and Flatpak layers. Vulkan selects the correct library for each game process, so genuine 32-bit Vulkan games no longer depend on the WoW64 workaround. |
 | 🛡️ | **Gamescope recovery**          | Bounded presentation recovery preserves proven Adaptive state, ignores transient Steam-menu cadence, refreshes history, and resumes only after the game cadence is stable again. A validated 2x Adaptive setup also recovers from short gameplay hitches without entering the longer menu/focus path. |
 | ⏯️ | **Live frame-generation switch** | Turn frame generation on or off immediately without changing the selected Fixed or Adaptive settings. Turn it back on to resume with the same profile.                                                                                                                                                |
@@ -48,7 +48,7 @@ build-specific known issues.
 > **Try the game's V-Sync setting first.** It can give the layer a steadier real-frame cadence. On lsfg-vk's normal
 > SDR path, the layer then uses an ordered FIFO presentation sequence for real and generated images, reducing bursts,
 > skipped output, and uneven frame times. V-Sync does not create extra GPU headroom and can add latency or interact
-> poorly with a game's limiter, VRR, or compositor—test it both enabled and disabled before making deeper adjustments.
+> poorly with a game's limiter, VRR, or compositor. Test it both enabled and disabled before making deeper adjustments.
 
 Every game, renderer, and display setup behaves differently. Also compare Fixed and Adaptive Frame Generation, then
 fullscreen, borderless, and windowed modes. Change one setting at a time, restart after major display or
