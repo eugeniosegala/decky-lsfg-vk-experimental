@@ -10,6 +10,17 @@ HDR work, but this Decky release keeps HDR exposure locked off and therefore rem
 Other GPU-backend, flow-scale, or performance-mode changes that cannot be applied safely remain pending until the game
 naturally recreates its swapchain or is restarted.
 
+## In-game V-Sync
+
+Game V-Sync and LSFG-VK's output transport do different jobs. On Decky's established SDR path, the layer reserves
+space for generated images and presents each generated/real sequence through ordered FIFO output. The game's V-Sync
+can make the incoming real-frame cadence steadier, while LSFG-VK's FIFO transport prevents its output sequence from
+being immediately coalesced or skipped. Together this can improve frame pacing and perceived smoothness, particularly
+when an uncapped game otherwise submits bursts of frames.
+
+V-Sync does not create GPU headroom and can add latency, interact with VRR or an in-game limiter, or fall to a lower
+refresh divisor if the game misses its interval. Test it both enabled and disabled for each game.
+
 ## Frame-generation mode
 
 - **Frame Generation (Live On/Off):** Leave this control on to use either Fixed or Adaptive Frame Generation. When
@@ -39,6 +50,10 @@ naturally recreates its swapchain or is restarted.
   measures the real-only rate and either resumes fractional
   scheduling or tests one higher level when **Maximum Adaptive Multiplier** permits it. Rescue never exceeds that
   maximum and has a cooldown to avoid repeated switching.
+
+  **Per-game tuning:** There is no universal best mode. Compare Fixed 2x with Adaptive, then try Adaptive with Smooth
+  Cadence both enabled and disabled. The best choice depends on a game's frame pacing, real-frame headroom, display
+  refresh, and responsiveness, so change one setting at a time and let Adaptive settle before comparing results.
 
 Adaptive also has an automatic Steam-menu discontinuity safeguard, independent of **Smooth Cadence**. After a hard
 cadence stall, it temporarily presents real frames, waits for the measured base cadence to remain healthy for one

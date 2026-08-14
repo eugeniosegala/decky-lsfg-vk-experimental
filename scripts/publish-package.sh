@@ -171,7 +171,6 @@ printf '%s\n' \
   '- **Engine update:** Bundles checksum-verified `lsfg-vk 2.0.0-dev28-experimental.25`. Complete the required in-plugin engine-update step after installing the ZIP.' \
   '- **HDR foundation — in progress:** The bundled engine contains HDR10/PQ and linear-scRGB colour-pipeline groundwork, Gamescope feedback, packed HDR10 boundary transport, and safe passthrough. HDR activation and frame generation are not exposed by this Decky release while cross-game presentation, colour, and performance validation continues.' \
   '- **64-bit and 32-bit Vulkan support:** Installs architecture-matched host and Flatpak layers. Vulkan selects the correct layer for each game process, so genuine 32-bit Vulkan games no longer need the old WoW64 option; existing wrappers are migrated away from stale `PROTON_USE_WOW64` exports.' \
-  '- **Locked SDR safety boundary:** **Disable Experimental HDR (Restart)** is checked and read-only. The backend also overrides older saved opt-ins, exports `LSFGVK_DISABLE_HDR_EXPOSURE=1`, and leaves DXVK at its normal SDR default. Heroic keeps Gamescope WSI in the Vulkan chain so its established presentation and frame-limiting path remains intact.' \
   '- **Safer live reconfiguration and stall recovery:** Transient partial configuration writes are retried. Frame Generation and Adaptive Target, Maximum Multiplier, and Smooth Cadence can update in place when resources permit; resource-shape and model settings are deferred, so restart the game to guarantee those changes. A transient backend stall keeps native presentation active and warms temporal history before generation resumes.' \
   '- **Private layer discovery migration:** The `.25` wrapper regenerates older launchers and retains the uniquely named experimental layer on the proven SDR path. Heroic Flatpak launches explicitly retain Gamescope WSI ahead of the experimental layer; Flatpak cleanup recognises both historical isolated and additive layouts.' \
   '- **Diagnostic log presets:** Installs `~/.local/bin/lsfg-vk-experimental-diagnostics` with focused HDR, Adaptive, recovery, performance, lifecycle, startup, layer, and error filters.' \
@@ -181,7 +180,7 @@ printf '%s\n' \
   '## 🎮 In-game considerations' \
   '' \
   '> [!TIP]' \
-  '> **Try the game’s V-Sync setting first.** In many games it can materially improve frame pacing and the perceived smoothness of frame generation. Test it both enabled and disabled before making deeper adjustments.' \
+  '> **Try the game’s V-Sync setting first.** It can give the layer a steadier real-frame cadence. On lsfg-vk’s normal SDR path, the layer then uses an ordered FIFO presentation sequence for real and generated images, reducing bursts, skipped output, and uneven frame times. V-Sync does not create extra GPU headroom and can add latency or interact poorly with a game’s limiter, VRR, or compositor—test it both enabled and disabled before making deeper adjustments.' \
   '' \
   'Every game, renderer, and display setup behaves differently. Also compare Fixed and Adaptive Frame Generation, then fullscreen, borderless, and windowed modes. Change one setting at a time and keep the configuration that feels best for that game.' \
   '' \
