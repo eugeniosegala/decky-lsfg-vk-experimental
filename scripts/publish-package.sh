@@ -178,6 +178,10 @@ printf '%s\n' \
   '- **Local engine packaging:** Maintainers can build a Decky ZIP directly from a sibling lsfg-vk checkout. The generated ZIP records the exact commit, dirty state, filenames, and checksums without changing the tracked public release pin.' \
   '- **Documentation:** Expands HDR, dual-architecture, diagnostics, Flatpak migration, local packaging, and community-coverage guidance.' \
   '' \
+  '## In-game considerations' \
+  '' \
+  'Every game, renderer, and display setup behaves differently. Try Fixed and Adaptive Frame Generation, enable or disable the game’s V-Sync, and compare fullscreen, borderless, and windowed modes. Change one setting at a time and keep the configuration that feels best for that game.' \
+  '' \
   'See the [Configuration guide](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/blob/main/docs/CONFIGURATION.md) and [Troubleshooting guide](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/blob/main/docs/TROUBLESHOOTING.md) for the full behaviour and per-game controls.' \
   '' \
   '> ⚠️ **Required engine-update step:** Installing the ZIP updates the plugin files, but does **not** by itself replace the private LSFG-VK layer. Open this plugin and select **Install Experimental LSFG-VK (developer build)** to install the version bundled in the new ZIP.' \

@@ -42,6 +42,13 @@ The currently pinned engine, source commit, checksum, and upstream change record
 [latest experimental release notes](https://github.com/eugeniosegala/decky-lsfg-vk-experimental/releases) for
 build-specific known issues.
 
+## In-game considerations
+
+Every game, renderer, and display setup behaves differently. For the best experience, try Fixed and Adaptive Frame
+Generation, enable or disable the game's V-Sync, and compare fullscreen, borderless, and windowed modes. Change one
+setting at a time, restart after major display or frame-generation changes, and keep the configuration that feels best
+for that game.
+
 ## Install and use
 
 1. **Install Decky Loader** if needed: switch to Desktop Mode and follow the
