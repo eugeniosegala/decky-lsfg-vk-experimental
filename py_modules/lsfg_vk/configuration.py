@@ -24,7 +24,6 @@ from .constants import (
     ARMADA_GAME_LAUNCH,
     EXPERIMENTAL_LAYER_ENABLE_ENV,
     FLATPAK_IMPLICIT_LAYER_DIR,
-    HDR_META_LAYER_NAME_64,
     PRESENT_ACQUIRE_TIMEOUT_MS,
 )
 from .types import ConfigurationResponse, ProfilesResponse, ProfileResponse
@@ -33,7 +32,7 @@ from .types import ConfigurationResponse, ProfilesResponse, ProfileResponse
 class ConfigurationService(BaseService):
     """Service for managing TOML-based lsfg configuration"""
 
-    _WRAPPER_FORMAT_MARKER = "# decky-lsfg-vk-experimental-wrapper-format: 22"
+    _WRAPPER_FORMAT_MARKER = "# decky-lsfg-vk-experimental-wrapper-format: 23"
     _WRAPPER_PROFILE_SETTINGS_VERSION = 1
     _REQUIRED_WRAPPER_EXPORTS = (
         "export LSFGVK_PRESENT_ACQUIRE_TIMEOUT_MS=",
@@ -45,6 +44,9 @@ class ConfigurationService(BaseService):
     _OBSOLETE_WRAPPER_EXPORTS = (
         "PROTON_USE_WOW64",
         "LSFGVK_PRESENT_RECOVERY_RECREATE",
+        "LSFGVK_EXPERIMENTAL_HDR",
+        "VK_INSTANCE_LAYERS",
+        "VK_LAYER_DECKY_LSFGVK_experimental_hdr_stack_x86_64",
     )
 
     @staticmethod
@@ -321,8 +323,8 @@ class ConfigurationService(BaseService):
         
         generate_script_lines = get_script_generation_logic()
         lines.extend(generate_script_lines(config))
-        lines.extend(self._generate_layer_environment_lines())
         lines.extend(self._experimental_hdr_activation_lines(config))
+        lines.extend(self._generate_layer_environment_lines())
         lines.extend(self._profile_selection_lines(DEFAULT_PROFILE_NAME, config))
         lines.extend(self._generate_game_launch_lines())
         
@@ -352,8 +354,8 @@ class ConfigurationService(BaseService):
         
         generate_script_lines = get_script_generation_logic()
         lines.extend(generate_script_lines(merged_config))
-        lines.extend(self._generate_layer_environment_lines())
         lines.extend(self._experimental_hdr_activation_lines(merged_config))
+        lines.extend(self._generate_layer_environment_lines())
         # Never export LSFGVK_PROFILE once any profile uses Active In: the
         # environment override takes precedence over upstream's executable
         # detection and would otherwise make profiles depend on the UI's last
@@ -369,33 +371,25 @@ class ConfigurationService(BaseService):
 
     @staticmethod
     def _experimental_hdr_activation_lines(config: Dict[str, Any]) -> list[str]:
-        """Make the existing restart-time HDR boundary explicit to the engine.
+        """Select a restart-time SDR or HDR exposure contract.
 
-        A missing Gamescope app-HDR Boolean is ambiguous: it can mean SDR, or
-        simply that Gamescope has never published its cached false property.
-        Only a profile whose user opts into Experimental HDR may use the
-        guarded output/format bootstrap. Default and recovery profiles export
-        no opt-in and retain the isolated SDR launch path.
+        SDR keeps the proven private implicit-layer path and explicitly tells
+        DXVK not to expose HDR. HDR restores SteamOS' normal Gamescope WSI
+        discovery and asks DXVK to expose HDR formats. Neither route forces the
+        engine's colour pipeline: the game must still select HDR and Gamescope
+        must report positive application evidence.
         """
-        if (
-            config.get(DISABLE_HDR_EXPOSURE, True)
-            or config.get(DISABLE_LSFGVK, False)
-        ):
-            return []
-        # The standalone Gamescope and LSFG manifests are implicit, and their
-        # relative order is deliberately undefined by Vulkan. Remove only the
-        # variables that automatically enable those standalone instances, then
-        # explicitly enable the meta-layer that lists Gamescope first
-        # (application-facing) and LSFG second (driver-facing). Do not set the
-        # components' hard-disable variables: the SteamOS loader also applies
-        # those gates to meta-layer components and would validate the meta-layer
-        # while inserting neither component.
+        if config.get(DISABLE_HDR_EXPOSURE, True):
+            return [
+                "export LSFGVK_DISABLE_HDR_EXPOSURE=1",
+                "export DXVK_HDR=0",
+                "unset ENABLE_GAMESCOPE_WSI",
+            ]
         return [
-            "export LSFGVK_EXPERIMENTAL_HDR=1",
-            "unset ENABLE_GAMESCOPE_WSI",
-            "unset ENABLE_LSFGVK_EXPERIMENTAL",
-            f'export VK_INSTANCE_LAYERS="{HDR_META_LAYER_NAME_64}'
-            '${VK_INSTANCE_LAYERS:+:$VK_INSTANCE_LAYERS}"',
+            "unset LSFGVK_DISABLE_HDR_EXPOSURE",
+            "export DXVK_HDR=1",
+            "unset DISABLE_GAMESCOPE_WSI",
+            "export ENABLE_GAMESCOPE_WSI=1",
         ]
 
     def _generate_layer_environment_lines(self) -> list[str]:
@@ -446,17 +440,14 @@ class ConfigurationService(BaseService):
     def migrate_launch_script_if_needed(self) -> bool:
         """Upgrade an installed generated wrapper without touching user data.
 
-        Wrapper format 22 enables one explicit Vulkan meta-layer for the
-        x86-64 experimental-HDR path. It removes the variables that enable the
-        unordered standalone implicit instances, then its component list
-        deterministically places Gamescope above LSFG. Format 21 instead set
-        both components' hard-disable variables; the SteamOS loader validated
-        the meta-layer but excluded both components, hiding HDR from the game.
-        Formats 19 and 20 attempted to order component
-        names directly through VK_INSTANCE_LAYERS; captured SteamOS traces
-        proved duplicate already-enabled implicit layers retain discovery
-        order, so both formats could leave LSFG unattached. Default SDR remains
-        isolated and does not export VK_INSTANCE_LAYERS.
+        Wrapper format 23 removes the explicit HDR meta-layer and the
+        output-capability bootstrap. Default SDR retains the proven private
+        implicit-layer path and forces DXVK HDR exposure off. An opted-in HDR
+        launch instead preserves SteamOS' normal implicit discovery, enables
+        Gamescope WSI and DXVK HDR exposure, and waits for application HDR
+        evidence before the engine changes colour resources. Formats 19 to 22
+        attempted to order components through VK_INSTANCE_LAYERS or a Vulkan
+        meta-layer and could leave Gamescope or LSFG unattached.
         Format 15 forced only LSFG and could break Wine swapchain dispatch;
         marker validation therefore still regenerates it. Formats 16 through
         18 returned to implicit discovery, which worked only when the loader
@@ -507,7 +498,7 @@ class ConfigurationService(BaseService):
             if not result["success"]:
                 raise OSError(result.get("error") or "could not refresh launch wrapper")
 
-            self.log.info("Upgraded installed lsfg-vk experimental launch wrapper to format 22")
+            self.log.info("Upgraded installed lsfg-vk experimental launch wrapper to format 23")
             return True
         except OSError:
             raise

@@ -6,10 +6,10 @@ Experimental HDR frame generation is still developing and disabled by default. L
 (Restart)** enabled for untested games. To test HDR, select the game's Decky profile, turn that option off, enable HDR
 in SteamOS and the game, and restart the game. Leave it off only for games where HDR works well.
 This is a restart-time exposure boundary rather than a live force-HDR switch: compatible games still select HDR
-themselves. The experimental wrapper then preserves Gamescope WSI discovery and authorizes a guarded compatibility
-bootstrap for the known Gamescope case where its app-HDR Boolean remains unset. That bootstrap additionally requires an
-HDR Gamescope output and a 10-bit or float swapchain; blocked/default SDR profiles cannot enter it. The engine diagnoses
-the swapchain format and colour space for the standard SteamOS HDR10/PQ and linear-scRGB paths.
+themselves. The experimental wrapper preserves SteamOS' normal implicit discovery, enables Gamescope WSI, and sets
+`DXVK_HDR=1`. The engine still waits for positive application colour-space feedback or HDR metadata. An HDR-capable
+output alone is not application intent and cannot promote an SDR swapchain. Blocked/default SDR profiles instead use
+the isolated private path and `DXVK_HDR=0`.
 
 HDR10 frame generation is decoded from BT.2020/PQ into linear scRGB for the model, then encoded back to BT.2020/PQ for
 presentation. Unsupported HDR encodings, including HLG and Dolby Vision, use the game's real frames rather than
@@ -46,15 +46,12 @@ settles. It should be followed by `runtime-transition-applied` and the in-place 
 pending, include the HDR preset in the report and confirm that SteamOS HDR is enabled and the game process has
 `DXVK_HDR=1`.
 
-For the current x86-64 experimental HDR test, the wrapper enables
-`VK_LAYER_DECKY_LSFGVK_experimental_hdr_stack_x86_64`. Its Vulkan meta-layer components must appear as Gamescope WSI
-before experimental LSFG in the loader callstack. Seeing both component names is not sufficient: if LSFG appears above
-Gamescope, LSFG may initialize yet never receive the game's translated swapchain calls. That failure has a distinctive
-trace: the HDR activation line is present and Gamescope creates swapchains, but there is no `swapchain colour pipeline`,
-`runtime-state-applied`, or `swapchain-context-create` line. Default SDR does not enable this experimental meta-layer.
-If the meta-layer validates but neither component appears in the callstack, confirm the wrapper does not export
-`DISABLE_GAMESCOPE_WSI` or `DISABLE_LSFGVK_EXPERIMENTAL`; format 21 used those hard-disable gates and suppressed the
-components as well as their unordered standalone instances.
+For the current x86-64 experimental HDR test, the wrapper does not use `VK_INSTANCE_LAYERS` or a custom meta-layer.
+With `VK_LOADER_DEBUG=layer`, confirm that Gamescope WSI and
+`VK_LAYER_LSFGVK_experimental_frame_generation` are both inserted and that the LSFG build marker is present. If
+Gamescope creates swapchains but there is no `swapchain colour pipeline`, `runtime-state-applied`, or
+`swapchain-context-create` record, the experimental layer did not attach to the game's swapchain path. Re-enable the
+default SDR option to return to the isolated compatibility path while collecting the loader report.
 
 `mode=scrgb-linear` is also supported. `frame-generation=passthrough` includes a reason on the following line and is a
 safe compatibility result, not washed-out generated output.

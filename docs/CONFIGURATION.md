@@ -98,26 +98,20 @@ remain 64-bit because they are not loaded into the game process.
 - **Zink:** Optional Vulkan-based OpenGL path for OpenGL games.
 
 Gamescope WSI and MangoHud controls are deliberately not shown. The wrapper enables this plugin's uniquely named
-experimental layer and disables both public LSFG identities for that game. Normal implicit-layer discovery remains
-available, so Vulkan can still discover Gamescope WSI when SteamOS enables it. Existing caller-supplied layer paths are
-preserved. Default SDR does not modify `VK_INSTANCE_LAYERS`. When a profile explicitly enables the developing HDR path,
-the current x86-64 test wrapper enables a plugin-owned Vulkan meta-layer whose ordered components are Gamescope WSI then
-experimental LSFG. That keeps Gamescope's Wine WSI bridge application-facing and ensures LSFG receives its translated
-swapchain handles. The wrapper withholds the variables that automatically activate the unordered standalone implicit
-instances for that process; Vulkan activates the same component manifests explicitly through the meta-layer in
-deterministic order. It deliberately does not set the components' hard-disable variables, because the SteamOS loader
-also applies those gates to meta-layer components. This avoids relying on implicit-manifest
-enumeration or on duplicate component names in `VK_INSTANCE_LAYERS`, both of which left the already-enabled discovery
-order unchanged in captured SteamOS traces. Gamescope normalizes the driver-facing colour space to sRGB, so the engine
-recovers HDR semantics only for its exact packed-10-bit or float HDR formats while the Gamescope session advertises HDR.
+experimental layer and disables both public LSFG identities for that game. Existing caller-supplied layer paths and
+`VK_INSTANCE_LAYERS` are preserved. With **Disable Experimental HDR (Restart)** on, the wrapper uses the proven private
+implicit-layer path and sets `DXVK_HDR=0`, keeping ordinary SDR independent from the developing HDR integration. With
+the option off, the wrapper restores SteamOS' normal implicit-layer discovery, enables Gamescope WSI, and sets
+`DXVK_HDR=1` so an HDR-capable game can enumerate HDR. It does not install or activate a custom Vulkan meta-layer.
+Gamescope normalizes its driver-facing colour space to sRGB, so the engine recovers HDR semantics only for exact
+packed-10-bit or float formats after Gamescope reports positive application HDR evidence.
 
 Experimental HDR frame generation is still in development, so **Disable Experimental HDR (Restart)** is enabled by
-default, retaining the proven SDR path. Leave it on for untested games. If HDR works well for a particular game, turn
-the option off for that game's Decky profile, enable HDR in SteamOS and the game, then restart the game. Turning it off
-also marks that launch as an explicit experimental-HDR test. This lets the engine recover
-Gamescope-normalized HDR formats when the compositor leaves its cached app-HDR Boolean property unset, but only while
-the Gamescope output itself is HDR; blocked/default SDR profiles never authorize that compatibility path. Compatible
-games are otherwise detected automatically; there is no force-HDR mode. The engine recognizes Gamescope
+default, retaining the proven SDR path. Leave it on for untested games. To test HDR, turn the option off for that
+game's Decky profile, enable HDR in SteamOS, restart the game, and select HDR in the game. This exposes HDR through the
+normal SteamOS path but does not force an SDR renderer into HDR. Output HDR capability is diagnostic information only;
+the engine waits for the game's live colour-space feedback or HDR metadata before changing colour resources. The
+engine recognizes Gamescope
 HDR10/PQ and linear-scRGB swapchain combinations and converts HDR10 to linear scRGB around frame generation. Unsupported
 transfer functions and initialization failures remain on real-frame passthrough. The blocking option restores
 private-only Vulkan discovery, so other global Vulkan layers are unavailable for that game while it is enabled. Use

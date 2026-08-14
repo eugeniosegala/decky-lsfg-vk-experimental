@@ -236,7 +236,7 @@ export function ConfigurationSection({
           <PanelSectionRow>
             <ToggleField
               label={t("CONFIG_DISABLE_HDR_EXPOSURE", "Disable Experimental HDR (Restart)")}
-              description={t("CONFIG_DISABLE_HDR_EXPOSURE_DESC", "Experimental HDR is still in development and is disabled by default. Leave this on for untested games. Turn it off only for games where HDR works well, then restart.")}
+              description={t("CONFIG_DISABLE_HDR_EXPOSURE_DESC", "On (default) uses the isolated SDR path and disables DXVK HDR exposure. Turn it off only to test HDR; the game must then select HDR. Restart required.")}
               checked={config.disable_hdr_exposure}
               onChange={(value) => onConfigChange(DISABLE_HDR_EXPOSURE, value)}
             />

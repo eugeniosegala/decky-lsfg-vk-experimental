@@ -67,16 +67,14 @@ class BaseService:
         self.local_lib32_dir.mkdir(parents=True, exist_ok=True)
         self.local_share_dir.mkdir(parents=True, exist_ok=True)
         self.user_vulkan_layer_dir.mkdir(parents=True, exist_ok=True)
-        self.user_vulkan_explicit_layer_dir.mkdir(parents=True, exist_ok=True)
         self.config_dir.mkdir(parents=True, exist_ok=True)
         self.lsfg_script_path.parent.mkdir(parents=True, exist_ok=True)
         self.log.info(
-            "Ensured isolated directories exist: %s, %s, %s, %s, %s, %s, %s",
+            "Ensured isolated directories exist: %s, %s, %s, %s, %s, %s",
             self.local_lib_dir,
             self.local_lib32_dir,
             self.local_share_dir,
             self.user_vulkan_layer_dir,
-            self.user_vulkan_explicit_layer_dir,
             self.config_dir,
             self.lsfg_script_path.parent,
         )

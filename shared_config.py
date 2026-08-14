@@ -138,7 +138,7 @@ CONFIG_SCHEMA_DEF = {
         "name": "disable_hdr_exposure",
         "fieldType": ConfigFieldType.BOOLEAN,
         "default": True,
-        "description": "disable experimental HDR by default; turn off only for games verified with HDR",
+        "description": "default isolated SDR launch; turn off only to test application-selected HDR",
         "location": "script"
     },
 

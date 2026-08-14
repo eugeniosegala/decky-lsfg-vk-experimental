@@ -32,9 +32,10 @@ class WrapperEnvironmentTests(unittest.TestCase):
         self.service.local_share_dir = Path("/private/lsfg/implicit_layer.d")
 
     def _evaluate(self, extra_environment=None, config=None):
-        lines = self.service._generate_layer_environment_lines()
+        lines = []
         if config is not None:
             lines.extend(self.service._experimental_hdr_activation_lines(config))
+        lines.extend(self.service._generate_layer_environment_lines())
         script = "\n".join(lines + [
             'printf "ADD=%s\\n" "${VK_ADD_IMPLICIT_LAYER_PATH:-}"',
             'printf "IMPLICIT=%s\\n" "${VK_IMPLICIT_LAYER_PATH:-}"',
@@ -43,6 +44,9 @@ class WrapperEnvironmentTests(unittest.TestCase):
             'printf "DISABLE_LEGACY=%s\\n" "${DISABLE_LSFG:-}"',
             'printf "DISABLE_EXPERIMENTAL=%s\\n" "${DISABLE_LSFGVK_EXPERIMENTAL:-}"',
             'printf "DISABLE_GAMESCOPE=%s\\n" "${DISABLE_GAMESCOPE_WSI:-}"',
+            'printf "ENABLE_GAMESCOPE=%s\\n" "${ENABLE_GAMESCOPE_WSI:-}"',
+            'printf "HDR_EXPOSURE_DISABLED=%s\\n" "${LSFGVK_DISABLE_HDR_EXPOSURE:-}"',
+            'printf "DXVK_HDR=%s\\n" "${DXVK_HDR:-}"',
             'printf "INSTANCE=%s\\n" "${VK_INSTANCE_LAYERS:-}"',
         ])
         environment = {
@@ -162,12 +166,10 @@ class WrapperEnvironmentTests(unittest.TestCase):
             "disable_hdr_exposure": False,
         })
         self.assertEqual(lines, [
-            "export LSFGVK_EXPERIMENTAL_HDR=1",
-            "unset ENABLE_GAMESCOPE_WSI",
-            "unset ENABLE_LSFGVK_EXPERIMENTAL",
-            'export VK_INSTANCE_LAYERS="'
-            'VK_LAYER_DECKY_LSFGVK_experimental_hdr_stack_x86_64'
-            '${VK_INSTANCE_LAYERS:+:$VK_INSTANCE_LAYERS}"',
+            "unset LSFGVK_DISABLE_HDR_EXPOSURE",
+            "export DXVK_HDR=1",
+            "unset DISABLE_GAMESCOPE_WSI",
+            "export ENABLE_GAMESCOPE_WSI=1",
         ])
 
         values = self._evaluate(
@@ -181,10 +183,12 @@ class WrapperEnvironmentTests(unittest.TestCase):
         )
         self.assertEqual(
             values["INSTANCE"],
-            "VK_LAYER_DECKY_LSFGVK_experimental_hdr_stack_x86_64:"
             "VK_LAYER_existing_one:VK_LAYER_existing_two",
         )
-        self.assertEqual(values["ENABLE"], "")
+        self.assertEqual(values["ENABLE"], "1")
+        self.assertEqual(values["ENABLE_GAMESCOPE"], "1")
+        self.assertEqual(values["HDR_EXPOSURE_DISABLED"], "")
+        self.assertEqual(values["DXVK_HDR"], "1")
         self.assertEqual(values["DISABLE_EXPERIMENTAL"], "")
         self.assertEqual(values["DISABLE_GAMESCOPE"], "")
 
@@ -192,21 +196,29 @@ class WrapperEnvironmentTests(unittest.TestCase):
         lines = self.service._experimental_hdr_activation_lines({
             "disable_hdr_exposure": True,
         })
-        self.assertEqual(lines, [])
+        self.assertEqual(lines, [
+            "export LSFGVK_DISABLE_HDR_EXPOSURE=1",
+            "export DXVK_HDR=0",
+            "unset ENABLE_GAMESCOPE_WSI",
+        ])
         values = self._evaluate(
             {"VK_INSTANCE_LAYERS": "VK_LAYER_existing"},
             {"disable_hdr_exposure": True},
         )
         self.assertEqual(values["INSTANCE"], "VK_LAYER_existing")
+        self.assertEqual(values["HDR_EXPOSURE_DISABLED"], "1")
+        self.assertEqual(values["DXVK_HDR"], "0")
+        self.assertEqual(values["ENABLE_GAMESCOPE"], "")
         self.assertEqual(values["DISABLE_EXPERIMENTAL"], "")
         self.assertEqual(values["DISABLE_GAMESCOPE"], "")
 
-    def test_full_layer_disable_does_not_activate_hdr_meta_layer(self):
+    def test_full_layer_disable_keeps_hdr_exposure_choice_independent(self):
         lines = self.service._experimental_hdr_activation_lines({
             "disable_hdr_exposure": False,
             "disable_lsfgvk": True,
         })
-        self.assertEqual(lines, [])
+        self.assertIn("export DXVK_HDR=1", lines)
+        self.assertNotIn("VK_INSTANCE_LAYERS", "\n".join(lines))
 
     def test_full_layer_disable_targets_only_experimental_identity(self):
         lines = get_script_generation_logic()({"disable_lsfgvk": True})
