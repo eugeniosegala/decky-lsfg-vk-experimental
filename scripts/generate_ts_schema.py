@@ -115,7 +115,6 @@ def generate_typescript_schema():
     ] + field_types + [
         "  };",
         "}",
-        "",
         ""
     ]
     
