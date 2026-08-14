@@ -54,7 +54,8 @@ Gamescope feedback, packed HDR10 boundary transport, and safe real-frame passthr
 presentation, colour, and performance are not yet release-ready.
 
 Decky therefore locks **Disable Experimental HDR (Restart)** on and read-only for `.25`. The backend overrides older
-saved opt-ins, uses the private-only SDR discovery path, exports `LSFGVK_DISABLE_HDR_EXPOSURE=1`, and sets `DXVK_HDR=0`.
+saved opt-ins, exports `LSFGVK_DISABLE_HDR_EXPOSURE=1`, and leaves DXVK at its normal SDR default. Heroic launches keep
+Gamescope WSI ahead of the private experimental layer so the compositor's established presentation path stays active.
 The engine foundation remains integrated for future work without leaking its experimental transport into normal SDR.
 **Disable Experimental LSFG-VK on Next Launch** remains the last-resort recovery if the layer itself prevents a title
 from starting.

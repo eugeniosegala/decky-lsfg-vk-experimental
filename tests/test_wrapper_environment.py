@@ -131,20 +131,26 @@ class WrapperEnvironmentTests(unittest.TestCase):
         self.assertEqual(values["DISABLE_PUBLIC"], "1")
         self.assertEqual(values["DISABLE_LEGACY"], "1")
 
-    def test_flatpak_hdr_recovery_uses_only_the_experimental_extension(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
+    def test_flatpak_sdr_boundary_uses_explicit_umu_manifest_path(self):
+        with tempfile.TemporaryDirectory() as temp_dir, tempfile.TemporaryDirectory() as gamescope_dir:
             previous = configuration_module.FLATPAK_IMPLICIT_LAYER_DIR
+            previous_gamescope = configuration_module.FLATPAK_GAMESCOPE_IMPLICIT_LAYER_DIR
             configuration_module.FLATPAK_IMPLICIT_LAYER_DIR = temp_dir
+            configuration_module.FLATPAK_GAMESCOPE_IMPLICIT_LAYER_DIR = gamescope_dir
             try:
                 values = self._evaluate({
                     "LSFGVK_DISABLE_HDR_EXPOSURE": "1",
                     "VK_IMPLICIT_LAYER_PATH": "/caller/override",
+                    "VK_ADD_IMPLICIT_LAYER_PATH": "/caller/additional",
+                    "ENABLE_GAMESCOPE_WSI": "1",
                 })
             finally:
                 configuration_module.FLATPAK_IMPLICIT_LAYER_DIR = previous
+                configuration_module.FLATPAK_GAMESCOPE_IMPLICIT_LAYER_DIR = previous_gamescope
 
-        self.assertEqual(values["IMPLICIT"], temp_dir)
+        self.assertEqual(values["IMPLICIT"], f"{gamescope_dir}:{temp_dir}")
         self.assertEqual(values["ADD"], "")
+        self.assertEqual(values["ENABLE_GAMESCOPE"], "1")
 
     def test_hdr_recovery_profile_generates_wrapper_export(self):
         lines = get_script_generation_logic()({"disable_hdr_exposure": True})
@@ -167,8 +173,7 @@ class WrapperEnvironmentTests(unittest.TestCase):
         })
         self.assertEqual(lines, [
             "export LSFGVK_DISABLE_HDR_EXPOSURE=1",
-            "export DXVK_HDR=0",
-            "unset ENABLE_GAMESCOPE_WSI",
+            "unset DXVK_HDR",
         ])
 
         values = self._evaluate(
@@ -185,9 +190,9 @@ class WrapperEnvironmentTests(unittest.TestCase):
             "VK_LAYER_existing_one:VK_LAYER_existing_two",
         )
         self.assertEqual(values["ENABLE"], "1")
-        self.assertEqual(values["ENABLE_GAMESCOPE"], "")
+        self.assertEqual(values["ENABLE_GAMESCOPE"], "1")
         self.assertEqual(values["HDR_EXPOSURE_DISABLED"], "1")
-        self.assertEqual(values["DXVK_HDR"], "0")
+        self.assertEqual(values["DXVK_HDR"], "")
         self.assertEqual(values["DISABLE_EXPERIMENTAL"], "")
         self.assertEqual(values["DISABLE_GAMESCOPE"], "")
 
@@ -197,8 +202,7 @@ class WrapperEnvironmentTests(unittest.TestCase):
         })
         self.assertEqual(lines, [
             "export LSFGVK_DISABLE_HDR_EXPOSURE=1",
-            "export DXVK_HDR=0",
-            "unset ENABLE_GAMESCOPE_WSI",
+            "unset DXVK_HDR",
         ])
         values = self._evaluate(
             {"VK_INSTANCE_LAYERS": "VK_LAYER_existing"},
@@ -206,7 +210,7 @@ class WrapperEnvironmentTests(unittest.TestCase):
         )
         self.assertEqual(values["INSTANCE"], "VK_LAYER_existing")
         self.assertEqual(values["HDR_EXPOSURE_DISABLED"], "1")
-        self.assertEqual(values["DXVK_HDR"], "0")
+        self.assertEqual(values["DXVK_HDR"], "")
         self.assertEqual(values["ENABLE_GAMESCOPE"], "")
         self.assertEqual(values["DISABLE_EXPERIMENTAL"], "")
         self.assertEqual(values["DISABLE_GAMESCOPE"], "")
@@ -216,7 +220,7 @@ class WrapperEnvironmentTests(unittest.TestCase):
             "disable_hdr_exposure": False,
             "disable_lsfgvk": True,
         })
-        self.assertIn("export DXVK_HDR=0", lines)
+        self.assertIn("unset DXVK_HDR", lines)
         self.assertNotIn("VK_INSTANCE_LAYERS", "\n".join(lines))
 
     def test_full_layer_disable_targets_only_experimental_identity(self):

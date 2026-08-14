@@ -55,6 +55,14 @@ BIN_DIR = "bin"
 FLATPAK_EXTENSION_NAME = "org.freedesktop.Platform.VulkanLayer.lsfgvkexperimental"
 FLATPAK_EXTENSION_PREFIX = "/usr/lib/extensions/vulkan/lsfgvkexperimental"
 FLATPAK_IMPLICIT_LAYER_DIR = f"{FLATPAK_EXTENSION_PREFIX}/share/vulkan/implicit_layer.d"
+# Heroic's Flatpak ships Gamescope as a separate Vulkan runtime extension.
+# When the per-game UMU wrapper must use VK_IMPLICIT_LAYER_PATH to carry this
+# experimental layer into Pressure Vessel, keep Gamescope's manifest in that
+# explicit search set as well. Removing it changes ordinary SDR presentation,
+# frame limiting, and window integration before LSFG creates a swapchain.
+FLATPAK_GAMESCOPE_IMPLICIT_LAYER_DIR = (
+    "/usr/lib/extensions/vulkan/gamescope/share/vulkan/implicit_layer.d"
+)
 FLATPAK_23_08_FILENAME = f"{FLATPAK_EXTENSION_NAME}-23.08.flatpak"
 FLATPAK_24_08_FILENAME = f"{FLATPAK_EXTENSION_NAME}-24.08.flatpak"
 FLATPAK_25_08_FILENAME = f"{FLATPAK_EXTENSION_NAME}-25.08.flatpak"

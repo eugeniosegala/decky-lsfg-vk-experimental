@@ -23,6 +23,7 @@ from .constants import (
     ARMADA_DEVICE_ENV,
     ARMADA_GAME_LAUNCH,
     EXPERIMENTAL_LAYER_ENABLE_ENV,
+    FLATPAK_GAMESCOPE_IMPLICIT_LAYER_DIR,
     FLATPAK_IMPLICIT_LAYER_DIR,
     PRESENT_ACQUIRE_TIMEOUT_MS,
 )
@@ -32,7 +33,7 @@ from .types import ConfigurationResponse, ProfilesResponse, ProfileResponse
 class ConfigurationService(BaseService):
     """Service for managing TOML-based lsfg configuration"""
 
-    _WRAPPER_FORMAT_MARKER = "# decky-lsfg-vk-experimental-wrapper-format: 24"
+    _WRAPPER_FORMAT_MARKER = "# decky-lsfg-vk-experimental-wrapper-format: 27"
     _WRAPPER_PROFILE_SETTINGS_VERSION = 1
     _REQUIRED_WRAPPER_EXPORTS = (
         "export LSFGVK_PRESENT_ACQUIRE_TIMEOUT_MS=",
@@ -384,8 +385,10 @@ class ConfigurationService(BaseService):
         del config
         return [
             "export LSFGVK_DISABLE_HDR_EXPOSURE=1",
-            "export DXVK_HDR=0",
-            "unset ENABLE_GAMESCOPE_WSI",
+            # Absence is DXVK's established SDR default. Do not replace the
+            # launcher's normal Gamescope WSI contract while blocking LSFG's
+            # unfinished HDR path.
+            "unset DXVK_HDR",
         ]
 
     def _generate_layer_environment_lines(self) -> list[str]:
@@ -394,8 +397,11 @@ class ConfigurationService(BaseService):
         The same wrapper is used in Steam launch options and as Heroic's
         per-game wrapper command. Host launches use the uniquely named, gated
         manifest installed in Vulkan's normal per-user directory so Pressure
-        Vessel can register it before this wrapper starts. Flatpak launches
-        still add their mounted runtime-extension directory at process start.
+        Vessel can register it before this wrapper starts. Heroic's UMU launch
+        path rebuilds the child's Vulkan manifest search from an explicit
+        override; use the mounted Flatpak extension as that override so the
+        experimental layer survives into the game process. The HDR exposure
+        boundary is enforced separately.
         """
         diagnostics_log_path = self.config_dir / "present-diagnostics.log"
         return [
@@ -404,23 +410,27 @@ class ConfigurationService(BaseService):
             "export DISABLE_LSFGVK=1",
             "export DISABLE_LSFG=1",
             f"if [ -d {shlex.quote(FLATPAK_IMPLICIT_LAYER_DIR)} ]; then",
-            f"    lsfgvk_implicit_layer_dir={shlex.quote(FLATPAK_IMPLICIT_LAYER_DIR)}",
+            f"    lsfgvk_implicit_layer_path={shlex.quote(FLATPAK_IMPLICIT_LAYER_DIR)}",
+            f"    if [ -d {shlex.quote(FLATPAK_GAMESCOPE_IMPLICIT_LAYER_DIR)} ]; then",
+            "        # Gamescope must stay above LSFG in Heroic's Vulkan chain.",
+            f"        lsfgvk_implicit_layer_path={shlex.quote(FLATPAK_GAMESCOPE_IMPLICIT_LAYER_DIR)}:\"$lsfgvk_implicit_layer_path\"",
+            "    fi",
             'elif [ "${LSFGVK_DISABLE_HDR_EXPOSURE:-0}" != "0" ]; then',
-            f"    lsfgvk_implicit_layer_dir={shlex.quote(str(self.local_share_dir))}",
+            f"    lsfgvk_implicit_layer_path={shlex.quote(str(self.local_share_dir))}",
             "else",
-            '    lsfgvk_implicit_layer_dir=""',
+            '    lsfgvk_implicit_layer_path=""',
             "fi",
             'if [ "${LSFGVK_DISABLE_HDR_EXPOSURE:-0}" != "0" ]; then',
-            '    export VK_IMPLICIT_LAYER_PATH="$lsfgvk_implicit_layer_dir"',
+            '    export VK_IMPLICIT_LAYER_PATH="$lsfgvk_implicit_layer_path"',
             '    unset VK_ADD_IMPLICIT_LAYER_PATH',
-            'elif [ -z "$lsfgvk_implicit_layer_dir" ]; then',
+            'elif [ -z "$lsfgvk_implicit_layer_path" ]; then',
             "    : # Host manifest is registered before Pressure Vessel starts.",
             'elif [ -n "${VK_IMPLICIT_LAYER_PATH:-}" ]; then',
-            '    export VK_IMPLICIT_LAYER_PATH="$lsfgvk_implicit_layer_dir:$VK_IMPLICIT_LAYER_PATH"',
+            '    export VK_IMPLICIT_LAYER_PATH="$lsfgvk_implicit_layer_path:$VK_IMPLICIT_LAYER_PATH"',
             'elif [ -n "${VK_ADD_IMPLICIT_LAYER_PATH:-}" ]; then',
-            '    export VK_ADD_IMPLICIT_LAYER_PATH="$lsfgvk_implicit_layer_dir:$VK_ADD_IMPLICIT_LAYER_PATH"',
+            '    export VK_ADD_IMPLICIT_LAYER_PATH="$lsfgvk_implicit_layer_path:$VK_ADD_IMPLICIT_LAYER_PATH"',
             "else",
-            '    export VK_ADD_IMPLICIT_LAYER_PATH="$lsfgvk_implicit_layer_dir"',
+            '    export VK_ADD_IMPLICIT_LAYER_PATH="$lsfgvk_implicit_layer_path"',
             "fi",
             f"export LSFGVK_CONFIG={shlex.quote(str(self.config_file_path))}",
             "# Heroic can discard a game's stderr. Capture opt-in engine diagnostics here instead.",
@@ -436,9 +446,14 @@ class ConfigurationService(BaseService):
     def migrate_launch_script_if_needed(self) -> bool:
         """Upgrade an installed generated wrapper without touching user data.
 
-        Wrapper format 24 locks the packaged Decky release to the proven private
-        SDR path and forces DXVK HDR exposure off while HDR remains under
-        development. It also replaces saved opt-ins from format 23. Formats 19 to 22
+        Wrapper format 27 keeps Heroic's Gamescope WSI manifest and activation
+        contract while using the explicit Flatpak search path required to carry
+        LSFG through UMU. Format 26 restored LSFG attachment but still removed
+        Gamescope from ordinary SDR launches. Format 25 used
+        VK_ADD_IMPLICIT_LAYER_PATH, but Heroic's UMU child did not retain that
+        addition and frame generation never loaded. HDR remains blocked by the
+        separate restart-time SDR boundary.
+        Formats 19 to 22
         attempted to order components through VK_INSTANCE_LAYERS or a Vulkan
         meta-layer and could leave Gamescope or LSFG unattached.
         Format 15 forced only LSFG and could break Wine swapchain dispatch;
@@ -491,7 +506,7 @@ class ConfigurationService(BaseService):
             if not result["success"]:
                 raise OSError(result.get("error") or "could not refresh launch wrapper")
 
-            self.log.info("Upgraded installed lsfg-vk experimental launch wrapper to format 24")
+            self.log.info("Upgraded installed lsfg-vk experimental launch wrapper to format 27")
             return True
         except OSError:
             raise

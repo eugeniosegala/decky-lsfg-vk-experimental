@@ -3,9 +3,10 @@
 ## HDR (in progress)
 
 HDR exposure is intentionally unavailable in this Decky release. **Disable Experimental HDR (Restart)** is checked,
-read-only, and enforced by the backend even if an older profile stored the opposite value. The generated wrapper uses
-the isolated SDR path, exports `LSFGVK_DISABLE_HDR_EXPOSURE=1`, and sets `DXVK_HDR=0`. An HDR option being unavailable
-inside a game is therefore expected and is not evidence that the `.25` package installed incorrectly.
+read-only, and enforced by the backend even if an older profile stored the opposite value. The generated wrapper exports
+`LSFGVK_DISABLE_HDR_EXPOSURE=1` and leaves DXVK at its normal SDR default. Heroic Flatpak launches retain Gamescope WSI
+alongside the experimental layer. An HDR option being unavailable inside a game is therefore expected and is not
+evidence that the `.25` package installed incorrectly.
 
 The pinned engine still contains the HDR10/PQ and linear-scRGB colour-pipeline foundation, Gamescope feedback resolver,
 packed HDR10 boundary transport, and safe-passthrough diagnostics. Those pieces remain useful for continued engine

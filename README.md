@@ -32,7 +32,7 @@
 This plugin installs a private, checksum-verified lsfg-vk v2 engine under a uniquely named, wrapper-scoped Vulkan layer and
 activates it only through its experimental launcher. The launcher disables both known public LSFG layer identities for
 that game, so the original plugin can remain installed without either implementation being chained accidentally. This
-release keeps the launcher on the isolated SDR path. Although the pinned engine contains an HDR colour-pipeline
+release keeps the launcher on a controlled SDR path while preserving Gamescope WSI for Heroic. Although the pinned engine contains an HDR colour-pipeline
 foundation, Decky's HDR exposure block is locked on until the full Gamescope activation and presentation path is ready.
 It uses the normal `Lossless.dll` from the Lossless Scaling Steam application; it does not install, copy, or modify that
 DLL.

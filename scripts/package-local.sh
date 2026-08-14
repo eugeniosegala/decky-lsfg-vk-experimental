@@ -9,6 +9,7 @@ engine_archive_path=""
 flatpak_archive_path=""
 local_engine_repo=""
 local_engine_mode=false
+local_plugin_mode=false
 native_only=false
 build_64_only=false
 local_engine_commit=""
@@ -30,6 +31,10 @@ Options:
                           Build and bundle the engine checkout at PATH. Its
                           commit and generated checksums are recorded only in
                           the ZIP; tracked package.json is not changed.
+  --local-plugin          Build a uniquely versioned plugin-only test ZIP
+                          using the pinned released engine and Flatpak bundles.
+                          Use this for Decky or wrapper changes; it avoids a
+                          needless native-engine rebuild.
   --native-only           With --local-engine-repo, omit Flatpak extensions.
                           This is the fast path for native Steam game testing,
                           never for a release package.
@@ -86,6 +91,11 @@ while (($#)); do
       shift 2
       continue
       ;;
+    --local-plugin)
+      local_plugin_mode=true
+      shift
+      continue
+      ;;
     --native-only)
       native_only=true
       shift
@@ -121,6 +131,10 @@ done
 if [[ -n "$local_engine_repo" &&
       ( -n "$engine_archive_path" || -n "$flatpak_archive_path" ) ]]; then
   echo "--local-engine-repo cannot be combined with archive override options" >&2
+  exit 2
+fi
+if [[ "$local_plugin_mode" == true && -n "$local_engine_repo" ]]; then
+  echo "--local-plugin cannot be combined with --local-engine-repo" >&2
   exit 2
 fi
 if [[ "$native_only" == true && -z "$local_engine_repo" ]]; then
@@ -271,6 +285,13 @@ if [[ -n "$local_engine_repo" ]]; then
   fi
 fi
 
+if [[ "$local_plugin_mode" == true ]]; then
+  # Wrapper/UI-only test packages must still have a distinct version or Decky
+  # can retain the old Python backend and generated launcher. The engine and
+  # Flatpak artifacts remain the pinned, verified release payloads.
+  local_plugin_label="wrapper.$(worktree_fingerprint "$project_dir")"
+fi
+
 for local_archive in "$engine_archive_path" "$flatpak_archive_path"; do
   if [[ -n "$local_archive" && ! -f "$local_archive" ]]; then
     echo "Local archive not found: $local_archive" >&2
@@ -279,7 +300,7 @@ for local_archive in "$engine_archive_path" "$flatpak_archive_path"; do
 done
 
 if [[ "$output_path_set" == false ]]; then
-  if [[ "$local_engine_mode" == true ]]; then
+  if [[ "$local_engine_mode" == true || "$local_plugin_mode" == true ]]; then
     output_path="$project_dir/out/Decky.LSFG-VK.Experimental-local.$local_plugin_label.zip"
   else
     output_path="$project_dir/out/Decky.LSFG-VK.Experimental.zip"
@@ -438,6 +459,15 @@ if [[ "$local_engine_mode" == true ]]; then
     "$archive_checksum" "$local_engine_commit" "$local_engine_dirty" \
     "$local_engine_label" "$flatpak_archive_name" "$flatpak_archive_checksum" \
     "$local_plugin_label" "$build_64_only"
+elif [[ "$local_plugin_mode" == true ]]; then
+  node -e '
+    const fs = require("node:fs");
+    const manifestPath = process.argv[1];
+    const localPluginLabel = process.argv[2];
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+    manifest.version = `${manifest.version}.local.${localPluginLabel}`;
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+  ' "$package_dir/package.json" "$local_plugin_label"
 fi
 cp -R "$project_dir/dist/." "$package_dir/dist/"
 cp -R "$project_dir/py_modules/." "$package_dir/py_modules/"

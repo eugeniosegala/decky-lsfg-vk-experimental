@@ -100,9 +100,10 @@ remain 64-bit because they are not loaded into the game process.
 
 Gamescope WSI and MangoHud controls are deliberately not shown. The wrapper enables this plugin's uniquely named
 experimental layer and disables both public LSFG identities for that game. In this release, **Disable Experimental HDR
-(Restart)** is checked and read-only: the wrapper always uses the proven private implicit-layer path, exports
-`LSFGVK_DISABLE_HDR_EXPOSURE=1`, and sets `DXVK_HDR=0`. Existing profiles that previously opted into HDR are normalized
-back to this stable SDR boundary when loaded or saved.
+(Restart)** is checked and read-only: the wrapper exports `LSFGVK_DISABLE_HDR_EXPOSURE=1` and leaves DXVK at its normal
+SDR default. Heroic Flatpak launches explicitly keep Gamescope WSI ahead of the experimental layer so compositor
+presentation and frame limiting remain available. Existing profiles that previously opted into HDR are normalized back
+to this stable SDR boundary when loaded or saved.
 
 HDR frame generation remains under development. The pinned engine contains format classification, HDR10/PQ and
 linear-scRGB conversion, Gamescope feedback, packed-boundary transport, and safe-passthrough groundwork, but the Decky
