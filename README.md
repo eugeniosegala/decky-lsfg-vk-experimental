@@ -94,8 +94,8 @@ The Steam launch wrapper cannot enter a Flatpak sandbox, so configure Heroic thr
 4. Start that game normally from Heroic or its Steam shortcut.
 
 The wrapper applies only to the selected Heroic games. It enables the uniquely named experimental Flatpak layer and
-disables both known public LSFG identities for that game. While HDR is locked off, it uses the same isolated SDR layer
-discovery as native games; selection does not depend on ambiguous same-name search ordering.
+disables both known public LSFG identities for that game. While HDR is locked off, its controlled SDR discovery keeps
+Gamescope WSI ahead of the experimental layer; selection does not depend on ambiguous same-name search ordering.
 
 > [!IMPORTANT]
 > After installing a newer experimental plugin ZIP, return to **Flatpak Setup** and select **Update** for Heroic's

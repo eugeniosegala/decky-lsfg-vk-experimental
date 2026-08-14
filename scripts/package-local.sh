@@ -240,10 +240,11 @@ if [[ -n "$local_engine_repo" ]]; then
 
   # A local Decky build must have a plugin version distinct from the previous
   # package, otherwise Decky can keep the already-loaded Python backend and
-  # leave an older generated launch wrapper in place. Include a short hash of
-  # the tracked Decky worktree diff as well as the engine source identity.
+  # leave an older generated launch wrapper in place. Include the Decky commit
+  # and worktree diff as well as the engine source identity.
+  local_plugin_commit="$(git -C "$project_dir" rev-parse --short=8 HEAD)"
   local_plugin_fingerprint="$(worktree_fingerprint "$project_dir")"
-  local_plugin_label="$local_engine_label.$local_plugin_fingerprint"
+  local_plugin_label="$local_engine_label.$local_plugin_commit.$local_plugin_fingerprint"
   if [[ "$native_only" == true ]]; then
     local_plugin_label="$local_plugin_label.native-only"
   fi
@@ -287,9 +288,16 @@ fi
 
 if [[ "$local_plugin_mode" == true ]]; then
   # Wrapper/UI-only test packages must still have a distinct version or Decky
-  # can retain the old Python backend and generated launcher. The engine and
-  # Flatpak artifacts remain the pinned, verified release payloads.
-  local_plugin_label="wrapper.$(worktree_fingerprint "$project_dir")"
+  # can retain the old Python backend and generated launcher. Include both the
+  # committed source identity and any uncommitted diff: a diff-only fingerprint
+  # is e3b0c442 for every clean commit and is therefore not a cache buster.
+  # The engine and Flatpak artifacts remain the pinned, verified release payloads.
+  if ! command -v git >/dev/null 2>&1; then
+    echo "Local plugin packaging requires command: git" >&2
+    exit 1
+  fi
+  local_plugin_commit="$(git -C "$project_dir" rev-parse --short=8 HEAD)"
+  local_plugin_label="wrapper.$local_plugin_commit.$(worktree_fingerprint "$project_dir")"
 fi
 
 for local_archive in "$engine_archive_path" "$flatpak_archive_path"; do

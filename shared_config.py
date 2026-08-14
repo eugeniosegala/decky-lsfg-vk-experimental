@@ -138,7 +138,7 @@ CONFIG_SCHEMA_DEF = {
         "name": "disable_hdr_exposure",
         "fieldType": ConfigFieldType.BOOLEAN,
         "default": True,
-        "description": "required isolated SDR launch while HDR support is under development",
+        "description": "required SDR safety boundary while HDR support is under development",
         "location": "script"
     },
 
