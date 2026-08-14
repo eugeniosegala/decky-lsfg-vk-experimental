@@ -46,9 +46,9 @@ build-specific known issues.
 > lag or clash with the game's FPS cap, VRR, or compositor. Every game is different: compare both options and keep the
 > one that feels smoother and more responsive.
 
-Every game, renderer, and display setup behaves differently. Also compare Fixed and Adaptive Frame Generation, then
-fullscreen, borderless, and windowed modes. Change one setting at a time, restart after major display or
-frame-generation changes, and keep the configuration that feels best for that game.
+Every game, renderer, and display setup behaves differently. Compare Fixed and Adaptive Frame Generation one setting
+at a time. For most games, fullscreen is the best starting point for performance and frame pacing. Restart after major
+display or frame-generation changes, and keep the configuration that feels best for that game.
 
 ## Install and use
 
