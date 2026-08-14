@@ -12,11 +12,18 @@ presentation. Unsupported HDR encodings, including HLG and Dolby Vision, use the
 synthesizing frames with incorrect colours. This does not make HDR available in a game that has no HDR renderer, and a
 non-SteamOS compositor or GPU-driver HDR problem remains outside the plugin's colour pipeline.
 
+For HDR10, the experimental engine automatically uses 32-bit packed boundary images when both Vulkan devices validate
+the required external-image and storage capabilities. This is not a lossy block-compression mode or a user setting:
+HDR10 already has 10-bit PQ precision at the game boundary, while PQ conversion, frame generation, and temporal working
+images remain linear 16-bit float. The smaller exchange images target VRAM pressure and boundary bandwidth on Steam
+Deck without changing the Adaptive scheduler.
+
 For a quick engine check, start the game from Steam and inspect its log for a line like:
 
 ```text
 lsfg-vk: experimental layer active; identity=VK_LAYER_LSFGVK_experimental_frame_generation; build=2.0.0-dev28-experimental.25
-lsfg-vk: swapchain colour pipeline: format=64; color-space=0; mode=hdr10-pq; source=gamescope-normalized; frame-generation=supported
+lsfg-vk: swapchain colour pipeline: format=64; color-space=0; mode=hdr10-pq; source=gamescope-normalized; transport=packed-hdr10-32-bit; frame-generation=supported
+lsfg-vk: HDR10 transport: mode=packed-10-bit; nominal_bytes=16384000; nominal_bytes_saved=16384000; application_device_supported=1; backend_device_supported=1
 ```
 
 The first line is the authoritative build marker. With `VK_LOADER_DEBUG=layer`, the inserted LSFG layer must be
@@ -33,6 +40,11 @@ selects `sdr-high-precision`, confirm that SteamOS HDR is enabled and the game p
 
 `mode=scrgb-linear` is also supported. `frame-generation=passthrough` includes a reason on the following line and is a
 safe compatibility result, not washed-out generated output.
+
+`HDR10 transport: mode=packed-10-bit` confirms that the compact path was selected. `nominal_bytes_saved` covers only
+the private source/output transport images for that context, not all LSFG allocations. `mode=rgba16f` with either
+support field at `0` means the device capability check kept the established float transport; it is useful evidence to
+include in an HDR performance report.
 
 The plugin does not force HDR on. If the game chooses an HDR format that LSFG has not validated, or LSFG cannot create
 the HDR frame-generation resources on that GPU, the engine keeps the game's native swapchain and presents real frames.
@@ -106,7 +118,7 @@ loaded. It selects the plugin-private log first and falls back to Steam's consol
 presets to produce a smaller report:
 
 ```bash
-# Was HDR10/PQ or linear scRGB selected? Did HDR initialize or use passthrough?
+# Was HDR10/PQ or linear scRGB selected, and was packed HDR10 transport enabled?
 ~/.local/bin/lsfg-vk-experimental-diagnostics hdr
 
 # Did a Decky change apply live or wait safely for natural recreation?
@@ -142,7 +154,7 @@ If the helper is unavailable, these raw commands provide the two most common rep
 
 ```bash
 # HDR selection and safe fallback.
-grep -aE 'lsfg-vk: (Gamescope application HDR feedback|swapchain colour pipeline|frame generation disabled|LSFG frame-generation initialization failed)|lsfg-vk: present diagnostics: operation=(runtime-transition-pending|runtime-state-applied)' ~/.config/decky-lsfg-vk-experimental/present-diagnostics.log | tail -n 200
+grep -aE 'lsfg-vk: (Gamescope application HDR feedback|swapchain colour pipeline|HDR10 transport|frame generation disabled|LSFG frame-generation initialization failed)|lsfg-vk: present diagnostics: operation=(runtime-transition-pending|runtime-state-applied)' ~/.config/decky-lsfg-vk-experimental/present-diagnostics.log | tail -n 200
 
 # Adaptive policy and Gamescope recovery.
 grep -aE 'lsfg-vk: present diagnostics: operation=(runtime-transition-pending|runtime-state-applied|fixed-plan|adaptive-|skip-generated-frames|resume-generated-frames|generated-image-recovered|history-warmup|swapchain-recreation-suppressed|swapchain-context-create|swapchain-context-destroy)' ~/.config/decky-lsfg-vk-experimental/present-diagnostics.log | tail -n 800

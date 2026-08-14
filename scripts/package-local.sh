@@ -123,6 +123,17 @@ else
   exit 1
 fi
 
+worktree_fingerprint() {
+  local repo="$1"
+  {
+    git -C "$repo" diff --binary HEAD || true
+    while IFS= read -r -d '' untracked_path; do
+      printf 'untracked:%s\0' "$untracked_path"
+      "${checksum_command[@]}" "$repo/$untracked_path"
+    done < <(git -C "$repo" ls-files --others --exclude-standard -z)
+  } | "${checksum_command[@]}" | awk '{print substr($1, 1, 8)}'
+}
+
 read -r archive_name archive_version archive_url archive_checksum flatpak_archive_name flatpak_archive_url flatpak_archive_checksum < <(
   node -e '
     const manifest = require(process.argv[1]);
@@ -178,15 +189,15 @@ if [[ -n "$local_engine_repo" ]]; then
   local_engine_label="$local_engine_short_commit"
   if [[ -n "$(git -C "$local_engine_repo" status --porcelain --untracked-files=normal)" ]]; then
     local_engine_dirty=true
-    local_engine_label="$local_engine_label.dirty"
+    local_engine_fingerprint="$(worktree_fingerprint "$local_engine_repo")"
+    local_engine_label="$local_engine_label.dirty.$local_engine_fingerprint"
   fi
 
   # A local Decky build must have a plugin version distinct from the previous
   # package, otherwise Decky can keep the already-loaded Python backend and
   # leave an older generated launch wrapper in place. Include a short hash of
   # the tracked Decky worktree diff as well as the engine source identity.
-  local_plugin_fingerprint="$({ git -C "$project_dir" diff --binary HEAD || true; } |
-    "${checksum_command[@]}" | awk '{print substr($1, 1, 8)}')"
+  local_plugin_fingerprint="$(worktree_fingerprint "$project_dir")"
   local_plugin_label="$local_engine_label.$local_plugin_fingerprint"
 
   engine_archive_path="$local_engine_repo/out/lsfg-vk-$archive_version-local.$local_engine_label-linux.tar.xz"
@@ -334,9 +345,9 @@ if [[ "$local_engine_mode" == true ]]; then
     const [binary] = manifest.remote_binary ?? [];
     if (!binary) throw new Error("package.json has no remote_binary entry");
     const [archiveName, engineVersion, archiveChecksum, sourceCommit,
-      sourceDirty, flatpakName, flatpakChecksum, localPluginLabel] = process.argv.slice(2);
-    const shortCommit = sourceCommit.slice(0, 7);
-    const localLabel = `${shortCommit}${sourceDirty === "true" ? ".dirty" : ""}`;
+      sourceDirty, sourceLabel, flatpakName, flatpakChecksum,
+      localPluginLabel] = process.argv.slice(2);
+    const localLabel = sourceLabel;
     binary.name = archiveName;
     binary.version = `${engineVersion}-local.${localLabel}`;
     binary.release_tag = `local-worktree-${localLabel}`;
@@ -353,7 +364,8 @@ if [[ "$local_engine_mode" == true ]]; then
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
   ' "$package_dir/package.json" "$archive_name" "$archive_version" \
     "$archive_checksum" "$local_engine_commit" "$local_engine_dirty" \
-    "$flatpak_archive_name" "$flatpak_archive_checksum" "$local_plugin_label"
+    "$local_engine_label" "$flatpak_archive_name" "$flatpak_archive_checksum" \
+    "$local_plugin_label"
 fi
 cp -R "$project_dir/dist/." "$package_dir/dist/"
 cp -R "$project_dir/py_modules/." "$package_dir/py_modules/"

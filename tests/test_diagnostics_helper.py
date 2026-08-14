@@ -27,7 +27,8 @@ FIXTURE = """\
 [Vulkan Loader] Loading VK_LAYER_LSFGVK_experimental_frame_generation
 [Gamescope WSI] HDR output available
 lsfg-vk: experimental layer active; identity=VK_LAYER_LSFGVK_experimental_frame_generation; build=2.0.0-dev28-experimental.25
-lsfg-vk: swapchain colour pipeline: format=64; color-space=1000104008; mode=hdr10-pq; frame-generation=supported
+lsfg-vk: swapchain colour pipeline: format=64; color-space=1000104008; mode=hdr10-pq; source=gamescope-normalized; transport=packed-hdr10-32-bit; frame-generation=supported
+lsfg-vk: HDR10 transport: mode=packed-10-bit; nominal_bytes=16384000; nominal_bytes_saved=16384000; application_device_supported=1; backend_device_supported=1
 lsfg-vk: Gamescope application HDR feedback stabilized: active=1; contexts_pending_recreation=1
 lsfg-vk: present diagnostics: operation=swapchain-context-create context=1
 lsfg-vk: present diagnostics: operation=runtime-transition-pending context=1 state_revision=2 reason=profile-resources action=wait-for-natural-swapchain-recreation
@@ -62,6 +63,8 @@ class DiagnosticsHelperTests(unittest.TestCase):
             result = self._run("--log", str(path), "hdr")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("mode=hdr10-pq", result.stdout)
+        self.assertIn("HDR10 transport: mode=packed-10-bit", result.stdout)
+        self.assertIn("nominal_bytes_saved=16384000", result.stdout)
         self.assertIn("initialization failed", result.stdout)
         self.assertIn("experimental layer active", result.stdout)
         self.assertNotIn("adaptive-ramp", result.stdout)
@@ -76,6 +79,7 @@ class DiagnosticsHelperTests(unittest.TestCase):
         self.assertIn("skip-generated-frames", result.stdout)
         self.assertIn("experimental layer active", result.stdout)
         self.assertNotIn("mode=hdr10-pq", result.stdout)
+        self.assertNotIn("HDR10 transport", result.stdout)
 
     def test_every_preset_keeps_the_authoritative_build_marker(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -118,6 +122,7 @@ class DiagnosticsHelperTests(unittest.TestCase):
         self.assertIn("Gamescope WSI", result.stdout)
         self.assertIn("swapchain-context-create", result.stdout)
         self.assertIn("mode=hdr10-pq", result.stdout)
+        self.assertIn("HDR10 transport: mode=packed-10-bit", result.stdout)
 
     def test_private_log_is_selected_from_home(self):
         with tempfile.TemporaryDirectory() as temporary_directory:

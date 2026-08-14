@@ -17,7 +17,7 @@ The plugin-private log is preferred; Steam's console log is used when the
 private log does not exist.
 
 Presets:
-  hdr          HDR/scRGB selection, passthrough, and initialization
+  hdr          HDR/scRGB selection, transport packing, passthrough, and initialization
   config       Decky reloads and pending/applied safe runtime transitions
   adaptive     Adaptive policy, stabilization, ramp, rescue, and cadence
   recovery     generated-image fallback, history warm-up, and in-place recovery
@@ -123,7 +123,7 @@ add_pattern 'lsfg-vk: experimental layer active; identity=VK_LAYER_LSFGVK_experi
 for preset in "${presets[@]}"; do
   case "$preset" in
     hdr)
-      add_pattern 'lsfg-vk: (swapchain colour pipeline|frame generation disabled for this swapchain|frame generation is off for this swapchain|LSFG frame-generation initialization failed)'
+      add_pattern 'lsfg-vk: (swapchain colour pipeline|HDR10 transport|frame generation disabled for this swapchain|frame generation is off for this swapchain|LSFG frame-generation initialization failed)'
       add_pattern 'lsfg-vk: Gamescope application HDR feedback'
       add_pattern 'lsfg-vk: present diagnostics: operation=(runtime-transition-pending|runtime-state-applied)'
       ;;
@@ -144,14 +144,14 @@ for preset in "${presets[@]}"; do
     lifecycle)
       add_pattern 'lsfg-vk: present diagnostics: operation=swapchain-context-(create|destroy)'
       add_pattern 'lsfg-vk: present diagnostics: operation=(runtime-transition-pending|runtime-state-applied)'
-      add_pattern 'lsfg-vk: (swapchain colour pipeline|frame generation disabled for this swapchain|frame generation is off for this swapchain|LSFG frame-generation initialization failed)'
+      add_pattern 'lsfg-vk: (swapchain colour pipeline|HDR10 transport|frame generation disabled for this swapchain|frame generation is off for this swapchain|LSFG frame-generation initialization failed)'
       ;;
     startup)
       add_pattern '(VK_LAYER_LSFGVK(_experimental)?_frame_generation|VK_LAYER_LS_frame_generation|VkLayer_LSFGVK(_experimental)?_frame_generation|Gamescope WSI|Vulkan Loader|<Loader>|<Device>)'
       add_pattern 'lsfg-vk: present diagnostics: operation=swapchain-context-create'
       add_pattern 'lsfg-vk: Gamescope application HDR feedback'
       add_pattern 'lsfg-vk: present diagnostics: operation=(runtime-transition-pending|runtime-state-applied)'
-      add_pattern 'lsfg-vk: (swapchain colour pipeline|frame generation disabled for this swapchain|frame generation is off for this swapchain|LSFG frame-generation initialization failed)'
+      add_pattern 'lsfg-vk: (swapchain colour pipeline|HDR10 transport|frame generation disabled for this swapchain|frame generation is off for this swapchain|LSFG frame-generation initialization failed)'
       ;;
     layers)
       add_pattern '(VK_LAYER_LSFGVK(_experimental)?_frame_generation|VK_LAYER_LS_frame_generation|VkLayer_LSFGVK(_experimental)?_frame_generation|Gamescope WSI|Vulkan Loader|<Loader>|<Device>)'
