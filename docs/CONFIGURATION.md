@@ -12,8 +12,8 @@ naturally recreates its swapchain or is restarted.
 
 ## Frame-generation mode
 
-- **Frame Generation:** The first control switches frame generation on or off immediately, without changing the selected
-  Fixed or Adaptive settings. Turn it back on to resume with those settings.
+- **Frame Generation (Live On/Off):** Leave this control on to use either Fixed or Adaptive Frame Generation. When
+  it is off, neither mode generates frames; your selected mode and settings remain saved for when you turn it back on.
 - **FPS Multiplier:** Fixed 2x, 3x, or 4x generation. lsfg-vk v2 has no fixed 0x multiplier; use the live **Frame
   Generation** switch instead. Under Gamescope, the engine uses the confirmed display refresh as a delivery budget:
   it suppresses synthetic frames that cannot be scanned out rather than letting a nominal 2x/3x/4x sequence run above
@@ -65,8 +65,8 @@ The following settings are profile-based and support that automatic match:
 The `Lossless.dll` path and FP16 permission are shared globally because they apply to the installed engine, not to an
 individual game.
 
-Decky also keeps the launcher compatibility options per profile—Disable Experimental LSFG-VK on Next Launch, Block HDR Detection
-(Restart), Base FPS Cap, Steam Deck Mode, and Zink. They are saved in this plugin's private profile state and
+Decky also keeps the launcher compatibility options per profile—Disable Experimental LSFG-VK on Next Launch, Block
+Experimental HDR (Recommended, Restart), Base FPS Cap, Steam Deck Mode, and Zink. They are saved in this plugin's private profile state and
 are restored when you select that profile in Decky. They cannot follow **Active In** automatically: those variables must
 be set by the wrapper before lsfg-vk sees the game's process name. Select the profile manually before launching a game
 that needs one of those compatibility options, then restart the game after changing profiles.
@@ -105,14 +105,14 @@ bridge so Wine translates its dispatchable handles before LSFG sees them. Gamesc
 space to sRGB, so the engine recovers HDR semantics only for its exact packed-10-bit or float HDR formats while the
 Gamescope session advertises HDR. Engine selection still does not depend on ambiguous manifest search ordering.
 
-HDR is automatic rather than a configuration switch. With SteamOS HDR enabled, the engine recognizes the standard
-Gamescope HDR10/PQ and linear-scRGB swapchain combinations. HDR10 is converted to linear scRGB around frame generation;
-unsupported HDR transfer functions and HDR frame-generation initialization failures remain on real-frame passthrough
-instead of producing incorrect colours or failing the game swapchain. A game must still implement HDR and may require
-its own in-game HDR setting. For a rare startup problem caused by HDR exposure, use the selected profile's **Block HDR
-Detection (Restart)** workaround. It prevents Gamescope from advertising HDR formats to that game, so it starts in SDR;
-because it restores private-only Vulkan discovery, other global Vulkan layers are unavailable too. It remains active
-for that profile until you turn it off. Use **Disable Experimental LSFG-VK on Next Launch** when the layer itself is the suspected cause. The plugin
+HDR frame generation is still in development, and some games may have startup, colour, loading, or performance problems.
+The plugin therefore defaults **Block Experimental HDR (Recommended, Restart)** to enabled, retaining the proven SDR
+path. To test HDR, select the game's Decky profile, disable that option, enable HDR in SteamOS and the game, then restart
+the game. Compatible games are detected automatically; there is no force-HDR mode. The engine recognizes Gamescope
+HDR10/PQ and linear-scRGB swapchain combinations and converts HDR10 to linear scRGB around frame generation. Unsupported
+transfer functions and initialization failures remain on real-frame passthrough. The blocking option restores
+private-only Vulkan discovery, so other global Vulkan layers are unavailable for that game while it is enabled. Use
+**Disable Experimental LSFG-VK on Next Launch** when the layer itself is the suspected cause. The plugin
 writes `pacing = 'none'` and does not expose a
 dual-GPU control. See
 [Troubleshooting](TROUBLESHOOTING.md) and the release notes for build-specific compatibility guidance.

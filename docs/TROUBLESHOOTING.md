@@ -2,10 +2,12 @@
 
 ## HDR
 
-There is no normal plugin HDR enable/disable switch. Enable HDR in SteamOS, then enable HDR in the game if it offers its
-own setting. The experimental wrapper preserves Gamescope WSI discovery so compatible games can expose their HDR modes.
-The engine diagnoses the swapchain format and colour space and supports the standard SteamOS HDR10/PQ and linear-scRGB
-paths.
+HDR frame generation is a developing feature and is blocked by default. Some games may have startup, colour, loading,
+or performance problems. Keep **Block Experimental HDR (Recommended, Restart)** enabled for the proven SDR path. To
+test HDR, select the game's Decky profile, disable that option, enable HDR in SteamOS and the game, and restart the game.
+This is a restart-time exposure boundary rather than a live force-HDR switch: compatible games still select HDR
+themselves. The experimental wrapper then preserves Gamescope WSI discovery, and the engine diagnoses the swapchain
+format and colour space for the standard SteamOS HDR10/PQ and linear-scRGB paths.
 
 HDR10 frame generation is decoded from BT.2020/PQ into linear scRGB for the model, then encoded back to BT.2020/PQ for
 presentation. Unsupported HDR encodings, including HLG and Dolby Vision, use the game's real frames rather than
@@ -52,29 +54,30 @@ include in an HDR performance report.
 
 The plugin does not force HDR on. If the game chooses an HDR format that LSFG has not validated, or LSFG cannot create
 the HDR frame-generation resources on that GPU, the engine keeps the game's native swapchain and presents real frames.
-If a game still fails before reaching its menu, select its Decky profile, enable **Block HDR Detection (Restart)**,
-and restart it. That emergency compatibility path uses the wrapper's previous isolated Vulkan discovery, preventing
+If a game fails before reaching its menu, select its Decky profile, re-enable **Block Experimental HDR (Recommended,
+Restart)**, and restart it. That compatibility path uses the wrapper's previous isolated Vulkan discovery, preventing
 Gamescope WSI from advertising HDR so the game can boot in SDR. It also bypasses other global Vulkan layers for that
 game. Disable HDR in the game's settings, clear the Decky
 workaround, and test LSFG again. **Disable Experimental LSFG-VK on Next Launch** remains available if the LSFG layer itself is the
-problem. A separate everyday HDR switch is intentionally avoided.
+problem.
 
 ## Steam menu / Gamescope recovery
 
-The experimental wrapper supplies a 50 ms absolute safety ceiling, while the engine automatically tightens the actual
-Gamescope generated-image deadline to 75% of one confirmed display slot (clamped to 1–12 ms). It reserves an image
-before scheduling expensive model work. If the image cannot arrive while it is still useful, lsfg-vk presents the real
-game frame, keeps temporal history current, and probes for an available generated image at a bounded rate.
+The developing Gamescope HDR transport reserves generated destinations with timeout zero before scheduling model work.
+If no image is immediately available, the real game frame wins: LSFG schedules no synthetic work, presents natively,
+and retries on the next frame. It also polls private GPU work without blocking the game's present thread. The wrapper's
+50 ms acquisition ceiling remains only for the legacy non-Gamescope path. The proven SDR transport intentionally keeps
+its ordered FIFO and synchronous fence behaviour; applying the opportunistic HDR bypass to SDR caused generated frames
+to be skipped on ordinary one-frame overlap on Deck-class hardware.
 
-Recovery is always in place: the layer never returns a fabricated out-of-date result merely to make the game rebuild
-its swapchain. It refreshes real-frame history, retains the last proven generation level, and delays higher probes. A
-hard cadence stall enters a bounded discontinuity recovery first: Adaptive presents real frames until the healthy base
-cadence has returned for one second, then restores the proven level. If that does not happen within five seconds, it starts a clean ramp from
-zero. A sustained gameplay cadence drop uses a shorter one-second stabilization and then rebases at the new rate instead
-of waiting for the old rate to return. Image recovery in a hard-discontinuity window refreshes history without
-invalidating the game-owned swapchain, including after repeated stalls. This targets accumulated
-latency, unstable restarts, and repeated load spikes after Steam-menu transitions. A short drop toward the base rate,
-pause, or flicker can still occur during recovery.
+Recovery never returns a fabricated out-of-date result merely to make the game rebuild its swapchain. Ordered SDR and
+Gamescope HDR deliberately use different policies. SDR refreshes two real history frames after a cadence discontinuity
+and retains the last proven multiplier; sustained model-load collapse falls directly to the cheaper proven generated
+level, while validated 2x is retained rather than inserting a visible real-only second. HDR uses the more conservative
+bounded discontinuity recovery because a stall can also mean colour-transition or compositor-admission pressure. It
+presents real frames until healthy base cadence has returned for one second, restores the proven level, or starts a
+clean ramp after the bounded timeout. This separation prevents HDR safety guards from degrading the established SDR
+path.
 
 When Adaptive is capped at 2x and has already validated that level, a short gameplay hitch of up to 250 ms takes a
 lighter path: the engine keeps the proven 2x policy, refreshes three real frames of temporal history, and resumes.

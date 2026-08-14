@@ -9,6 +9,8 @@ engine_archive_path=""
 flatpak_archive_path=""
 local_engine_repo=""
 local_engine_mode=false
+native_only=false
+build_64_only=false
 local_engine_commit=""
 local_engine_dirty=false
 local_engine_label=""
@@ -28,6 +30,11 @@ Options:
                           Build and bundle the engine checkout at PATH. Its
                           commit and generated checksums are recorded only in
                           the ZIP; tracked package.json is not changed.
+  --native-only           With --local-engine-repo, omit Flatpak extensions.
+                          This is the fast path for native Steam game testing,
+                          never for a release package.
+  --64-bit-only           With --local-engine-repo, build and bundle only the
+                          64-bit host layer. Intended only for fast local tests.
   -h, --help              Show this help.
 EOF
 }
@@ -79,6 +86,16 @@ while (($#)); do
       shift 2
       continue
       ;;
+    --native-only)
+      native_only=true
+      shift
+      continue
+      ;;
+    --64-bit-only)
+      build_64_only=true
+      shift
+      continue
+      ;;
     --help|-h)
       usage
       exit 0
@@ -106,6 +123,14 @@ if [[ -n "$local_engine_repo" &&
   echo "--local-engine-repo cannot be combined with archive override options" >&2
   exit 2
 fi
+if [[ "$native_only" == true && -z "$local_engine_repo" ]]; then
+  echo "--native-only requires --local-engine-repo" >&2
+  exit 2
+fi
+if [[ "$build_64_only" == true && -z "$local_engine_repo" ]]; then
+  echo "--64-bit-only requires --local-engine-repo" >&2
+  exit 2
+fi
 
 for command in curl node npm python3 strings tar zip unzip; do
   if ! command -v "$command" >/dev/null 2>&1; then
@@ -128,6 +153,12 @@ worktree_fingerprint() {
   {
     git -C "$repo" diff --binary HEAD || true
     while IFS= read -r -d '' untracked_path; do
+      # Generated packages must not become part of the source identity.  Apart
+      # from making the label depend on old artifacts, including out/ makes
+      # every package invalidate the engine archive it just produced.
+      case "$untracked_path" in
+        out/*) continue ;;
+      esac
       printf 'untracked:%s\0' "$untracked_path"
       "${checksum_command[@]}" "$repo/$untracked_path"
     done < <(git -C "$repo" ls-files --others --exclude-standard -z)
@@ -199,15 +230,45 @@ if [[ -n "$local_engine_repo" ]]; then
   # the tracked Decky worktree diff as well as the engine source identity.
   local_plugin_fingerprint="$(worktree_fingerprint "$project_dir")"
   local_plugin_label="$local_engine_label.$local_plugin_fingerprint"
+  if [[ "$native_only" == true ]]; then
+    local_plugin_label="$local_plugin_label.native-only"
+  fi
+  if [[ "$build_64_only" == true ]]; then
+    local_plugin_label="$local_plugin_label.x86_64"
+  fi
 
-  engine_archive_path="$local_engine_repo/out/lsfg-vk-$archive_version-local.$local_engine_label-linux.tar.xz"
-  flatpak_archive_path="$local_engine_repo/out/lsfg-vk-$archive_version-local.$local_engine_label-flatpaks.tar.xz"
+  engine_archive_suffix="linux"
+  if [[ "$build_64_only" == true ]]; then
+    engine_archive_suffix="linux.x86_64"
+  fi
+  engine_archive_path="$local_engine_repo/out/lsfg-vk-$archive_version-local.$local_engine_label-$engine_archive_suffix.tar.xz"
   archive_name="$(basename "$engine_archive_path")"
-  flatpak_archive_name="$(basename "$flatpak_archive_path")"
 
-  echo "Building local engine checkout $local_engine_label..."
-  "$local_engine_repo/scripts/package-local.sh" "$engine_archive_path"
-  "$local_engine_repo/scripts/package-flatpaks.sh" "$flatpak_archive_path"
+  if [[ -s "$engine_archive_path" ]]; then
+    echo "Reusing matching local engine archive $archive_name..."
+  else
+    echo "Building local engine checkout $local_engine_label..."
+    engine_package_args=()
+    if [[ "$build_64_only" == true ]]; then
+      engine_package_args+=(--64-bit-only)
+    fi
+    "$local_engine_repo/scripts/package-local.sh" \
+      "${engine_package_args[@]}" "$engine_archive_path"
+  fi
+  if [[ "$native_only" == true ]]; then
+    echo "Skipping Flatpak extension builds for this native-only test package."
+    flatpak_archive_path=""
+    flatpak_archive_name=""
+    flatpak_archive_checksum=""
+  else
+    flatpak_archive_path="$local_engine_repo/out/lsfg-vk-$archive_version-local.$local_engine_label-flatpaks.tar.xz"
+    flatpak_archive_name="$(basename "$flatpak_archive_path")"
+    if [[ -s "$flatpak_archive_path" ]]; then
+      echo "Reusing matching local Flatpak archive $flatpak_archive_name..."
+    else
+      "$local_engine_repo/scripts/package-flatpaks.sh" "$flatpak_archive_path"
+    fi
+  fi
 fi
 
 for local_archive in "$engine_archive_path" "$flatpak_archive_path"; do
@@ -271,9 +332,15 @@ elif [[ "$actual_checksum" != "$archive_checksum" ]]; then
   exit 1
 fi
 
-for manifest_path in \
-  "./share/vulkan/implicit_layer.d/VkLayer_LSFGVK_experimental_frame_generation.json" \
-  "./share/vulkan/implicit_layer.d/VkLayer_LSFGVK_experimental_frame_generation.x86.json"; do
+manifest_paths=(
+  "./share/vulkan/implicit_layer.d/VkLayer_LSFGVK_experimental_frame_generation.json"
+)
+if [[ "$build_64_only" != true ]]; then
+  manifest_paths+=(
+    "./share/vulkan/implicit_layer.d/VkLayer_LSFGVK_experimental_frame_generation.x86.json"
+  )
+fi
+for manifest_path in "${manifest_paths[@]}"; do
   if ! tar -tf "$package_dir/bin/$archive_name" | grep -Fx "$manifest_path" >/dev/null; then
     echo "Engine archive is missing $manifest_path" >&2
     exit 1
@@ -287,9 +354,11 @@ for manifest_path in \
   fi
 done
 
-for layer_binary_path in \
-  "./lib/liblsfg-vk-layer.so" \
-  "./lib32/liblsfg-vk-layer.so"; do
+layer_binary_paths=("./lib/liblsfg-vk-layer.so")
+if [[ "$build_64_only" != true ]]; then
+  layer_binary_paths+=("./lib32/liblsfg-vk-layer.so")
+fi
+for layer_binary_path in "${layer_binary_paths[@]}"; do
   verification_binary="$staging_dir/$(basename "$(dirname "$layer_binary_path")")-liblsfg-vk-layer.so"
   tar -xJOf "$package_dir/bin/$archive_name" "$layer_binary_path" > "$verification_binary"
   if ! strings "$verification_binary" |
@@ -346,7 +415,7 @@ if [[ "$local_engine_mode" == true ]]; then
     if (!binary) throw new Error("package.json has no remote_binary entry");
     const [archiveName, engineVersion, archiveChecksum, sourceCommit,
       sourceDirty, sourceLabel, flatpakName, flatpakChecksum,
-      localPluginLabel] = process.argv.slice(2);
+      localPluginLabel, build64Only] = process.argv.slice(2);
     const localLabel = sourceLabel;
     binary.name = archiveName;
     binary.version = `${engineVersion}-local.${localLabel}`;
@@ -355,17 +424,20 @@ if [[ "$local_engine_mode" == true ]]; then
     binary.local_worktree_dirty = sourceDirty === "true";
     binary.url = `local-worktree://${archiveName}`;
     binary.sha256hash = archiveChecksum;
-    if (binary.flatpak_bundle) {
+    binary.architectures = build64Only === "true" ? ["64"] : ["64", "32"];
+    if (binary.flatpak_bundle && flatpakName) {
       binary.flatpak_bundle.name = flatpakName;
       binary.flatpak_bundle.url = `local-worktree://${flatpakName}`;
       binary.flatpak_bundle.sha256hash = flatpakChecksum;
+    } else {
+      delete binary.flatpak_bundle;
     }
     manifest.version = `${manifest.version}.local.${localPluginLabel}`;
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
   ' "$package_dir/package.json" "$archive_name" "$archive_version" \
     "$archive_checksum" "$local_engine_commit" "$local_engine_dirty" \
     "$local_engine_label" "$flatpak_archive_name" "$flatpak_archive_checksum" \
-    "$local_plugin_label"
+    "$local_plugin_label" "$build_64_only"
 fi
 cp -R "$project_dir/dist/." "$package_dir/dist/"
 cp -R "$project_dir/py_modules/." "$package_dir/py_modules/"

@@ -18,6 +18,7 @@ sys.modules.setdefault("decky", SimpleNamespace(logger=_Logger()))
 
 from py_modules.lsfg_vk import configuration as configuration_module  # noqa: E402
 from py_modules.lsfg_vk.configuration import ConfigurationService  # noqa: E402
+from py_modules.lsfg_vk.config_schema import CONFIG_SCHEMA  # noqa: E402
 from py_modules.lsfg_vk.config_schema_generated import (  # noqa: E402
     ALL_FIELDS,
     get_script_generation_logic,
@@ -140,6 +141,17 @@ class WrapperEnvironmentTests(unittest.TestCase):
     def test_hdr_recovery_profile_generates_wrapper_export(self):
         lines = get_script_generation_logic()({"disable_hdr_exposure": True})
         self.assertIn("export LSFGVK_DISABLE_HDR_EXPOSURE=1", lines)
+
+    def test_experimental_hdr_is_blocked_by_default(self):
+        self.assertTrue(CONFIG_SCHEMA["disable_hdr_exposure"].default)
+        settings = self.service._wrapper_settings_defaults()
+        self.assertTrue(settings["disable_hdr_exposure"])
+
+    def test_explicit_hdr_test_opt_in_is_preserved(self):
+        settings = self.service._normalize_wrapper_settings({
+            "disable_hdr_exposure": False,
+        })
+        self.assertFalse(settings["disable_hdr_exposure"])
 
     def test_full_layer_disable_targets_only_experimental_identity(self):
         lines = get_script_generation_logic()({"disable_lsfgvk": True})

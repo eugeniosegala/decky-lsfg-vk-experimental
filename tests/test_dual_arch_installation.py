@@ -131,12 +131,23 @@ class DualArchInstallationTests(unittest.TestCase):
         self.assertFalse(legacy32.exists())
         self.assertTrue(unrelated.exists())
 
-    def test_rejects_archive_missing_32bit_layer_before_installing_anything(self):
-        with self.assertRaisesRegex(OSError, "required lsfg-vk files"):
-            self.service._extract_and_install_files(self._archive(include_32bit=False))
+    def test_installs_64bit_only_archive_and_removes_stale_32bit_files(self):
+        self.service.lib32_file.parent.mkdir(parents=True, exist_ok=True)
+        self.service.lib32_file.write_bytes(b"stale")
+        self.service.json32_file.parent.mkdir(parents=True, exist_ok=True)
+        self.service.json32_file.write_text("stale", encoding="utf-8")
+        self.service.registered_json32_file.parent.mkdir(parents=True, exist_ok=True)
+        self.service.registered_json32_file.write_text("stale", encoding="utf-8")
 
-        self.assertFalse(self.service.lib_file.exists())
-        self.assertFalse(self.service.json_file.exists())
+        self.service._extract_and_install_files(self._archive(include_32bit=False))
+        self.service._register_layer_manifests()
+
+        self.assertTrue(self.service.lib_file.read_bytes().startswith(b"ELF64"))
+        self.assertTrue(self.service.json_file.exists())
+        self.assertTrue(self.service.registered_json_file.exists())
+        self.assertFalse(self.service.lib32_file.exists())
+        self.assertFalse(self.service.json32_file.exists())
+        self.assertFalse(self.service.registered_json32_file.exists())
 
     def test_rejects_payload_without_experimental_build_marker(self):
         archive_path = self._archive()

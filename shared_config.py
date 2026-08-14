@@ -39,7 +39,7 @@ CONFIG_SCHEMA_DEF = {
         "name": "frame_generation_enabled",
         "fieldType": ConfigFieldType.BOOLEAN,
         "default": True,
-        "description": "enable or stop live frame generation while preserving fixed or adaptive settings",
+        "description": "live on/off switch; leave on for fixed or adaptive generation, off stops both modes",
         "location": "toml"
     },
     
@@ -131,13 +131,14 @@ CONFIG_SCHEMA_DEF = {
         "location": "script"
     },
 
-    # Emergency launcher recovery, not an engine HDR toggle. This blocks
-    # Gamescope HDR discovery before the game enumerates formats.
+    # HDR frame generation is still under active development. Keep Gamescope
+    # HDR discovery blocked by default so ordinary users retain the proven SDR
+    # transport; testers can opt in per profile and restart the game.
     "disable_hdr_exposure": {
         "name": "disable_hdr_exposure",
         "fieldType": ConfigFieldType.BOOLEAN,
-        "default": False,
-        "description": "emergency SDR startup path for games that fail when SteamOS HDR is detected",
+        "default": True,
+        "description": "keep developing HDR support blocked by default; disable and restart only for HDR testing",
         "location": "script"
     },
 

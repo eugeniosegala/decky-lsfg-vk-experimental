@@ -235,8 +235,8 @@ export function ConfigurationSection({
         <>
           <PanelSectionRow>
             <ToggleField
-              label={t("CONFIG_DISABLE_HDR_EXPOSURE", "Block HDR Detection (Restart)")}
-              description={t("CONFIG_DISABLE_HDR_EXPOSURE_DESC", "Emergency startup workaround for a game that fails when SteamOS HDR is detected. Prevents Gamescope from advertising HDR formats, so the game starts in SDR. Also bypasses other global Vulkan layers for that game. Turn it off after changing the game's HDR setting.")}
+              label={t("CONFIG_DISABLE_HDR_EXPOSURE", "Block Experimental HDR (Recommended, Restart)")}
+              description={t("CONFIG_DISABLE_HDR_EXPOSURE_DESC", "HDR frame generation is still in development and some games may have startup, colour, loading, or performance problems. Keep this enabled for the proven SDR path. Disable it and restart the game only when testing HDR. This also bypasses other global Vulkan layers for that game.")}
               checked={config.disable_hdr_exposure}
               onChange={(value) => onConfigChange(DISABLE_HDR_EXPOSURE, value)}
             />

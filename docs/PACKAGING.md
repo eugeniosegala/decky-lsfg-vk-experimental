@@ -43,6 +43,20 @@ That command expects the engine checkout at `../lsfg-vk`. For another location, 
 scripts/package-local.sh --local-engine-repo /path/to/lsfg-vk
 ```
 
+For quick native Steam-game iteration, omit the expensive Flatpak runtime
+matrix and the 32-bit host layer while retaining a verified 64-bit build:
+
+```bash
+pnpm run package:local-engine-fast
+```
+
+Native-only, 64-bit-only archives are labelled accordingly and must not be published. Run
+the complete local-engine packaging command before any release candidate or
+when testing Flatpak games and launchers. Local artifacts are keyed by the
+engine commit and dirty-worktree fingerprint, so UI-only repackaging reuses an
+already verified matching engine build; changing engine source produces a new
+fingerprint and rebuilds it.
+
 The engine's native and Flatpak packaging scripts run first, including their tests and dual-architecture layout
 checks. Decky then embeds those artifacts and writes their source commit, dirty-worktree marker, and calculated
 checksums into the generated ZIP's copy of `package.json`. The tracked Decky `package.json` remains unchanged, so this

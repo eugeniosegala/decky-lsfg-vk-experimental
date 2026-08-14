@@ -53,7 +53,7 @@ export const CONFIG_SCHEMA: Record<string, ConfigField> = {
     name: "frame_generation_enabled",
     fieldType: ConfigFieldType.BOOLEAN,
     default: true,
-    description: "enable or stop live frame generation while preserving fixed or adaptive settings"
+    description: "live on/off switch; leave on for fixed or adaptive generation, off stops both modes"
   },
   multiplier: {
     name: "multiplier",
@@ -124,8 +124,8 @@ export const CONFIG_SCHEMA: Record<string, ConfigField> = {
   disable_hdr_exposure: {
     name: "disable_hdr_exposure",
     fieldType: ConfigFieldType.BOOLEAN,
-    default: false,
-    description: "emergency SDR startup path for games that fail when SteamOS HDR is detected"
+    default: true,
+    description: "keep developing HDR support blocked by default; disable and restart only for HDR testing"
   },
   dxvk_frame_rate: {
     name: "dxvk_frame_rate",
@@ -190,7 +190,7 @@ export function getDefaults(): ConfigurationData {
     active_in: "",
     gpu: "",
     disable_lsfgvk: false,
-    disable_hdr_exposure: false,
+    disable_hdr_exposure: true,
     dxvk_frame_rate: 0,
     disable_steamdeck_mode: false,
     enable_zink: false,

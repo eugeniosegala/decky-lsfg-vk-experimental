@@ -89,7 +89,7 @@ class InstallationService(BaseService):
             self.log.error(error_msg)
             return self._error_response(InstallationResponse, str(e), message="")
 
-    def _bundled_archive_metadata(self, plugin_dir: Path) -> Dict[str, str]:
+    def _bundled_archive_metadata(self, plugin_dir: Path) -> Dict[str, Any]:
         """Return the versioned host payload metadata from package.json."""
         manifest_path = plugin_dir / "package.json"
         try:
@@ -101,6 +101,7 @@ class InstallationService(BaseService):
             archive_name = binary.get("name")
             version = binary.get("version")
             checksum = binary.get("sha256hash")
+            architectures = binary.get("architectures", ["64", "32"])
             if not isinstance(archive_name, str) or Path(archive_name).name != archive_name:
                 raise ValueError("remote_binary name must be a filename")
             if not isinstance(version, str) or not version:
@@ -111,16 +112,29 @@ class InstallationService(BaseService):
                 or any(character not in "0123456789abcdefABCDEF" for character in checksum)
             ):
                 raise ValueError("remote_binary sha256hash must be a SHA-256 checksum")
-            return {"name": archive_name, "version": version, "sha256hash": checksum}
+            if (
+                not isinstance(architectures, list)
+                or not architectures
+                or any(architecture not in ("64", "32") for architecture in architectures)
+                or "64" not in architectures
+            ):
+                raise ValueError("remote_binary architectures must contain 64 and optional 32")
+            return {
+                "name": archive_name,
+                "version": version,
+                "sha256hash": checksum,
+                "architectures": architectures,
+            }
         except (OSError, json.JSONDecodeError, TypeError, ValueError, KeyError) as exc:
             raise OSError(f"Could not read bundled lsfg-vk metadata from {manifest_path}: {exc}") from exc
 
-    def _write_engine_state(self, archive_metadata: Dict[str, str]) -> None:
+    def _write_engine_state(self, archive_metadata: Dict[str, Any]) -> None:
         """Record exactly which pinned payload was installed by this plugin."""
         state = {
             "archive": archive_metadata["name"],
             "version": archive_metadata["version"],
             "sha256hash": archive_metadata["sha256hash"],
+            "architectures": archive_metadata.get("architectures", ["64", "32"]),
         }
         self._write_file(self.engine_state_file, json.dumps(state, indent=2) + "\n", 0o644)
 
@@ -138,7 +152,7 @@ class InstallationService(BaseService):
                 f"expected {expected_checksum.lower()}, got {actual_checksum}"
             )
 
-    def _read_engine_state(self) -> Optional[Dict[str, str]]:
+    def _read_engine_state(self) -> Optional[Dict[str, Any]]:
         """Return the plugin-managed payload record, if one exists."""
         try:
             state = json.loads(self.engine_state_file.read_text(encoding="utf-8"))
@@ -160,12 +174,15 @@ class InstallationService(BaseService):
             tarfile.TarError: If the archive is corrupted
             OSError: If file operations fail
         """
-        destinations = {
+        required_destinations = {
             f"lib/{LIB_FILENAME}": self.lib_file,
-            f"lib32/{LIB_FILENAME}": self.lib32_file,
             f"share/vulkan/implicit_layer.d/{JSON_FILENAME}": self.json_file,
+        }
+        optional_32bit_destinations = {
+            f"lib32/{LIB_FILENAME}": self.lib32_file,
             f"share/vulkan/implicit_layer.d/{JSON32_FILENAME}": self.json32_file,
         }
+        destinations = {**required_destinations, **optional_32bit_destinations}
         with tarfile.open(archive_path, "r:xz") as archive:
             with tempfile.TemporaryDirectory() as temp_dir:
                 temp_path = Path(temp_dir)
@@ -192,7 +209,7 @@ class InstallationService(BaseService):
                     staged_files[destination] = (temp_file, filename)
 
                 missing = [
-                    str(path) for path in destinations.values()
+                    str(path) for path in required_destinations.values()
                     if path not in staged_files
                 ]
                 if missing:
@@ -201,10 +218,17 @@ class InstallationService(BaseService):
                         + ", ".join(missing)
                     )
 
-                self._validate_layer_binary_identity(
-                    staged_files[self.lib_file][0],
-                    staged_files[self.lib32_file][0],
-                )
+                has_32bit_library = self.lib32_file in staged_files
+                has_32bit_manifest = self.json32_file in staged_files
+                if has_32bit_library != has_32bit_manifest:
+                    raise OSError(
+                        "Archive contained an incomplete 32-bit Vulkan layer pair"
+                    )
+
+                layer_binaries = [staged_files[self.lib_file][0]]
+                if has_32bit_library:
+                    layer_binaries.append(staged_files[self.lib32_file][0])
+                self._validate_layer_binary_identity(*layer_binaries)
 
                 for destination, (temp_file, filename) in staged_files.items():
                     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -221,6 +245,12 @@ class InstallationService(BaseService):
                         if filename == CLI_FILENAME:
                             destination.chmod(0o755)
                     self.log.info("Installed %s to %s", filename, destination)
+
+                if not has_32bit_library:
+                    # A 64-bit-only local test package must not leave a stale
+                    # 32-bit layer from an older install discoverable.
+                    self._remove_if_exists(self.lib32_file)
+                    self._remove_if_exists(self.json32_file)
 
     @staticmethod
     def _validate_layer_binary_identity(*layer_binaries: Path) -> None:
@@ -285,12 +315,15 @@ class InstallationService(BaseService):
             str(self.lib_file),
             "64",
         )
-        self._copy_and_fix_json_file(
-            self.json32_file,
-            self.registered_json32_file,
-            str(self.lib32_file),
-            "32",
-        )
+        if self.lib32_file.exists() and self.json32_file.exists():
+            self._copy_and_fix_json_file(
+                self.json32_file,
+                self.registered_json32_file,
+                str(self.lib32_file),
+                "32",
+            )
+        else:
+            self._remove_if_exists(self.registered_json32_file)
 
     def _remove_legacy_private_manifests(self) -> None:
         """Remove only obsolete manifests inside this plugin's private directory."""
@@ -428,11 +461,14 @@ class InstallationService(BaseService):
             registered_json32_exists = self.registered_json32_file.exists()
             script_exists = self.lsfg_launch_script_path.exists()
             installed = (
-                lib_exists and lib32_exists and json_exists and json32_exists
-                and registered_json_exists and registered_json32_exists
-                and script_exists
+                lib_exists and json_exists and registered_json_exists and script_exists
             )
             expected = self._bundled_archive_metadata(Path(__file__).parent.parent.parent)
+            expects_32bit = "32" in expected.get("architectures", ["64", "32"])
+            installed = installed and (
+                not expects_32bit
+                or (lib32_exists and json32_exists and registered_json32_exists)
+            )
             state = self._read_engine_state()
             version_known = state is not None
             installed_version = state["version"] if state else None

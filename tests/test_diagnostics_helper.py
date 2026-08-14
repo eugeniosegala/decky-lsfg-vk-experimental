@@ -37,6 +37,8 @@ lsfg-vk: present diagnostics: operation=adaptive-ramp context=1 old_limit=0 new_
 lsfg-vk: present diagnostics: operation=fixed-plan context=2 base_fps=61.2 multiplier=2 generated_per_real=1 observed_output_fps=122.4 generated_presented=61 generated_skipped=0 configured_adaptive_target_fps=110 target_applies=0
 lsfg-vk: present diagnostics: operation=acquire-generated-image context=1 duration_ms=50 result=VK_TIMEOUT
 lsfg-vk: present diagnostics: operation=skip-generated-frames context=1 reason=initial-timeout
+lsfg-vk: present diagnostics: operation=pipeline-busy-bypass context=1 consecutive_frames=1 total_bypassed_frames=16 duration_ms=0 planned=1 history_action=preserved action=native-present
+lsfg-vk: present diagnostics: operation=pipeline-busy-recovered context=1 bypassed_frames=1 total_recoveries=16 duration_ms=8 history_warmup_requested=0
 lsfg-vk: LSFG frame-generation initialization failed; native presentation retained: test failure
 unrelated application output
 """
@@ -77,6 +79,7 @@ class DiagnosticsHelperTests(unittest.TestCase):
         self.assertIn("adaptive-ramp", result.stdout)
         self.assertIn("runtime-state-applied", result.stdout)
         self.assertIn("skip-generated-frames", result.stdout)
+        self.assertIn("pipeline-busy-bypass", result.stdout)
         self.assertIn("experimental layer active", result.stdout)
         self.assertNotIn("mode=hdr10-pq", result.stdout)
         self.assertNotIn("HDR10 transport", result.stdout)
@@ -111,6 +114,8 @@ class DiagnosticsHelperTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("operation=fixed-plan", result.stdout)
         self.assertIn("generated_skipped=0", result.stdout)
+        self.assertIn("pipeline-busy-bypass", result.stdout)
+        self.assertIn("pipeline-busy-recovered", result.stdout)
         self.assertNotIn("adaptive-ramp", result.stdout)
 
     def test_startup_includes_loader_gamescope_context_and_hdr(self):
