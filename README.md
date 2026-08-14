@@ -42,10 +42,9 @@ build-specific known issues.
 ## 🎮 In-game considerations
 
 > [!TIP]
-> **Try the game's V-Sync setting first.** It can give the layer a steadier real-frame cadence. On lsfg-vk's normal
-> SDR path, the layer then uses an ordered FIFO presentation sequence for real and generated images, reducing bursts,
-> skipped output, and uneven frame times. V-Sync does not create extra GPU headroom and can add latency or interact
-> poorly with a game's limiter, VRR, or compositor. Test it both enabled and disabled before making deeper adjustments.
+> **Try the game's V-Sync setting both on and off.** It can make frame delivery feel steadier, but may also add input
+> lag or clash with the game's FPS cap, VRR, or compositor. Every game is different: compare both options and keep the
+> one that feels smoother and more responsive.
 
 Every game, renderer, and display setup behaves differently. Also compare Fixed and Adaptive Frame Generation, then
 fullscreen, borderless, and windowed modes. Change one setting at a time, restart after major display or

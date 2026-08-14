@@ -12,14 +12,12 @@ naturally recreates its swapchain or is restarted.
 
 ## In-game V-Sync
 
-Game V-Sync and LSFG-VK's output transport do different jobs. On Decky's established SDR path, the layer reserves
-space for generated images and presents each generated/real sequence through ordered FIFO output. The game's V-Sync
-can make the incoming real-frame cadence steadier, while LSFG-VK's FIFO transport prevents its output sequence from
-being immediately coalesced or skipped. Together this can improve frame pacing and perceived smoothness, particularly
-when an uncapped game otherwise submits bursts of frames.
+V-Sync can make LSFG-VK feel smoother by giving it more evenly spaced real frames to work with. It can also add input
+lag or clash with a game's FPS cap, VRR, or compositor. Every game is different, so test V-Sync both on and off and
+keep the option that feels smoother and more responsive.
 
-V-Sync does not create GPU headroom and can add latency, interact with VRR or an in-game limiter, or fall to a lower
-refresh divisor if the game misses its interval. Test it both enabled and disabled for each game.
+For reference, Decky's established SDR path keeps generated and real frames in order before they reach the display.
+That engine detail is separate from the V-Sync option inside the game.
 
 ## Frame-generation mode
 
