@@ -45,6 +45,9 @@ more SteamOS users discover and evaluate the project.
 - [How to Install LOSSLESS SCALING 2.0 on STEAM DECK / STEAM MACHINE](https://www.youtube.com/watch?v=1rGKvyA98FI)
   by [HolyDeck](https://www.youtube.com/@HolySteamDeck): an installation guide for Lossless Scaling 2.0 on Steam Deck
   and Steam Machine.
+- [ROG XBOX ALLY Z2A : Je teste Lossless Scaling 2.0 vs Lossless Scaling 1.0](https://www.youtube.com/watch?v=vOzOYT3z4ds)
+  by [Mike](https://www.youtube.com/@mpv99): French-language comparison of Lossless Scaling 2.0 and 1.0 on ROG Xbox
+  Ally Z2A.
 
 ## Coverage includes
 
