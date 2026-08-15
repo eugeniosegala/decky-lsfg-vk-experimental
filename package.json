@@ -3,9 +3,19 @@
   "version": "0.13.0-experimental.25",
   "description": "Experimental lsfg-vk features for Lossless Scaling on Steam OS",
   "type": "module",
+  "packageManager": "pnpm@10.18.0",
+  "engines": {
+    "node": ">=20 <25",
+    "pnpm": ">=10 <11"
+  },
   "scripts": {
     "build": "node scripts/build-frontend.mjs",
     "watch": "rollup -c -w",
+    "typecheck": "tsc --noEmit",
+    "check:generated": "./scripts/check-generated.sh",
+    "check:python": "python3 -m compileall -q main.py shared_config.py py_modules tests",
+    "check:shell": "bash -n .vscode/build.sh .vscode/config.sh .vscode/setup.sh scripts/build_i18n_json.sh scripts/package-local.sh scripts/publish-package.sh scripts/lsfg-vk-experimental-diagnostics",
+    "check": "pnpm run check:generated && pnpm run check:python && pnpm run check:shell && pnpm test && pnpm run typecheck && pnpm run build",
     "package:local": "./scripts/package-local.sh",
     "package:local-engine": "./scripts/package-local.sh --local-engine-repo ../lsfg-vk",
     "package:local-engine-fast": "./scripts/package-local.sh --local-engine-repo ../lsfg-vk --native-only --64-bit-only",
