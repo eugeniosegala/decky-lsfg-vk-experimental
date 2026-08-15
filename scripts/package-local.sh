@@ -182,7 +182,10 @@ worktree_fingerprint() {
 read -r archive_name archive_version archive_url archive_checksum flatpak_archive_name flatpak_archive_url flatpak_archive_checksum < <(
   node -e '
     const manifest = require(process.argv[1]);
-    const [binary] = manifest.remote_binary ?? [];
+    if (!Array.isArray(manifest.remote_binary) || manifest.remote_binary.length !== 1) {
+      throw new Error("package.json must define exactly one remote_binary entry");
+    }
+    const [binary] = manifest.remote_binary;
     if (!binary?.name || !binary?.version || !binary?.url || !binary?.sha256hash) {
       process.exitCode = 1;
       throw new Error("package.json must define one versioned, verified remote_binary entry");

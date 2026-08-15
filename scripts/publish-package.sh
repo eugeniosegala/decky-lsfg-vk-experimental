@@ -79,7 +79,10 @@ fi
 read -r archive_name engine_version package_version github_repository has_flatpak_bundle archive_url release_tag < <(
   node -e '
     const manifest = require(process.argv[1]);
-    const [binary] = manifest.remote_binary ?? [];
+    if (!Array.isArray(manifest.remote_binary) || manifest.remote_binary.length !== 1) {
+      throw new Error("package.json must define exactly one remote_binary entry");
+    }
+    const [binary] = manifest.remote_binary;
     const repositoryUrl = manifest.repository?.url;
     const githubRepository = repositoryUrl
       ?.replace(/^git\+https:\/\/github\.com\//, "")
@@ -136,7 +139,49 @@ elif [[ "$output_path" != /* ]]; then
   output_path="$project_dir/$output_path"
 fi
 
+output_path="$(node -e '
+  const path = require("node:path");
+  process.stdout.write(path.resolve(process.argv[1]));
+' "$output_path")"
+output_relative_path=""
+if [[ "$output_path" == "$project_dir/"* ]]; then
+  output_relative_path="${output_path#"$project_dir/"}"
+  if git -C "$project_dir" ls-files --error-unmatch -- \
+      ":(literal)$output_relative_path" >/dev/null 2>&1; then
+    echo "Refusing to publish to tracked output path: $output_path" >&2
+    exit 1
+  else
+    ls_files_status=$?
+    if [[ "$ls_files_status" -ne 1 ]]; then
+      echo "Could not classify the in-repository output path: $output_path" >&2
+      exit 1
+    fi
+  fi
+fi
+
 "$script_dir/package-local.sh" "$output_path"
+
+# Packaging regenerates tracked artifacts. Recheck before creating a tag so a
+# stale generated file cannot turn a clean release commit into a dirty tag. A
+# caller-selected ZIP inside the repository is the sole permitted untracked
+# result; tracked output paths are never treated as disposable artifacts.
+post_package_status_args=(status --porcelain --untracked-files=normal -z -- .)
+if [[ -n "$output_relative_path" ]]; then
+  post_package_status_args+=(":(exclude,literal)$output_relative_path")
+fi
+
+post_package_status="$(mktemp "${TMPDIR:-/tmp}/decky-lsfg-vk-status.XXXXXX")"
+if ! git -C "$project_dir" "${post_package_status_args[@]}" > "$post_package_status"; then
+  rm -f "$post_package_status"
+  echo "Could not verify the worktree after packaging." >&2
+  exit 1
+fi
+if [[ -s "$post_package_status" ]]; then
+  rm -f "$post_package_status"
+  echo "Refusing to tag after packaging changed the worktree. Commit the generated changes first." >&2
+  exit 1
+fi
+rm -f "$post_package_status"
 
 release_tag="v$package_version"
 current_commit="$(git -C "$project_dir" rev-parse HEAD)"
