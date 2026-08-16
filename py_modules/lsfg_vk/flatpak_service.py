@@ -183,6 +183,13 @@ class FlatpakService(BaseService):
             raise MutationBlockedError(
                 "Flatpak active ownership state contains an absent path"
             )
+        if record["status"] == "active" and (
+            record["retired_paths"]
+            or not all(entry["owned"] for entry in paths.values())
+        ):
+            raise MutationBlockedError(
+                "Flatpak active ownership state is not exclusive"
+            )
         if record["status"] == "baseline" and any(
             entry["owned"] for entry in paths.values()
         ):
@@ -208,25 +215,18 @@ class FlatpakService(BaseService):
         if operation == "remove":
             if (
                 before is None
-                or after is None
                 or before["status"] != "active"
-                or after["status"] != "baseline"
-                or after["retired_paths"] != before["retired_paths"]
+                or after is not None
             ):
                 raise MutationBlockedError(
                     "Flatpak ownership ledger contains an invalid remove intent"
                 )
-            for role in FLATPAK_FILESYSTEM_ROLES:
-                previous = before["paths"][role]
-                target = after["paths"][role]
-                if (
-                    target["path"] != previous["path"]
-                    or target["owned"]
-                    or target["present"] != (not previous["owned"])
-                ):
-                    raise MutationBlockedError(
-                        "Flatpak ownership ledger contains an unsafe remove transition"
-                    )
+            if before["retired_paths"] or not all(
+                entry["owned"] for entry in before["paths"].values()
+            ):
+                raise MutationBlockedError(
+                    "Flatpak ownership ledger contains an unsafe remove transition"
+                )
             return
 
         if after is None or after["status"] != "active" or (
@@ -236,31 +236,17 @@ class FlatpakService(BaseService):
                 "Flatpak ownership ledger contains an invalid set intent"
             )
         if before is None:
-            if after["retired_paths"]:
+            if after["retired_paths"] or not all(
+                entry["owned"] for entry in after["paths"].values()
+            ):
                 raise MutationBlockedError(
-                    "Flatpak initial ownership intent contains retired paths"
+                    "Flatpak initial ownership intent is not exclusive"
                 )
             return
 
-        current_paths = {entry["path"] for entry in after["paths"].values()}
-        expected_retired = set(before["retired_paths"])
-        for role in FLATPAK_FILESYSTEM_ROLES:
-            previous = before["paths"][role]
-            target = after["paths"][role]
-            if previous["path"] == target["path"]:
-                expected_owned = (
-                    previous["owned"] if previous["present"] else True
-                )
-                if target["owned"] is not expected_owned:
-                    raise MutationBlockedError(
-                        "Flatpak set intent changes ownership without evidence"
-                    )
-            elif previous["owned"]:
-                expected_retired.add(previous["path"])
-        expected_retired.difference_update(current_paths)
-        if set(after["retired_paths"]) != expected_retired:
+        if before["status"] != "active" or before != after:
             raise MutationBlockedError(
-                "Flatpak set intent contains inconsistent retired history"
+                "Flatpak set intent must not replace an active ownership boundary"
             )
 
     def _write_flatpak_ownership(
@@ -790,22 +776,34 @@ class FlatpakService(BaseService):
                 states[permission_path] = f"grant_{mode}"
         in_environment = False
         in_context = False
+        section = ""
         for raw_line in output.splitlines():
             line = raw_line.strip()
             if line == "[Environment]":
+                section = "Environment"
                 in_environment, in_context = True, False
             elif line == "[Context]":
+                section = "Context"
                 in_environment, in_context = False, True
             elif line.startswith("["):
+                section = line
                 in_environment = in_context = False
             elif in_environment:
                 variable, separator, _value = line.partition("=")
-                if separator and variable in LEGACY_ENVIRONMENT_FIELDS:
+                if separator:
                     states[f"@env:{variable}"] = "value"
             elif in_context and line.startswith("unset-environment="):
                 for variable in line.partition("=")[2].split(";"):
-                    if variable in LEGACY_ENVIRONMENT_FIELDS:
+                    if variable:
                         states[f"@env:{variable}"] = "unset"
+            elif in_context and line.startswith("filesystems="):
+                continue
+            elif in_context and line and not line.startswith("filesystems="):
+                key = line.partition("=")[0]
+                states[f"@other:Context:{key}"] = "present"
+            elif line and "=" in line:
+                key = line.partition("=")[0]
+                states[f"@other:{section}:{key}"] = "present"
         return states
 
     @staticmethod
@@ -926,25 +924,6 @@ class FlatpakService(BaseService):
             ownership_status=status,
         )
 
-    @staticmethod
-    def _owned_paths_record(
-        paths: dict[str, str], states: dict[str, str], previous: Optional[dict[str, Any]]
-    ) -> dict[str, dict[str, object]]:
-        owned: dict[str, dict[str, object]] = {}
-        previous_paths = previous["paths"] if previous is not None else {}
-        for role in FLATPAK_FILESYSTEM_ROLES:
-            path = paths[role]
-            previous_entry = previous_paths.get(role)
-            state = states.get(path, "absent")
-            is_owned = state == "absent" or bool(
-                previous_entry is not None
-                and previous_entry["path"] == path
-                and previous_entry["present"]
-                and previous_entry["owned"]
-            )
-            owned[role] = {"path": path, "owned": is_owned, "present": True}
-        return owned
-
     def _override_unverified(
         self,
         app_id: str,
@@ -998,44 +977,31 @@ class FlatpakService(BaseService):
             return "pending"
         if states is None:
             return "managed"
-        if not self._active_boundary_matches(record, states):
+        if not self._exclusive_boundary_matches(record, states):
             return "blocked"
         return "managed" if record["status"] == "active" else "unmanaged"
 
+    @classmethod
+    def _exclusive_boundary_matches(
+        cls, record: dict[str, Any], states: dict[str, str]
+    ) -> bool:
+        return states == cls._boundary_states(record)
+
     @staticmethod
-    def _boundary_matches(
-        record: dict[str, Any], states: dict[str, str], *, remove_owned: bool
+    def _active_boundary_matches(
+        record: dict[str, Any], states: dict[str, str]
     ) -> bool:
         for role, entry in record["paths"].items():
-            if remove_owned:
-                expected = (
-                    "absent"
-                    if entry["owned"]
-                    else f"grant_{FLATPAK_MANAGED_MODES[role]}"
-                )
-            else:
-                expected = (
-                    f"grant_{FLATPAK_MANAGED_MODES[role]}"
-                    if entry["present"]
-                    else "absent"
-                )
+            expected = (
+                f"grant_{FLATPAK_MANAGED_MODES[role]}"
+                if entry["present"]
+                else "absent"
+            )
             if states.get(entry["path"], "absent") != expected:
                 return False
         return all(
             states.get(path, "absent") == "absent" for path in record["retired_paths"]
         )
-
-    @classmethod
-    def _active_boundary_matches(
-        cls, record: dict[str, Any], states: dict[str, str]
-    ) -> bool:
-        return cls._boundary_matches(record, states, remove_owned=False)
-
-    @classmethod
-    def _empty_boundary_matches(
-        cls, record: dict[str, Any], states: dict[str, str]
-    ) -> bool:
-        return cls._boundary_matches(record, states, remove_owned=True)
 
     @staticmethod
     def _boundary_states(
@@ -1133,14 +1099,14 @@ class FlatpakService(BaseService):
             )
         before, after = pending["before"], pending["after"]
         after_matches = (
-            self._active_boundary_matches(after, states)
+            self._exclusive_boundary_matches(after, states)
             if after is not None
-            else self._empty_boundary_matches(before, states)
+            else not states
         )
         before_matches = (
-            self._active_boundary_matches(before, states)
+            self._exclusive_boundary_matches(before, states)
             if before is not None
-            else self._empty_boundary_matches(after, states)
+            else not states
         )
         if after_matches:
             stable = after
@@ -1154,17 +1120,30 @@ class FlatpakService(BaseService):
                     "pending",
                     f"retry the recorded {pending['operation']} operation first",
                 )
-            before_states, after_states = self._pending_boundary_states(pending)
-            options = self._pending_repair_options(
-                before_states, after_states, states
-            )
-            if options is None:
-                return self._ownership_failure(
-                    app_id,
-                    operation,
-                    "blocked",
-                    "pending filesystem state contains an unexpected external change",
+            if pending["operation"] == "remove":
+                expected_before = self._boundary_states(before)
+                if states != expected_before:
+                    return self._ownership_failure(
+                        app_id,
+                        operation,
+                        "blocked",
+                        "pending remove state contains an unexpected external change",
+                    )
+                options = ["--reset"]
+            else:
+                before_states, after_states = self._pending_boundary_states(pending)
+                options = self._pending_repair_options(
+                    before_states, after_states, states
                 )
+                if options is None or any(
+                    key.startswith("@") for key in states
+                ):
+                    return self._ownership_failure(
+                        app_id,
+                        operation,
+                        "blocked",
+                        "pending filesystem state contains an unexpected external change",
+                    )
 
             command_error = None
             try:
@@ -1199,7 +1178,7 @@ class FlatpakService(BaseService):
                     ownership_status="pending",
                 )
 
-            if after is not None and self._active_boundary_matches(
+            if after is not None and self._exclusive_boundary_matches(
                 after, final_states
             ):
                 document["apps"][app_id] = after
@@ -1217,6 +1196,20 @@ class FlatpakService(BaseService):
                     )
                 )
                 if command_error and response["success"]:
+                    response["warning"] = self._sanitize_flatpak_detail(
+                        "The requested state was verified, although Flatpak reported: "
+                        f"{command_error}"
+                    )
+                    response["failed_steps"] = [FLATPAK_OVERRIDE_STEP]
+                return response
+
+            if after is None and not final_states:
+                try:
+                    self._remove_flatpak_ownership(coordinator, document, app_id)
+                except Exception as error:
+                    return self._override_execution_unavailable(app_id, operation, error)
+                response = self._ownership_complete_remove(app_id, final)
+                if command_error:
                     response["warning"] = self._sanitize_flatpak_detail(
                         "The requested state was verified, although Flatpak reported: "
                         f"{command_error}"
@@ -1468,6 +1461,13 @@ class FlatpakService(BaseService):
                         "unknown",
                         "a legacy LSFG environment override or unset is already present",
                     )
+                if previous is None and exact_states:
+                    return self._ownership_failure(
+                        app_id,
+                        "set",
+                        "unknown",
+                        "the application already has user or Flatseal overrides; automatic setup would not be safely reversible",
+                    )
                 if previous is not None and self._flatpak_ownership_status(
                     app_id, observed, document, exact_states
                 ) == "blocked":
@@ -1485,6 +1485,26 @@ class FlatpakService(BaseService):
                     return self._ownership_failure(
                         app_id, "set", "blocked", "managed filesystem paths overlap"
                     )
+                if previous is not None:
+                    previous_paths = {
+                        role: entry["path"] for role, entry in previous["paths"].items()
+                    }
+                    if previous["status"] != "active" or not all(
+                        entry["owned"] for entry in previous["paths"].values()
+                    ):
+                        return self._ownership_failure(
+                            app_id,
+                            "set",
+                            "blocked",
+                            "the existing ownership record is not exclusive",
+                        )
+                    if previous_paths != paths:
+                        return self._ownership_failure(
+                            app_id,
+                            "set",
+                            "blocked",
+                            "the managed paths changed; remove the existing override before enabling it again",
+                        )
                 for role, path in paths.items():
                     state = exact_states.get(path, "absent")
                     if state not in {"absent", f"grant_{FLATPAK_MANAGED_MODES[role]}"}:
@@ -1497,24 +1517,13 @@ class FlatpakService(BaseService):
 
                 active = {
                     "status": "active",
-                    "paths": self._owned_paths_record(paths, exact_states, previous),
-                    "retired_paths": list(previous["retired_paths"]) if previous else [],
+                    "paths": {
+                        role: {"path": path, "owned": True, "present": True}
+                        for role, path in paths.items()
+                    },
+                    "retired_paths": [],
                 }
                 options: list[str] = []
-                if previous is not None:
-                    for role, entry in previous["paths"].items():
-                        if entry["owned"] and entry["path"] != paths[role]:
-                            options.append(f"--nofilesystem={entry['path']}")
-                            if entry["path"] not in active["retired_paths"]:
-                                active["retired_paths"].append(entry["path"])
-                current_paths = {
-                    entry["path"] for entry in active["paths"].values()
-                }
-                active["retired_paths"] = [
-                    path
-                    for path in active["retired_paths"]
-                    if path not in current_paths
-                ]
                 for role, entry in active["paths"].items():
                     if entry["owned"] and exact_states.get(entry["path"], "absent") == "absent":
                         options.append(
@@ -1570,10 +1579,7 @@ class FlatpakService(BaseService):
                     final_states.get(entry["path"], "absent")
                     == f"grant_{FLATPAK_MANAGED_MODES[role]}"
                     for role, entry in active["paths"].items()
-                ) and all(
-                    final_states.get(path, "absent") == "absent"
-                    for path in active["retired_paths"]
-                )
+                ) and final_states == self._boundary_states(active)
                 result = self._classify_override_result(
                     app_id, "set", final, command_error
                 )
@@ -1655,43 +1661,31 @@ class FlatpakService(BaseService):
                         app_id, "remove", "blocked", "tracked filesystem state was changed externally"
                     )
 
-                owned_entries = [
-                    entry for entry in record["paths"].values() if entry["owned"]
-                ]
-                baseline = {
-                    "status": "baseline",
-                    "paths": {
-                        role: {
-                            "path": entry["path"],
-                            "owned": False,
-                            "present": not entry["owned"],
-                        }
-                        for role, entry in record["paths"].items()
-                    },
-                    "retired_paths": list(record["retired_paths"]),
-                }
-                if not owned_entries:
-                    document["apps"][app_id] = baseline
-                    self._write_flatpak_ownership(coordinator, document)
-                    return self._ownership_complete_remove(app_id, observed)
+                if (
+                    record["status"] != "active"
+                    or record["retired_paths"]
+                    or not all(entry["owned"] for entry in record["paths"].values())
+                    or not self._exclusive_boundary_matches(record, exact_states)
+                ):
+                    return self._ownership_failure(
+                        app_id,
+                        "remove",
+                        "blocked",
+                        "the app override is not exclusively owned by this plugin",
+                    )
 
                 document["apps"][app_id] = {
                     "status": "pending",
                     "operation": "remove",
                     "before": record,
-                    "after": baseline,
+                    "after": None,
                 }
                 self._write_flatpak_ownership(coordinator, document)
                 mutation_started = True
                 command_error = None
                 try:
                     command = self._run_flatpak_command(
-                        [
-                            "override",
-                            "--user",
-                            *[f"--nofilesystem={entry['path']}" for entry in owned_entries],
-                            app_id,
-                        ],
+                        ["override", "--user", "--reset", app_id],
                         capture_output=True,
                         text=True,
                     )
@@ -1714,14 +1708,9 @@ class FlatpakService(BaseService):
                         failed=command_error is not None,
                         ownership_status="pending",
                     )
-                if self._active_boundary_matches(baseline, final_states):
-                    document["apps"][app_id] = baseline
-                    self._write_flatpak_ownership(coordinator, document)
+                if not final_states:
+                    self._remove_flatpak_ownership(coordinator, document, app_id)
                     response = self._ownership_complete_remove(app_id, final)
-                    if any(entry["present"] for entry in baseline["paths"].values()):
-                        response["warning"] = (
-                            "Plugin-managed access was removed; pre-existing Flatpak access was retained."
-                        )
                     if command_error:
                         response["warning"] = self._sanitize_flatpak_detail(
                             "The requested state was verified, although Flatpak reported: "

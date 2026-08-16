@@ -196,18 +196,12 @@ class FlatpakOverrideContractTests(unittest.TestCase):
         })
         self.assertEqual((result["success"], result["outcome"]), (True, "complete"))
 
-    def test_remove_uses_one_multi_option_command_and_reports_complete(self):
+    def test_remove_resets_only_the_exclusively_owned_app_layer(self):
         result, calls = self._run("remove", _completed(stdout=_override_output()))
 
         self.assertEqual(calls, [
             ["override", "--user", "--show", APP_ID],
-            [
-            "override", "--user",
-            f"--nofilesystem={CONFIG_PATH}",
-            f"--nofilesystem={DLL_PATH}",
-            f"--nofilesystem={WRAPPER_PATH}",
-            APP_ID,
-            ],
+            ["override", "--user", "--reset", APP_ID],
             ["override", "--user", "--show", APP_ID],
         ])
         self.assertEqual(result["observed_state"], {key: False for key in OBSERVED_KEYS})
@@ -584,25 +578,13 @@ class FlatpakOverrideContractTests(unittest.TestCase):
             },
             "retired_paths": [],
         }
-        baseline = {
-            "status": "baseline",
-            "paths": {
-                role: {
-                    "path": entry["path"],
-                    "owned": False,
-                    "present": False,
-                }
-                for role, entry in active["paths"].items()
-            },
-            "retired_paths": [],
-        }
         path = self.service._flatpak_ownership_path
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps({"schema": 1, "apps": {APP_ID: {
             "status": "pending",
             "operation": "remove",
             "before": active,
-            "after": baseline,
+            "after": None,
         }}}), encoding="utf-8")
         observations = iter((
             _completed(stdout=_override_output(config=True, dll=True, wrapper=True)),
@@ -615,8 +597,7 @@ class FlatpakOverrideContractTests(unittest.TestCase):
             result = self.service.remove_app_override(APP_ID)
         self.assertEqual(command.call_count, 4)
         self.assertTrue(result["success"])
-        ledger = json.loads(self.service._flatpak_ownership_path.read_text())
-        self.assertEqual(ledger["apps"][APP_ID]["status"], "baseline")
+        self.assertFalse(self.service._flatpak_ownership_path.exists())
 
     def test_set_intent_is_durable_0600_before_flatpak_mutation(self):
         calls = []
@@ -639,39 +620,17 @@ class FlatpakOverrideContractTests(unittest.TestCase):
             self.service._flatpak_ownership_path.read_text()
         )["apps"][APP_ID]["status"], "active")
 
-    def test_preexisting_correct_grants_are_tracked_but_never_owned_or_removed(self):
+    def test_preexisting_correct_grants_are_preserved_by_refusing_automation(self):
         calls = []
         def command(args, **_kwargs):
             calls.append(args)
             return _completed(stdout=_override_output(config=True, dll=True, wrapper=True))
         with patch.object(self.service, "_run_flatpak_command", side_effect=command):
             result = self.service.set_app_override(APP_ID)
-        self.assertTrue(result["success"])
+        self.assertFalse(result["success"])
+        self.assertEqual(result["ownership_status"], "unknown")
         self.assertEqual(calls, [["override", "--user", "--show", APP_ID]])
-        record = json.loads(self.service._flatpak_ownership_path.read_text())["apps"][APP_ID]
-        self.assertFalse(any(entry["owned"] for entry in record["paths"].values()))
-        with patch.object(self.service, "_run_flatpak_command", side_effect=command):
-            removed = self.service.remove_app_override(APP_ID)
-        self.assertEqual(removed["outcome"], "complete")
-        self.assertEqual(calls[-1], ["override", "--user", "--show", APP_ID])
-        baseline = json.loads(
-            self.service._flatpak_ownership_path.read_text()
-        )["apps"][APP_ID]
-        self.assertEqual(baseline["status"], "baseline")
-        output = _override_output(config=True, dll=True, wrapper=True)
-        states = self.service._parse_override_exact_states(
-            output,
-            f"filesystems={CONFIG_PATH}:rw;{DLL_PATH}:ro;{WRAPPER_PATH}:ro;",
-        )
-        self.assertEqual(
-            self.service._flatpak_ownership_status(
-                APP_ID,
-                removed["observed_state"],
-                {"schema": 1, "apps": {APP_ID: baseline}},
-                states,
-            ),
-            "unmanaged",
-        )
+        self.assertFalse(self.service._flatpak_ownership_path.exists())
 
     def test_explicit_deny_wins_over_duplicate_allow_in_any_order(self):
         for entries in (
@@ -780,7 +739,7 @@ class FlatpakOverrideContractTests(unittest.TestCase):
         record = json.loads(path.read_text(encoding="utf-8"))["apps"][APP_ID]
         self.assertEqual(record, active)
 
-    def test_pending_set_path_change_preserves_preexisting_unowned_grant(self):
+    def test_pending_set_path_change_with_unowned_grant_is_rejected_as_tampered(self):
         replacement_config = "/home/deck/.config/lsfg-vk-new"
         before = {
             "status": "active",
@@ -851,33 +810,17 @@ class FlatpakOverrideContractTests(unittest.TestCase):
 
         self.assertEqual(
             (result["success"], result["outcome"], result["ownership_status"]),
-            (True, "complete", "managed"),
+            (False, "unverified", "blocked"),
         )
-        self.assertEqual(len(mutations), 1)
-        self.assertIn(f"--filesystem={replacement_config}:rw", mutations[0])
-        self.assertNotIn(f"--nofilesystem={CONFIG_PATH}", mutations[0])
-        self.assertIn(CONFIG_PATH, granted_paths)
-        record = json.loads(
-            ownership_path.read_text(encoding="utf-8")
-        )["apps"][APP_ID]
-        self.assertEqual(record, after)
+        self.assertEqual(mutations, [])
 
-    def test_pending_remove_retry_applies_only_compatible_remaining_transitions(self):
+    def test_pending_remove_with_mixed_state_blocks_without_mutation(self):
         active = {
             "status": "active",
             "paths": {
                 "config": {"path": CONFIG_PATH, "owned": True, "present": True},
                 "dll": {"path": DLL_PATH, "owned": True, "present": True},
                 "wrapper": {"path": WRAPPER_PATH, "owned": True, "present": True},
-            },
-            "retired_paths": [],
-        }
-        baseline = {
-            "status": "baseline",
-            "paths": {
-                "config": {"path": CONFIG_PATH, "owned": False, "present": False},
-                "dll": {"path": DLL_PATH, "owned": False, "present": False},
-                "wrapper": {"path": WRAPPER_PATH, "owned": False, "present": False},
             },
             "retired_paths": [],
         }
@@ -889,7 +832,7 @@ class FlatpakOverrideContractTests(unittest.TestCase):
                 "status": "pending",
                 "operation": "remove",
                 "before": active,
-                "after": baseline,
+                "after": None,
             }},
         }), encoding="utf-8")
         granted_paths = {CONFIG_PATH}
@@ -916,15 +859,9 @@ class FlatpakOverrideContractTests(unittest.TestCase):
 
         self.assertEqual(
             (result["success"], result["outcome"], result["ownership_status"]),
-            (True, "complete", "unmanaged"),
+            (False, "unverified", "blocked"),
         )
-        self.assertEqual(len(mutations), 1)
-        self.assertEqual(
-            mutations[0],
-            ["override", "--user", f"--nofilesystem={CONFIG_PATH}", APP_ID],
-        )
-        record = json.loads(path.read_text(encoding="utf-8"))["apps"][APP_ID]
-        self.assertEqual(record, baseline)
+        self.assertEqual(mutations, [])
 
     def test_remove_deny_readback_is_not_success_and_leaves_pending(self):
         self._write_active_ownership()
@@ -939,7 +876,7 @@ class FlatpakOverrideContractTests(unittest.TestCase):
         self.assertFalse(result["success"])
         self.assertEqual(result["ownership_status"], "pending")
 
-    def test_changing_dll_path_retires_the_old_owned_grant(self):
+    def test_changing_dll_path_requires_remove_before_reenable(self):
         dll_b = "/home/deck/Games/Lossless"
         current_dll = DLL_PATH
         self.paths.stop()
@@ -975,14 +912,14 @@ class FlatpakOverrideContractTests(unittest.TestCase):
             self.assertTrue(first["success"])
             current_dll = dll_b
             second = self.service.set_app_override(APP_ID)
-        self.assertTrue(second["success"])
-        self.assertIn(f"--nofilesystem={DLL_PATH}", mutations[1])
-        self.assertIn(f"--filesystem={dll_b}:ro", mutations[1])
+        self.assertFalse(second["success"])
+        self.assertEqual(second["ownership_status"], "blocked")
+        self.assertEqual(len(mutations), 1)
         record = json.loads(self.service._flatpak_ownership_path.read_text())["apps"][APP_ID]
-        self.assertEqual(record["paths"]["dll"]["path"], dll_b)
-        self.assertIn(DLL_PATH, record["retired_paths"])
+        self.assertEqual(record["paths"]["dll"]["path"], DLL_PATH)
+        self.assertEqual(record["retired_paths"], [])
 
-    def test_returning_to_a_retired_dll_path_restores_managed_complete_state(self):
+    def test_dll_path_cycle_is_safe_via_remove_and_reenable(self):
         dll_b = "/home/deck/Games/Lossless"
         current_dll = DLL_PATH
         granted_paths: set[str] = set()
@@ -1008,34 +945,38 @@ class FlatpakOverrideContractTests(unittest.TestCase):
             if args[:3] == ["override", "--user", "--show"]:
                 return _completed(stdout=output())
             mutations.append(args)
+            if "--reset" in args:
+                granted_paths.clear()
+                return _completed()
             for argument in args:
-                if argument.startswith("--nofilesystem="):
-                    granted_paths.discard(argument.removeprefix("--nofilesystem="))
-                elif argument.startswith("--filesystem="):
+                if argument.startswith("--filesystem="):
                     path_and_mode = argument.removeprefix("--filesystem=")
                     granted_paths.add(path_and_mode.rsplit(":", 1)[0])
             return _completed()
 
         with patch.object(self.service, "_run_flatpak_command", side_effect=command):
             first = self.service.set_app_override(APP_ID)
+            removed_a = self.service.remove_app_override(APP_ID)
             current_dll = dll_b
             second = self.service.set_app_override(APP_ID)
+            removed_b = self.service.remove_app_override(APP_ID)
             current_dll = DLL_PATH
             third = self.service.set_app_override(APP_ID)
 
         self.assertTrue(first["success"])
+        self.assertTrue(removed_a["success"])
         self.assertTrue(second["success"])
+        self.assertTrue(removed_b["success"])
         self.assertEqual(
             (third["success"], third["outcome"], third["ownership_status"]),
             (True, "complete", "managed"),
         )
-        self.assertEqual(len(mutations), 3)
+        self.assertEqual(len(mutations), 5)
         record = json.loads(
             self.service._flatpak_ownership_path.read_text(encoding="utf-8")
         )["apps"][APP_ID]
         self.assertEqual(record["paths"]["dll"]["path"], DLL_PATH)
-        self.assertNotIn(DLL_PATH, record["retired_paths"])
-        self.assertIn(dll_b, record["retired_paths"])
+        self.assertEqual(record["retired_paths"], [])
 
     def test_nonabsolute_configured_dll_path_fails_closed_before_mutation(self):
         self.paths.stop()

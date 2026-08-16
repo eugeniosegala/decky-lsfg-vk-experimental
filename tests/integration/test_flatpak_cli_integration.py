@@ -201,7 +201,7 @@ os.execvpe(real, [real, *args], os.environ.copy())
         self.assertEqual(states.get(str(self.dll_a), "absent"), "absent")
         self.assertEqual(states.get(str(self.wrapper_path), "absent"), "absent")
 
-    def test_remove_preserves_a_preexisting_user_grant(self):
+    def test_preexisting_user_grant_is_preserved_by_refusing_automation(self):
         app_id = self._app_id("Preexisting")
         self._flatpak(
             "override",
@@ -213,19 +213,13 @@ os.execvpe(real, [real, *args], os.environ.copy())
 
         with self._ready_service(service, self.dll_a):
             prepared = service.set_app_override(app_id)
-        self.assertTrue(prepared["success"], prepared)
-        ledger = json.loads(service._flatpak_ownership_path.read_text(encoding="utf-8"))
-        self.assertFalse(ledger["apps"][app_id]["paths"]["config"]["owned"])
-
-        with self._ready_service(service, self.dll_a):
-            removed = service.remove_app_override(app_id)
-        self.assertTrue(removed["success"], removed)
-        self.assertIn("pre-existing", removed["warning"])
+        self.assertFalse(prepared["success"], prepared)
+        self.assertEqual(prepared["ownership_status"], "unknown")
+        self.assertFalse(service._flatpak_ownership_path.exists())
 
         states = self._exact_states(service, app_id, self.dll_a)
         self.assertEqual(states[str(self.config_path)], "grant_rw")
-        self.assertEqual(states.get(str(self.dll_a), "absent"), "absent")
-        self.assertEqual(states.get(str(self.wrapper_path), "absent"), "absent")
+        self.assertEqual(set(states), {str(self.config_path)})
 
     def test_wrong_mode_fails_closed_without_claiming_ownership(self):
         app_id = self._app_id("WrongMode")
@@ -303,20 +297,30 @@ os.execvpe(real, [real, *args], os.environ.copy())
         self.assertEqual(states[str(self.dll_a)], "grant_ro")
         self.assertEqual(states[str(self.wrapper_path)], "grant_ro")
 
-    def test_dll_path_a_to_b_to_a_never_retires_the_active_path(self):
+    def test_dll_path_change_requires_safe_remove_before_reenable(self):
         app_id = self._app_id("PathCycle")
         service = self._service()
 
-        for dll_path in (self.dll_a, self.dll_b, self.dll_a):
-            with self._ready_service(service, dll_path):
-                result = service.set_app_override(app_id)
-            self.assertTrue(result["success"], result)
-            self.assertEqual(result["ownership_status"], "managed")
+        with self._ready_service(service, self.dll_a):
+            first = service.set_app_override(app_id)
+        self.assertTrue(first["success"], first)
 
-        states = self._exact_states(service, app_id, self.dll_a)
-        self.assertEqual(states[str(self.dll_a)], "grant_ro")
-        self.assertEqual(states.get(str(self.dll_b), "absent"), "absent")
+        with self._ready_service(service, self.dll_b):
+            refused = service.set_app_override(app_id)
+        self.assertFalse(refused["success"], refused)
+        self.assertEqual(refused["ownership_status"], "blocked")
+
+        with self._ready_service(service, self.dll_a):
+            removed = service.remove_app_override(app_id)
+        self.assertTrue(removed["success"], removed)
+
+        with self._ready_service(service, self.dll_b):
+            second = service.set_app_override(app_id)
+        self.assertTrue(second["success"], second)
+
+        states = self._exact_states(service, app_id, self.dll_b)
+        self.assertEqual(states[str(self.dll_b)], "grant_ro")
+        self.assertEqual(states.get(str(self.dll_a), "absent"), "absent")
         ledger = json.loads(service._flatpak_ownership_path.read_text(encoding="utf-8"))
         record = ledger["apps"][app_id]
-        self.assertNotIn(str(self.dll_a), record["retired_paths"])
-        self.assertIn(str(self.dll_b), record["retired_paths"])
+        self.assertEqual(record["retired_paths"], [])
