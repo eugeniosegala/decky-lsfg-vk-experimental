@@ -15,6 +15,7 @@ from unittest import mock
 import scripts.latency_trace_gate as latency_trace_gate
 from scripts.latency_trace_gate import (
     EXIT_INVALID_TRACE,
+    EXIT_USAGE,
     MAX_EVENT_COUNT,
     MAX_FILE_BYTES,
     LatencyTraceError,
@@ -1970,6 +1971,94 @@ class LatencyTraceV1CorrectionContractTests(unittest.TestCase):
 
             self.assertEqual(output.read_bytes(), stale)
             self.assertEqual([path.name for path in root.iterdir()], ["result.json"])
+
+    def test_cli_rejects_input_output_alias_without_modifying_trace(self):
+        for payload in (
+            (FIXTURES / "valid-real-only.jsonl").read_bytes(),
+            b"{}\n",
+        ):
+            with self.subTest(valid_input=payload != b"{}\n"):
+                with tempfile.TemporaryDirectory() as directory:
+                    trace = Path(directory) / "trace.jsonl"
+                    trace.write_bytes(payload)
+                    before = trace.read_bytes()
+                    with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                        code = main(
+                            [str(trace), "--json-output", str(trace.absolute())]
+                        )
+                    self.assertEqual(code, EXIT_USAGE)
+                    self.assertEqual(trace.read_bytes(), before)
+
+    def test_cli_rejects_hardlinked_input_output_alias(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            trace = root / "trace.jsonl"
+            output = root / "result.json"
+            trace.write_bytes((FIXTURES / "valid-real-only.jsonl").read_bytes())
+            os.link(trace, output)
+            before = trace.read_bytes()
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                code = main([str(trace), "--json-output", str(output)])
+            self.assertEqual(code, EXIT_USAGE)
+            self.assertEqual(trace.read_bytes(), before)
+            self.assertEqual(output.read_bytes(), before)
+
+    def test_alias_inspection_error_does_not_mask_unreadable_input(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            trace = root / "trace.jsonl"
+            output = root / "result.json"
+            trace.write_bytes((FIXTURES / "valid-real-only.jsonl").read_bytes())
+            with (
+                mock.patch(
+                    "scripts.latency_trace_gate.os.path.samefile",
+                    side_effect=PermissionError("alias inspection denied"),
+                ),
+                mock.patch(
+                    "scripts.latency_trace_gate.load_trace",
+                    side_effect=LatencyTraceError(
+                        "cannot read trace: permission denied"
+                    ),
+                ),
+                redirect_stdout(io.StringIO()),
+                redirect_stderr(io.StringIO()),
+            ):
+                code = main([str(trace), "--json-output", str(output)])
+
+            self.assertEqual(code, EXIT_INVALID_TRACE)
+            rejected = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(rejected["error"], "cannot read trace: permission denied")
+
+    def test_cli_sanitizes_untrusted_terminal_control_characters(self):
+        records = _records()
+        _event(records, "real_frame_ready")["event"] = "\x1b]0;owned\x07"
+        with tempfile.TemporaryDirectory() as directory:
+            trace = Path(directory) / "trace.jsonl"
+            output = Path(directory) / "result.json"
+            trace.write_text(
+                "\n".join(json.dumps(record) for record in records) + "\n",
+                encoding="utf-8",
+            )
+            stderr = io.StringIO()
+            with redirect_stdout(io.StringIO()), redirect_stderr(stderr):
+                code = main([str(trace), "--json-output", str(output)])
+            rejected = json.loads(output.read_text(encoding="utf-8"))
+        self.assertEqual(code, EXIT_INVALID_TRACE)
+        self.assertNotIn("\x1b", stderr.getvalue())
+        self.assertNotIn("\x07", stderr.getvalue())
+        self.assertNotIn("\x1b", rejected["error"])
+        self.assertNotIn("\x07", rejected["error"])
+        self.assertLessEqual(
+            len(rejected["error"]), latency_trace_gate.MAX_DIAGNOSTIC_CHARS
+        )
+        self.assertIn("latency trace rejected", stderr.getvalue())
+
+    def test_empty_context_reports_queue_depth_as_unavailable(self):
+        records = _records()
+        records = [records[0], records[1], records[-2], records[-1]]
+        _renumber(records)
+        summary = evaluate_trace(records)["summary"]
+        self.assertIsNone(summary["maximum_queue_depth"])
 
     def test_simulator_scenarios_have_exact_semantic_summaries(self):
         expected = {

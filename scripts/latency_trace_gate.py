@@ -17,6 +17,7 @@ import stat
 import sys
 import tempfile
 from typing import Any
+import unicodedata
 
 
 EXIT_OK = 0
@@ -27,6 +28,7 @@ MAX_LINE_BYTES = 16 * 1024
 MAX_EVENT_COUNT = 10_000
 MAX_NESTING_DEPTH = 6
 MAX_INTEGER_DIGITS = 128
+MAX_DIAGNOSTIC_CHARS = 512
 
 _ID_RE = re.compile(r"^[\x20-\x7e]{1,128}$")
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -210,6 +212,39 @@ def _identifier(value: Any, name: str) -> str:
     if not isinstance(value, str) or not _ID_RE.fullmatch(value):
         raise LatencyTraceError(f"{name} must be 1-128 printable ASCII characters")
     return value
+
+
+def _paths_refer_to_same_file(left: Path, right: Path) -> bool:
+    """Conservatively reject output aliases that could overwrite the input."""
+    if os.path.normcase(os.path.abspath(left)) == os.path.normcase(
+        os.path.abspath(right)
+    ):
+        return True
+    try:
+        return os.path.samefile(left, right)
+    except OSError:
+        # The real load/write operation owns the actionable filesystem error.
+        return False
+
+
+def _sanitize_diagnostic(value: Any) -> str:
+    """Make untrusted validation errors single-line and terminal-safe."""
+    sanitized: list[str] = []
+    length = 0
+    for character in str(value):
+        category = unicodedata.category(character)
+        if character.isprintable() and not category.startswith("C"):
+            part = character
+        elif character in {"\n", "\r", "\t"}:
+            part = " "
+        else:
+            part = f"\\u{ord(character):04x}"
+        remaining = MAX_DIAGNOSTIC_CHARS - length
+        sanitized.append(part[:remaining])
+        length += min(len(part), remaining)
+        if length >= MAX_DIAGNOSTIC_CHARS:
+            break
+    return "".join(sanitized)
 
 
 def _one_of(value: Any, allowed: tuple[str, ...] | set[str], name: str) -> str:
@@ -830,8 +865,11 @@ class _EventProcessor:
         output_kind = _one_of(data["output_kind"], {"real", "generated"}, "output_kind")
         frame_id = _identifier(data["output_frame_id"], "output_frame_id")
         queue_depth = _integer(data["queue_depth"], "queue_depth")
-        self.summary["maximum_queue_depth"] = max(
-            self.summary["maximum_queue_depth"], queue_depth
+        current_maximum = self.summary["maximum_queue_depth"]
+        self.summary["maximum_queue_depth"] = (
+            queue_depth
+            if current_maximum is None
+            else max(current_maximum, queue_depth)
         )
         if output_kind == "real":
             frame = ctx.real.get(frame_id)
@@ -1253,7 +1291,7 @@ def evaluate_trace(records: list[dict[str, Any]]) -> dict[str, Any]:
         "admitted_generated_frame_count": 0,
         "skipped_generated_frame_count": 0,
         "late_generated_present_call_count": 0,
-        "maximum_queue_depth": 0,
+        "maximum_queue_depth": None,
         "acquire_results": {result: 0 for result in _RESULTS},
         "present_results": {result: 0 for result in _RESULTS},
         "expected_feedback_count": 0,
@@ -1344,11 +1382,20 @@ def evaluate_trace(records: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _write_json(value: dict[str, Any], output: Path | None) -> None:
+def _write_json(
+    value: dict[str, Any],
+    output: Path | None,
+    *,
+    protected_input: Path | None = None,
+) -> None:
     payload = json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n"
     if output is None:
         sys.stdout.write(payload)
     else:
+        if protected_input is not None and _paths_refer_to_same_file(
+            protected_input, output
+        ):
+            raise OSError("JSON output must not refer to the input trace")
         temporary: Path | None = None
         try:
             with tempfile.NamedTemporaryFile(
@@ -1363,6 +1410,10 @@ def _write_json(value: dict[str, Any], output: Path | None) -> None:
                 stream.write(payload)
                 stream.flush()
                 os.fsync(stream.fileno())
+            if protected_input is not None and _paths_refer_to_same_file(
+                protected_input, output
+            ):
+                raise OSError("JSON output must not refer to the input trace")
             os.replace(temporary, output)
             temporary = None
         finally:
@@ -1381,20 +1432,39 @@ def main(argv: list[str] | None = None) -> int:
         args = parser.parse_args(argv)
     except SystemExit as exc:
         return EXIT_OK if exc.code == 0 else EXIT_USAGE
+    if args.json_output is not None and _paths_refer_to_same_file(
+        args.trace, args.json_output
+    ):
+        print(
+            "latency trace gate usage error: JSON output must not refer to the input trace",
+            file=sys.stderr,
+        )
+        return EXIT_USAGE
     try:
         result = evaluate_trace(load_trace(args.trace))
     except (LatencyTraceError, OSError) as exc:
-        rejected = {"valid": False, "error": str(exc)}
+        diagnostic = _sanitize_diagnostic(exc)
+        rejected = {"valid": False, "error": diagnostic}
         try:
-            _write_json(rejected, args.json_output)
+            _write_json(
+                rejected,
+                args.json_output,
+                protected_input=args.trace,
+            )
         except OSError as write_exc:
-            print(f"latency trace gate output error: {write_exc}", file=sys.stderr)
-        print(f"latency trace rejected: {exc}", file=sys.stderr)
+            print(
+                f"latency trace gate output error: {_sanitize_diagnostic(write_exc)}",
+                file=sys.stderr,
+            )
+        print(f"latency trace rejected: {diagnostic}", file=sys.stderr)
         return EXIT_INVALID_TRACE
     try:
-        _write_json(result, args.json_output)
+        _write_json(result, args.json_output, protected_input=args.trace)
     except OSError as exc:
-        print(f"latency trace gate output error: {exc}", file=sys.stderr)
+        print(
+            f"latency trace gate output error: {_sanitize_diagnostic(exc)}",
+            file=sys.stderr,
+        )
         return EXIT_INVALID_TRACE
     return EXIT_OK
 

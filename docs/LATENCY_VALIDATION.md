@@ -68,7 +68,9 @@ File output is written to a temporary file in the destination directory,
 flushed with `fsync`, and atomically replaced. A result file is trusted only
 when it came from the current invocation **and** that invocation returned exit
 code `0`. If validation or replacement fails, an older result file may still
-exist at the requested path; its contents are stale and untrusted.
+exist at the requested path; its contents are stale and untrusted. The input
+trace and JSON output must not be the same file or filesystem alias; that
+invalid argument combination exits with code `64` before either file is changed.
 
 Exit codes are stable:
 
@@ -190,6 +192,9 @@ not prove queue admission, submission serialization, compositor acceptance,
 display timing, scanout, or that a real frame received priority over generated
 work. A return or presentation-feedback timestamp after the deadline does not by
 itself constitute a deadline miss when present-call entry was on time.
+Deadline values and `deadline_source` are producer-declared synthetic test-vector
+inputs: v1 checks their internal ordering and arithmetic but does not derive them
+from `refresh_interval_ns` or attest a real display-timing policy.
 
 ## Lifecycle and failure semantics
 
@@ -235,7 +240,7 @@ nearest-rank p50/p95/p99. The summary includes:
 - direct real-ready to presented-feedback and optional
   `input_observed_to_real_feedback_proxy_ns` from observed input to matching real
   presented feedback;
-- maximum declared queue depth;
+- maximum declared queue depth, or `null` when no present call declared one;
 - planned, admitted, and skipped generated **frame** counts, plus derived late
   generated present-call entries;
 - separate batch and context/epoch counts;
@@ -257,7 +262,8 @@ crashes, black frames, and generation failures.
 1. Land this contract and its independently hand-authored fixtures.
 2. In a separate PR, optionally add a synthetic Vulkan producer only to validate
    loader/event plumbing; do not attach numeric latency claims to it.
-3. Define schema v2 native semantics, including queue identity, the exact
+3. Define schema v2 native semantics in a separate typed evaluator rather than
+   adding native branches to the frozen v1 state machine, including queue identity, the exact
    instrumentation boundary, binding between feedback and output provenance,
    and an immutable effective-configuration hash.
 4. Instrument the exact native source with bounded diagnostics-off overhead and
