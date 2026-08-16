@@ -190,7 +190,11 @@
     "RECOVERY_BLOCKED": "復旧が停止しており、修復が必要です。",
     "RECOVERY_PENDING": "変更は完了しましたが、永続的なクリーンアップが保留中です。",
     "RECOVERY_INVALID_CONFIG": "保存された設定が無効です。修復してください。",
-    "RECOVERY_WARNING_TITLE": "状態復旧の警告"
+    "RECOVERY_WARNING_TITLE": "状態復旧の警告",
+    "RECOVERY_RETRY": "状態の復旧を再試行",
+    "RECOVERY_RETRYING": "状態の復旧を再試行しています...",
+    "RECOVERY_REFRESH_STATUS": "状態を更新",
+    "RECOVERY_REFRESHING_STATUS": "状態を更新しています..."
   },
   "ko": {
     "CONTENT_FPS_MULTIPLIER": "프레임 생성 모드",
@@ -383,7 +387,11 @@
     "RECOVERY_BLOCKED": "복구가 중단되어 수리가 필요합니다.",
     "RECOVERY_PENDING": "변경은 완료되었지만 영구 정리 작업이 남아 있습니다.",
     "RECOVERY_INVALID_CONFIG": "저장된 설정이 올바르지 않아 수리가 필요합니다.",
-    "RECOVERY_WARNING_TITLE": "상태 복구 경고"
+    "RECOVERY_WARNING_TITLE": "상태 복구 경고",
+    "RECOVERY_RETRY": "상태 복구 다시 시도",
+    "RECOVERY_RETRYING": "상태 복구를 다시 시도하는 중...",
+    "RECOVERY_REFRESH_STATUS": "상태 새로 고침",
+    "RECOVERY_REFRESHING_STATUS": "상태를 새로 고치는 중..."
   },
   "language_metadata": {
     "ko": {
@@ -604,6 +612,10 @@
     "RECOVERY_BLOCKED": "Recovery is blocked and requires repair.",
     "RECOVERY_PENDING": "The change completed; durable cleanup is pending.",
     "RECOVERY_INVALID_CONFIG": "Saved configuration is invalid and must be repaired.",
-    "RECOVERY_WARNING_TITLE": "State recovery warning"
+    "RECOVERY_WARNING_TITLE": "State recovery warning",
+    "RECOVERY_RETRY": "Retry state recovery",
+    "RECOVERY_RETRYING": "Retrying state recovery...",
+    "RECOVERY_REFRESH_STATUS": "Refresh status",
+    "RECOVERY_REFRESHING_STATUS": "Refreshing status..."
   }
 }

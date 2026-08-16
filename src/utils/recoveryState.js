@@ -30,9 +30,11 @@ export function mapRecoveryState(response = {}) {
   const hasRecoveryMetadata = RECOVERY_FIELDS.some((field) =>
     Object.prototype.hasOwnProperty.call(response, field),
   );
+  const hasLegacyFailure = response.success === false
+    || (typeof response.error === "string" && response.error.length > 0);
   const available = hasExplicitAvailability
     ? response.status_available
-    : !hasRecoveryMetadata;
+    : !hasRecoveryMetadata && !hasLegacyFailure;
 
   let state = "available";
   if (response.error_code === "invalid_persisted_state") {
@@ -67,4 +69,38 @@ export function mapRecoveryState(response = {}) {
     recoveryPending: response.recovery_pending === true,
     warning: response.warning,
   };
+}
+
+function summarizeRecoveryStates(states) {
+  return {
+    mutationsDisabled: states.some((state) => state.mutationsDisabled),
+    warningVisible: states.some((state) => state.warningVisible),
+    warning: states.find((state) => state.warning)?.warning,
+    recoveryPending: states.some((state) => state.state === "cleanup-pending"),
+    refreshable: states.some((state) =>
+      state.retryable && state.recoveryAction === "refresh"
+    ),
+  };
+}
+
+/** Exclude component-local recovery state until that component is mounted. */
+export function summarizeContentRecoveryStates(
+  installationState,
+  configState,
+  profileState,
+  profileComponentState,
+  profileComponentMounted,
+) {
+  const activeStates = [installationState, configState, profileState];
+  if (profileComponentMounted) activeStates.push(profileComponentState);
+  return summarizeRecoveryStates(activeStates);
+}
+
+/** Refresh every active status source without replaying a mutation. */
+export async function refreshRecoveryStates(...refreshers) {
+  await Promise.all(
+    refreshers
+      .filter((refresh) => typeof refresh === "function")
+      .map((refresh) => refresh()),
+  );
 }

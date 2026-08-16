@@ -49,6 +49,20 @@ class _IndexedFailureInjector:
             raise OSError(f"injected {name}[{index}] failure")
 
 
+class _SimulatedCrash(BaseException):
+    pass
+
+
+class _CrashInjector:
+    def __init__(self, checkpoint: str):
+        self.checkpoint = checkpoint
+
+    def hit(self, name: str, index: int | None = None) -> None:
+        del index
+        if name == self.checkpoint:
+            raise _SimulatedCrash(f"injected crash at {name}")
+
+
 class _LifecycleObserver:
     """Record externally visible lifecycle state after each durable apply step."""
 
@@ -535,6 +549,76 @@ class InstallationTransactionTests(unittest.TestCase):
         for path in owned:
             with self.subTest(path=path):
                 self.assertFalse(path.exists())
+
+    def test_decky_cleanup_recovers_precommit_journal_then_removes_owned_files(self):
+        owned = self._seed_installed_state()
+        crashing = state_transaction.MutationCoordinator(
+            self.layout, _CrashInjector("before_committed_journal_replace")
+        )
+        with self.assertRaises(_SimulatedCrash):
+            crashing.commit(
+                "configuration",
+                replacements={self.layout.config_file: (b"changed config\n", 0o640)},
+                removals=(),
+            )
+
+        result = self.service.cleanup_on_uninstall()
+
+        self.assertTrue(result["success"], result)
+        self.assertFalse(self.layout.journal_file.exists())
+        for path in owned:
+            with self.subTest(path=path):
+                self.assertFalse(path.exists())
+
+    def test_decky_cleanup_finishes_committed_journal_then_removes_owned_files(self):
+        owned = self._seed_installed_state()
+        crashing = state_transaction.MutationCoordinator(
+            self.layout, _CrashInjector("after_committed_journal_replace")
+        )
+        with self.assertRaises(_SimulatedCrash):
+            crashing.commit(
+                "configuration",
+                replacements={self.layout.config_file: (b"committed config\n", 0o640)},
+                removals=(),
+            )
+
+        result = self.service.cleanup_on_uninstall()
+
+        self.assertTrue(result["success"], result)
+        self.assertEqual(self.layout.config_file.read_bytes(), b"committed config\n")
+        self.assertFalse(self.layout.journal_file.exists())
+        for path in owned:
+            with self.subTest(path=path):
+                self.assertFalse(path.exists())
+
+    def test_decky_cleanup_reports_busy_without_claiming_cleanup(self):
+        self._seed_installed_state()
+        self.layout.lock_file.parent.mkdir(parents=True, exist_ok=True)
+        self.layout.lock_file.write_bytes(b"")
+        import fcntl
+
+        descriptor = self.layout.lock_file.open("rb")
+        self.addCleanup(descriptor.close)
+        fcntl.flock(descriptor.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+        result = self.service.cleanup_on_uninstall()
+
+        self.assertFalse(result["success"], result)
+        self.assertEqual(result["error_code"], "mutation_busy")
+
+    def test_decky_cleanup_reports_blocked_and_preserves_evidence(self):
+        owned = self._seed_installed_state()
+        self.layout.journal_file.parent.mkdir(parents=True, exist_ok=True)
+        self.layout.journal_file.write_bytes(b"invalid journal")
+
+        result = self.service.cleanup_on_uninstall()
+
+        self.assertFalse(result["success"], result)
+        self.assertEqual(result["error_code"], "recovery_blocked")
+        self.assertTrue(self.layout.journal_file.exists())
+        for path in owned:
+            with self.subTest(path=path):
+                self.assertTrue(path.exists())
 
 
 if __name__ == "__main__":

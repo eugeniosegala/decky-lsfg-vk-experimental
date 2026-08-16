@@ -121,6 +121,18 @@ class AtomicFileTests(unittest.TestCase):
         with coordinator.locked("configuration"):
             pass
 
+    def test_journal_identity_accepts_complete_imode_domain(self):
+        from py_modules.lsfg_vk.state_transaction import FileIdentity
+
+        identity = FileIdentity.from_json({
+            "kind": "regular",
+            "sha256": "a" * 64,
+            "mode": 0o7777,
+        })
+
+        self.assertEqual(identity.mode, 0o7777)
+        self.assertEqual(identity.to_json()["mode"], 0o7777)
+
     def test_direct_write_failure_does_not_destroy_existing_file(self):
         target = self.paths.toml
         target.parent.mkdir(parents=True)
@@ -286,6 +298,19 @@ class AtomicFileTests(unittest.TestCase):
         self.assertEqual(snapshot_entry(self.paths.toml).content, b"new toml\n")
         self.assertEqual(snapshot_entry(self.paths.toml).mode, 0o600)
 
+    def test_successful_replacement_preserves_special_permission_bits(self):
+        self.paths.write_triplet()
+        coordinator = self._coordinator()
+
+        result = coordinator.commit(
+            "configuration",
+            replacements={self.paths.toml: (b"special mode\n", 0o1640)},
+            removals=(),
+        )
+
+        self.assertTrue(result.committed)
+        self.assertEqual(snapshot_entry(self.paths.toml).mode, 0o1640)
+
     def test_commit_rejects_target_outside_operation_allowlist(self):
         _, blocked_error, coordinator_type, layout_type = _transaction_api()
         outside = self.paths.home / "not-managed"
@@ -327,6 +352,28 @@ class AtomicFileTests(unittest.TestCase):
         self.assertEqual(
             {path: snapshot_entry(path) for path in self.paths.managed_paths()}, before
         )
+        self.assertFalse(self.paths.journal.exists())
+
+    def test_precommit_crash_recovers_old_special_permission_bits(self):
+        self.paths.write_triplet()
+        self.paths.toml.chmod(0o1640)
+        crashing = self._coordinator(
+            CheckpointInjector(
+                "before_committed_journal_replace", SimulatedCrash("power loss")
+            )
+        )
+
+        with self.assertRaises(SimulatedCrash):
+            crashing.commit(
+                "configuration",
+                replacements={self.paths.toml: (b"new toml\n", 0o1640)},
+                removals=(),
+            )
+
+        recovered = self._coordinator().recover()
+
+        self.assertTrue(recovered.refresh_required)
+        self.assertEqual(snapshot_entry(self.paths.toml).mode, 0o1640)
         self.assertFalse(self.paths.journal.exists())
 
     def test_update_duplicate_chain_recovers_before_first_apply_and_is_idempotent(self):

@@ -59,6 +59,10 @@ class Plugin:
         """
         return self.installation_service.uninstall()
 
+    async def recover_state(self) -> Dict[str, Any]:
+        """Recover a pending durable state transaction, then require refresh."""
+        return self.installation_service.recover_state()
+
     async def check_lossless_scaling_dll(self) -> Dict[str, Any]:
         """Check if Lossless Scaling DLL is available at the expected paths
         
@@ -467,13 +471,20 @@ class Plugin:
         decky.logger.info("decky-lsfg-vk-experimental plugin being uninstalled")
         
         # Clean up lsfg-vk files when the plugin is uninstalled
-        self.installation_service.cleanup_on_uninstall()
+        result = self.installation_service.cleanup_on_uninstall()
+        if not result.get("success"):
+            decky.logger.error(
+                "decky-lsfg-vk-experimental plugin uninstall cleanup failed: %s",
+                result.get("error"),
+            )
+            return result
         
         # Flatpak runtime extensions are shared by every lsfg-vk installation.
         # Never remove them automatically: another plugin may still depend on one.
         decky.logger.info("Leaving shared Flatpak runtime extensions installed")
         
         decky.logger.info("decky-lsfg-vk-experimental plugin uninstall cleanup completed")
+        return result
 
     async def _migration(self):
         """

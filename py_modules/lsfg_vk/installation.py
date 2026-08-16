@@ -153,15 +153,17 @@ class InstallationService(BaseService):
                 )
 
     def _lifecycle_error(self, response_type, error, error_code, **kwargs):
+        kwargs.setdefault("retryable", error_code == "mutation_busy")
+        kwargs.setdefault("recovery_pending", False)
+        kwargs.setdefault(
+            "recovery_action", self._recovery_action_for_error(error_code)
+        )
+        kwargs.setdefault("warning", None)
         return self._error_response(
             response_type,
             str(error),
             message="",
             error_code=error_code,
-            retryable=error_code == "mutation_busy",
-            recovery_pending=False,
-            recovery_action=self._recovery_action_for_error(error_code),
-            warning=None,
             **kwargs,
         )
 
@@ -913,6 +915,12 @@ class InstallationService(BaseService):
     
     def uninstall(self) -> UninstallationResponse:
         """Deactivate and remove plugin-owned engine files transactionally."""
+        return self._uninstall_transactionally(continue_after_recovery=False)
+
+    def _uninstall_transactionally(
+        self, *, continue_after_recovery: bool
+    ) -> UninstallationResponse:
+        """Recover under the uninstall lock, then optionally continue cleanup."""
         from . import state_transaction
 
         layout = state_transaction.PathLayout.from_home(self.user_home)
@@ -920,7 +928,7 @@ class InstallationService(BaseService):
         try:
             with coordinator.locked("uninstall"):
                 recovery = coordinator.recover()
-                if recovery.refresh_required:
+                if recovery.refresh_required and not continue_after_recovery:
                     return self._lifecycle_error(
                         UninstallationResponse,
                         "Recovered interrupted state; refresh before retrying",
@@ -992,16 +1000,62 @@ class InstallationService(BaseService):
                 UninstallationResponse, error, "durability_failure", removed_files=None
             )
 
-    def cleanup_on_uninstall(self) -> None:
+    def cleanup_on_uninstall(self) -> UninstallationResponse:
         """Clean up lsfg-vk files when the plugin is uninstalled
         
         Note: The config file (conf.toml) is preserved to maintain user's custom profiles
         """
-        result = self.uninstall()
+        # Decky is removing the plugin itself, so there may be no later UI retry.
+        # Recover a known journal and continue the uninstall while retaining the
+        # same outer uninstall lock. Interactive uninstall intentionally keeps
+        # its refresh barrier instead.
+        result = self._uninstall_transactionally(continue_after_recovery=True)
         if result.get("success"):
             self.log.info(result.get("message", "Transactional uninstall completed"))
         else:
             self.log.error("Transactional uninstall cleanup failed: %s", result.get("error"))
+        return result
+
+    def recover_state(self) -> Dict[str, Any]:
+        """Explicitly recover a pending transaction for the frontend barrier."""
+        from . import state_transaction
+
+        layout = state_transaction.PathLayout.from_home(self.user_home)
+        coordinator = state_transaction.MutationCoordinator(layout)
+        try:
+            recovery = coordinator.recover()
+            return self._success_response(
+                dict,
+                "State recovery completed",
+                status_available=True,
+                recovered=recovery.refresh_required,
+                refresh_required=True,
+                retryable=False,
+                recovery_pending=False,
+                recovery_action="refresh",
+                warning=None,
+            )
+        except state_transaction.MutationBusyError as error:
+            return self._lifecycle_error(
+                dict, error, "mutation_busy", status_available=False
+            )
+        except state_transaction.MutationBlockedError as error:
+            return self._lifecycle_error(
+                dict,
+                error,
+                "recovery_blocked",
+                status_available=False,
+                recovery_pending=True,
+            )
+        except OSError as error:
+            return self._lifecycle_error(
+                dict,
+                error,
+                "durability_failure",
+                status_available=False,
+                recovery_pending=True,
+                recovery_action="repair_required",
+            )
 
     def _merge_config_with_defaults(self, existing_profile_data, dll_service):
         """Merge existing user config with current schema defaults

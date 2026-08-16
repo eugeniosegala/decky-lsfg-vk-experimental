@@ -223,7 +223,26 @@ class ConfigurationService(BaseService):
     def _load_effective_state_strict(
             self) -> Tuple[ProfileData, Dict[str, Dict[str, Any]]]:
         """Load every persisted mutation input strictly, without side effects."""
-        return self._get_profile_data(), self._read_wrapper_profile_settings_strict()
+        profile_data = self._get_profile_data()
+        profile_settings = self._read_wrapper_profile_settings_strict()
+        self._validate_wrapper_profile_set(profile_data, profile_settings)
+        return profile_data, profile_settings
+
+    def _validate_wrapper_profile_set(
+            self,
+            profile_data: ProfileData,
+            profile_settings: Dict[str, Dict[str, Any]],
+    ) -> None:
+        """Require an existing wrapper document to cover exactly the TOML profiles."""
+        from .state_transaction import regular_file_exists_nofollow
+
+        if regular_file_exists_nofollow(self.wrapper_profile_settings_path):
+            configured_profiles = set(profile_data["profiles"])
+            wrapper_profiles = set(profile_settings)
+            if wrapper_profiles != configured_profiles:
+                raise ValueError(
+                    "wrapper settings profile set does not match configuration profiles"
+                )
 
     def _render_effective_state(
             self,
@@ -380,9 +399,9 @@ class ConfigurationService(BaseService):
     def migrate_wrapper_profile_settings_if_needed(self) -> bool:
         """Preserve old current-wrapper compatibility settings on first upgrade.
 
-        Older releases stored these values only in the generated launcher. That
-        launcher represented the selected profile, so it can be imported without
-        guessing settings for any other profile.
+        Older releases stored these values only in the generated launcher. Import
+        them for the selected profile and give every other existing profile the
+        documented wrapper defaults so the migrated snapshot is complete.
         """
         try:
             self._read_managed_text(self.wrapper_profile_settings_path)
@@ -400,9 +419,14 @@ class ConfigurationService(BaseService):
                 current_script
             )
             profile_data = self._get_profile_data()
-            self._write_wrapper_profile_settings({
-                profile_data["current_profile"]: self._normalize_wrapper_settings(script_values)
-            })
+            profile_settings = {
+                profile_name: self._wrapper_settings_defaults()
+                for profile_name in profile_data["profiles"]
+            }
+            profile_settings[profile_data["current_profile"]] = (
+                self._normalize_wrapper_settings(script_values)
+            )
+            self._write_wrapper_profile_settings(profile_settings)
             self.log.info(
                 "Migrated wrapper-only settings into profile '%s'",
                 profile_data["current_profile"],
@@ -453,8 +477,7 @@ class ConfigurationService(BaseService):
         layout = state_transaction.PathLayout.from_home(self.user_home)
         try:
             with state_transaction.read_only_guard(layout):
-                profile_data = self._get_profile_data()
-                profile_settings = self._read_wrapper_profile_settings_strict()
+                profile_data, profile_settings = self._load_effective_state_strict()
                 config = self._config_for_profile(
                     profile_data,
                     profile_data["current_profile"],
@@ -507,6 +530,7 @@ class ConfigurationService(BaseService):
         return self._error_response(
             response_type,
             warning,
+            status_available=False,
             error_code=error_code,
             retryable=retryable,
             recovery_pending=pending,
@@ -862,7 +886,7 @@ class ConfigurationService(BaseService):
         layout = state_transaction.PathLayout.from_home(self.user_home)
         try:
             with state_transaction.read_only_guard(layout):
-                profile_data = self._get_profile_data()
+                profile_data, _profile_settings = self._load_effective_state_strict()
             
             return self._success_response(ProfilesResponse,
                                         "Profiles retrieved successfully",
@@ -886,6 +910,14 @@ class ConfigurationService(BaseService):
                 ProfilesResponse, "recovery_blocked", str(e), retryable=False,
                 pending=True, action="repair_required", profiles=None,
                 current_profile=None,
+            )
+        except (ValueError, TypeError, json.JSONDecodeError) as e:
+            error_msg = f"Invalid persisted profile state: {str(e)}"
+            self.log.error(error_msg)
+            return self._unavailable_read(
+                ProfilesResponse, "invalid_persisted_state", error_msg,
+                retryable=False, pending=False, action="repair_required",
+                profiles=None, current_profile=None,
             )
         except Exception as e:
             error_msg = f"Error getting profiles: {str(e)}"
