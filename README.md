@@ -124,9 +124,12 @@ the clean path above if Decky reports an archive error or fails to reload the pl
 
 - [Configuration guide](docs/CONFIGURATION.md): fixed and Adaptive modes, quality/performance settings, profiles, and
   compatibility options.
+- [Architecture](docs/ARCHITECTURE.md): runtime boundaries, configuration generation, installation, and packaging.
 - [Troubleshooting](docs/TROUBLESHOOTING.md): Gamescope recovery behaviour, HDR compatibility, and diagnostic logs.
 - [Local packaging and publishing](docs/PACKAGING.md): build a ZIP for a Steam machine or publish a prerelease.
 - [Upstream engine record](UPSTREAM_LSFGVK.md): pinned source, checksums, and carried changes.
+- [Contributing](CONTRIBUTING.md): toolchain, local quality gate, generated files, and test boundaries.
+- [Target-hardware validation](docs/HARDWARE_VALIDATION.md): SteamOS/Bazzite frame-pacing, visual, latency-proxy, power, and stability evidence.
 
 ## Featured In
 

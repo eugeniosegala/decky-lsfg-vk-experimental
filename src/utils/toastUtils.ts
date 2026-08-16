@@ -5,6 +5,7 @@
 
 import { toaster } from "@decky/api";
 import t from "../i18n/i18n";
+import type { RecoveryMetadata } from "../api/lsfgApi";
 
 export interface ToastOptions {
   title: string;
@@ -29,6 +30,20 @@ export function showErrorToast(title: string, body: string): void {
     title,
     body
   });
+}
+
+export function showRecoveryWarningToast(result: RecoveryMetadata): void {
+  const messages: Record<string, string> = {
+    mutation_busy: t("RECOVERY_BUSY", "Another change is in progress. Refresh shortly."),
+    refresh_required: t("RECOVERY_REFRESH", "Recovered state changed. Refresh before trying again."),
+    recovery_blocked: t("RECOVERY_BLOCKED", "Recovery is blocked and requires repair."),
+    recovery_pending: t("RECOVERY_PENDING", "The change completed; durable cleanup is pending."),
+    invalid_persisted_state: t("RECOVERY_INVALID_CONFIG", "Saved configuration is invalid and must be repaired."),
+  };
+  showErrorToast(
+    t("RECOVERY_WARNING_TITLE", "State recovery warning"),
+    result.warning || messages[result.error_code || ""] || t("STATUS_RECOVERY_UNAVAILABLE", "State recovery is pending or unavailable. Changes are disabled until status refreshes."),
+  );
 }
 
 /**

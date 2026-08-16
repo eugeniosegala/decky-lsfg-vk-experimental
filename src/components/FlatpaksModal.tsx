@@ -1,4 +1,4 @@
-import { FC, useState, useEffect, CSSProperties } from 'react';
+import { FC, useState, useEffect, useRef, CSSProperties } from 'react';
 import {
   ModalRoot,
   DialogBody,
@@ -24,21 +24,75 @@ import {
   removeFlatpakAppOverride,
   FlatpakExtensionStatus,
   FlatpakApp,
-  FlatpakAppInfo
+  FlatpakAppInfo,
+  FlatpakOverrideOperation,
+  FlatpakOverrideResult
 } from '../api/lsfgApi';
 import t from '../i18n/i18n';
 import { showErrorToast, showSuccessToast } from '../utils/toastUtils';
+import {
+  boundedFlatpakDetail,
+  createFlatpakMutationQueue,
+  describeFlatpakAppActions,
+  mergeFlatpakApps,
+  presentFlatpakMutationExecution,
+  FlatpakDisplayApp,
+} from '../utils/flatpakMutation.js';
 
 interface FlatpaksModalProps {
   closeModal?: () => void;
 }
 
+type FlatpakDisplayInfo = Omit<FlatpakAppInfo, 'apps'> & {
+  apps: FlatpakDisplayApp<FlatpakApp>[];
+};
+
+const flatpakPresentationText = (messageKey: string): string => {
+  switch (messageKey) {
+    case 'FLATPAK_APPLICATION_UPDATED':
+      return t('FLATPAK_APPLICATION_UPDATED', 'Flatpak application updated');
+    case 'FLATPAK_APPLICATION_VERIFIED_WITH_WARNING':
+      return t('FLATPAK_APPLICATION_VERIFIED_WITH_WARNING', 'Flatpak state verified with a warning');
+    case 'FLATPAK_STATUS_PARTIAL':
+      return t('FLATPAK_STATUS_PARTIAL', 'Partial');
+    case 'FLATPAK_STATUS_UNAVAILABLE':
+      return t('FLATPAK_STATUS_UNAVAILABLE', 'Status unavailable');
+    case 'FLATPAK_PRECONDITION_FAILED':
+      return t('FLATPAK_PRECONDITION_FAILED', 'Required setup is not ready');
+    default:
+      return t('FLATPAK_APPLICATION_ACTION_FAILED', 'Could not update');
+  }
+};
+
 export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
   const [extensionStatus, setExtensionStatus] = useState<FlatpakExtensionStatus | null>(null);
-  const [flatpakApps, setFlatpakApps] = useState<FlatpakAppInfo | null>(null);
+  const [flatpakApps, setFlatpakApps] = useState<FlatpakDisplayInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [operationInProgress, setOperationInProgress] = useState<string | null>(null);
   const [appErrors, setAppErrors] = useState<Record<string, string>>({});
+  const [appWarnings, setAppWarnings] = useState<Record<string, string>>({});
+  const [appMutationsDisabled, setAppMutationsDisabled] = useState(true);
+  const [appListError, setAppListError] = useState<string | null>(null);
+  const flatpakAppsRef = useRef<FlatpakDisplayInfo | null>(null);
+  const mutationActiveRef = useRef(false);
+  const appMutationQueue = useRef(createFlatpakMutationQueue());
+
+  const applyFlatpakAppsResult = (result: FlatpakAppInfo) => {
+    const previousApps = flatpakAppsRef.current?.apps ?? [];
+    const merged = mergeFlatpakApps(previousApps, result);
+    setAppMutationsDisabled(merged.mutationsDisabled);
+    setAppListError(merged.error ?? null);
+
+    const next = result.success
+      ? { ...result, apps: merged.apps }
+      : flatpakAppsRef.current ?? { ...result, apps: merged.apps };
+    if (result.success) {
+      setAppErrors({});
+      setAppWarnings({});
+    }
+    flatpakAppsRef.current = next;
+    setFlatpakApps(next);
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -49,9 +103,11 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
       ]);
 
       setExtensionStatus(statusResult);
-      setFlatpakApps(appsResult);
+      applyFlatpakAppsResult(appsResult);
     } catch (error) {
       console.error('Error loading Flatpak data:', error);
+      setAppMutationsDisabled(true);
+      setAppListError(boundedFlatpakDetail(error) || t('FLATPAK_ERROR_APPS', 'Failed to load Flatpak applications'));
     } finally {
       setLoading(false);
     }
@@ -62,6 +118,8 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
   }, []);
 
   const handleExtensionOperation = async (operation: 'install' | 'uninstall', version: string) => {
+    if (mutationActiveRef.current) return;
+    mutationActiveRef.current = true;
     const operationId = `${operation}-${version}`;
     setOperationInProgress(operationId);
 
@@ -85,12 +143,17 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
       console.error(`Error ${operation}ing extension:`, error);
       showErrorToast(t('FLATPAK_EXTENSION_FAILED', 'Flatpak extension failed'), String(error));
     } finally {
+      mutationActiveRef.current = false;
       setOperationInProgress(null);
     }
   };
 
-  const handleAppOverrideToggle = async (app: FlatpakApp) => {
-    const hasOverrides = app.has_filesystem_override && app.has_wrapper_override;
+  const handleAppOverrideOperation = async (
+    app: FlatpakDisplayApp<FlatpakApp>,
+    operation: FlatpakOverrideOperation,
+  ) => {
+    if (mutationActiveRef.current || appMutationsDisabled || app.status_available !== true) return;
+    mutationActiveRef.current = true;
     const operationId = `app-${app.app_id}`;
     setOperationInProgress(operationId);
     setAppErrors((current) => {
@@ -98,27 +161,68 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
       delete next[app.app_id];
       return next;
     });
+    setAppWarnings((current) => {
+      const next = { ...current };
+      delete next[app.app_id];
+      return next;
+    });
 
     try {
-      const result = hasOverrides 
-        ? await removeFlatpakAppOverride(app.app_id)
-        : await setFlatpakAppOverride(app.app_id);
+      const execution = await appMutationQueue.current.run<FlatpakOverrideResult, FlatpakAppInfo, FlatpakApp>({
+        operation,
+        mutate: () => operation === 'set'
+          ? setFlatpakAppOverride(app.app_id)
+          : removeFlatpakAppOverride(app.app_id),
+        refresh: getFlatpakApps,
+        previousApps: flatpakAppsRef.current?.apps ?? [],
+      });
 
-      if (result.success) {
-        // Reload apps data after operation
-        const newApps = await getFlatpakApps();
-        setFlatpakApps(newApps);
-        showSuccessToast(t('FLATPAK_APPLICATION_UPDATED', 'Flatpak application updated'), result.message || `${app.app_name || app.app_id} ${t('FLATPAK_UPDATED', 'updated')}`);
+      if (execution.refresh) {
+        applyFlatpakAppsResult(execution.refresh);
       } else {
+        setAppMutationsDisabled(true);
+        setAppListError(
+          boundedFlatpakDetail(execution.refreshError)
+          || t('FLATPAK_ERROR_APPS', 'Failed to load Flatpak applications'),
+        );
+      }
+
+      const presentation = presentFlatpakMutationExecution(execution, app.app_id);
+
+      if (presentation.kind === 'success') {
+        if (execution.mutation?.warning && presentation.detail) {
+          setAppWarnings((current) => ({
+            ...current,
+            [app.app_id]: presentation.detail,
+          }));
+        }
+        showSuccessToast(
+          flatpakPresentationText(presentation.messageKey),
+          presentation.detail || `${app.app_name || app.app_id} ${t('FLATPAK_UPDATED', 'updated')}`,
+        );
+      } else {
+        const summary = flatpakPresentationText(presentation.messageKey);
+        const errorMessage = presentation.detail ? `${summary}: ${presentation.detail}` : summary;
         setAppErrors((current) => ({
           ...current,
-          [app.app_id]: result.error || result.message || `${t('FLATPAK_APPLICATION_ACTION_FAILED', 'Could not update')} ${app.app_name || app.app_id}`
+          [app.app_id]: errorMessage,
         }));
+        showErrorToast(summary, presentation.detail || app.app_name || app.app_id);
       }
     } catch (error) {
-      console.error('Error toggling app override:', error);
-      setAppErrors((current) => ({ ...current, [app.app_id]: String(error) }));
+      console.error('Error changing app override:', error);
+      const detail = boundedFlatpakDetail(error);
+      setAppErrors((current) => ({
+        ...current,
+        [app.app_id]: detail || t('FLATPAK_APPLICATION_ACTION_FAILED', 'Could not update'),
+      }));
+      showErrorToast(
+        t('FLATPAK_APPLICATION_ACTION_FAILED', 'Could not update'),
+        detail || app.app_name || app.app_id,
+      );
+      setAppMutationsDisabled(true);
     } finally {
+      mutationActiveRef.current = false;
       setOperationInProgress(null);
     }
   };
@@ -228,7 +332,7 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
                         <ButtonItem
                           layout="below"
                           onClick={() => handleRuntimePrimaryAction(runtime.version, runtime.installed)}
-                          disabled={isBusy}
+                          disabled={operationInProgress !== null}
                         >
                           {isBusy ? <Spinner /> : runtime.installed ? <><FaTrash /> {t('FLATPAK_UNINSTALL_BTN', 'Uninstall')}</> : <><FaDownload /> {t('FLATPAK_INSTALL_BTN', 'Install')}</>}
                         </ButtonItem>
@@ -238,7 +342,7 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
                           <ButtonItem
                             layout="below"
                             onClick={() => handleExtensionOperation('install', runtime.version)}
-                            disabled={isBusy}
+                            disabled={operationInProgress !== null}
                           >
                             {operationInProgress === `install-${runtime.version}` ? <Spinner /> : <><FaDownload /> {t('FLATPAK_UPDATE_BTN', 'Update')}</>}
                           </ButtonItem>
@@ -269,24 +373,70 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
               />
             </PanelSectionRow>
 
+            {appListError && (
+              <PanelSectionRow>
+                <Field
+                  label={t('FLATPAK_STATUS_UNAVAILABLE', 'Status unavailable')}
+                  description={appListError}
+                  icon={<FaTimes style={{ color: '#f4a261' }} />}
+                >
+                  <ButtonItem
+                    layout="below"
+                    onClick={loadData}
+                    disabled={operationInProgress !== null}
+                  >
+                    {t('FLATPAK_REFRESH_STATUS', 'Refresh status')}
+                  </ButtonItem>
+                </Field>
+              </PanelSectionRow>
+            )}
+
             {flatpakApps && flatpakApps.success ? (
               flatpakApps.apps.length > 0 ? (
                 flatpakApps.apps.map((app) => {
-                  const hasOverrides = app.has_filesystem_override && app.has_wrapper_override;
-                  const partialOverrides = app.has_filesystem_override || app.has_wrapper_override || app.has_env_override;
+                  const actions = describeFlatpakAppActions(app);
+                  const hasOverrides = actions.status === 'prepared';
 
                   let statusColor = 'red';
-                  let statusText = t('FLATPAK_STATUS_NO_OVERRIDES', 'No overrides');
+                  let statusText = t('FLATPAK_STATUS_NO_OVERRIDES', 'No LSFG access');
 
-                  if (hasOverrides) {
+                  if (actions.status === 'unavailable') {
+                    statusColor = '#f4a261';
+                    statusText = t('FLATPAK_STATUS_UNAVAILABLE', 'Status unavailable');
+                  } else if (hasOverrides) {
                     statusColor = 'green';
                     statusText = t('FLATPAK_STATUS_CONFIGURED', 'Prepared');
-                  } else if (partialOverrides) {
+                  } else if (actions.status === 'partial') {
                     statusColor = 'orange';
                     statusText = t('FLATPAK_STATUS_PARTIAL', 'Partial');
+                  } else if (actions.status === 'pending') {
+                    statusColor = '#f4a261';
+                    statusText = t('FLATPAK_STATUS_RECONCILIATION_PENDING', 'Reconciliation required');
+                  } else if (actions.status === 'blocked') {
+                    statusColor = '#f44336';
+                    statusText = t('FLATPAK_STATUS_MANUAL_REPAIR', 'Manual repair required');
+                  } else if (actions.status === 'unknown') {
+                    statusColor = 'orange';
+                    statusText = t(
+                      'FLATPAK_STATUS_OWNERSHIP_UNKNOWN',
+                      'Existing access - ownership unknown',
+                    );
+                  } else if (actions.status === 'retained') {
+                    statusColor = '#f4a261';
+                    statusText = t(
+                      'FLATPAK_STATUS_PREEXISTING_RETAINED',
+                      'Pre-existing Flatpak access retained',
+                    );
                   }
 
                   const appError = appErrors[app.app_id];
+                  const appWarning = appWarnings[app.app_id];
+                  const statusReason = app.status_available === false
+                    ? boundedFlatpakDetail(app.status_error)
+                    : '';
+                  const statusDescription = statusReason
+                    ? `${statusText}: ${statusReason}`
+                    : statusText;
 
                   return (
                     <PanelSectionRow key={app.app_id}>
@@ -296,9 +446,9 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
                           ? t(
                             'FLATPAK_HEROIC_APP_DESC',
                             '{app_id} - {status}. Per game: Settings > Advanced > enter this in Heroic\'s first Wrapper field: {wrapper_path}; leave Arguments empty.',
-                            { app_id: app.app_id, status: statusText, wrapper_path: app.wrapper_path }
+                            { app_id: app.app_id, status: statusDescription, wrapper_path: app.wrapper_path }
                           )
-                          : `${app.app_id} - ${statusText}`}
+                          : `${app.app_id} - ${statusDescription}`}
                         icon={<FaCog style={{color: appError ? '#f44336' : statusColor}} />}
                       >
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px', maxWidth: '100%' }}>
@@ -316,11 +466,63 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
                               {appError}
                             </div>
                           )}
-                          <Toggle
-                            value={hasOverrides}
-                            onChange={() => handleAppOverrideToggle(app)}
-                            disabled={operationInProgress === `app-${app.app_id}`}
-                          />
+                          {appWarning && (
+                            <div
+                              style={{
+                                color: '#f4a261',
+                                fontSize: '0.82em',
+                                lineHeight: '1.35',
+                                maxWidth: '260px',
+                                overflowWrap: 'anywhere',
+                                textAlign: 'left'
+                              }}
+                            >
+                              {appWarning}
+                            </div>
+                          )}
+                          {actions.toggle && (
+                            <Toggle
+                              value={hasOverrides}
+                              onChange={() => handleAppOverrideOperation(app, actions.toggle!)}
+                              disabled={operationInProgress !== null || appMutationsDisabled}
+                            />
+                          )}
+                          {actions.status === 'partial' && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '220px' }}>
+                              <ButtonItem
+                                layout="below"
+                                onClick={() => handleAppOverrideOperation(app, 'set')}
+                                disabled={operationInProgress !== null || appMutationsDisabled}
+                              >
+                                {t('FLATPAK_FINISH_PREPARING', 'Finish preparing')}
+                              </ButtonItem>
+                              <ButtonItem
+                                layout="below"
+                                onClick={() => handleAppOverrideOperation(app, 'remove')}
+                                disabled={operationInProgress !== null || appMutationsDisabled}
+                              >
+                                {t('FLATPAK_REMOVE_REMAINING', 'Remove remaining LSFG access')}
+                              </ButtonItem>
+                            </div>
+                          )}
+                          {actions.status === 'pending' && actions.explicit.length === 1 && (
+                            <ButtonItem
+                              layout="below"
+                              onClick={() => handleAppOverrideOperation(app, actions.explicit[0])}
+                              disabled={operationInProgress !== null || appMutationsDisabled}
+                            >
+                              {t('FLATPAK_RETRY_RECONCILIATION', 'Retry safe reconciliation')}
+                            </ButtonItem>
+                          )}
+                          {(actions.status === 'unavailable' || actions.status === 'blocked') && (
+                            <ButtonItem
+                              layout="below"
+                              onClick={loadData}
+                              disabled={operationInProgress !== null}
+                            >
+                              {t('FLATPAK_REFRESH_STATUS', 'Refresh status')}
+                            </ButtonItem>
+                          )}
                         </div>
                       </Field>
                     </PanelSectionRow>

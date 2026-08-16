@@ -2,14 +2,31 @@ import { callable } from "@decky/api";
 import { ConfigurationData } from "../config/configSchema";
 
 // Type definitions for API responses
-export interface InstallationResult {
+export interface RecoveryMetadata {
+  error_code?: "mutation_busy" | "refresh_required" | "recovery_blocked" |
+    "recovery_pending" | "invalid_persisted_state" | "durability_failure";
+  retryable?: boolean;
+  recovery_pending?: boolean;
+  warning?: string;
+  recovery_action?: "retry" | "refresh" | "wait_for_recovery" |
+    "repair_required" | "none";
+  status_available?: boolean;
+}
+
+export interface InstallationResult extends RecoveryMetadata {
   success: boolean;
   error?: string;
   message?: string;
   removed_files?: string[];
 }
 
-export interface InstallationStatus {
+export interface RecoveryResult extends RecoveryMetadata {
+  success: boolean;
+  message?: string;
+  error?: string;
+}
+
+export interface InstallationStatus extends RecoveryMetadata {
   installed: boolean;
   lib_exists: boolean;
   json_exists: boolean;
@@ -43,13 +60,13 @@ export interface DllStatsResult {
 // Use centralized configuration data type
 export type LsfgConfig = ConfigurationData;
 
-export interface ConfigResult {
+export interface ConfigResult extends RecoveryMetadata {
   success: boolean;
   config?: LsfgConfig;
   error?: string;
 }
 
-export interface ConfigUpdateResult {
+export interface ConfigUpdateResult extends RecoveryMetadata {
   success: boolean;
   message?: string;
   error?: string;
@@ -93,14 +110,48 @@ export interface FlatpakExtensionStatus {
   installed_25_08: boolean;
 }
 
-export interface FlatpakApp {
+export interface FlatpakObservedState {
+  config_filesystem: boolean;
+  dll_filesystem: boolean;
+  wrapper_filesystem: boolean;
+  config_filesystem_ready: boolean;
+  dll_filesystem_ready: boolean;
+  wrapper_filesystem_ready: boolean;
+  lsfg_config_env: boolean;
+  vk_implicit_layer_path_env: boolean;
+  vk_add_implicit_layer_path_env: boolean;
+}
+
+export type FlatpakOwnershipStatus =
+  | "managed"
+  | "unmanaged"
+  | "unknown"
+  | "pending"
+  | "blocked";
+
+interface FlatpakAppBase {
   app_id: string;
   app_name: string;
   wrapper_path: string;
+}
+
+export interface FlatpakAppAvailable extends FlatpakAppBase, FlatpakObservedState {
+  status_available: true;
+  ownership_status: FlatpakOwnershipStatus;
+  ownership_operation?: FlatpakOverrideOperation;
+  ownership_error_code?: "ownership_pending" | "ownership_blocked";
   has_filesystem_override: boolean;
   has_wrapper_override: boolean;
   has_env_override: boolean;
 }
+
+export interface FlatpakAppUnavailable extends FlatpakAppBase {
+  status_available: false;
+  status_error_code: "status_unavailable";
+  status_error?: string;
+}
+
+export type FlatpakApp = FlatpakAppAvailable | FlatpakAppUnavailable;
 
 export interface FlatpakAppInfo {
   success: boolean;
@@ -118,8 +169,90 @@ export interface FlatpakOperationResult {
   operation?: string;
 }
 
+export type FlatpakOverrideOperation = "set" | "remove";
+export type FlatpakOverrideOutcome =
+  | "complete"
+  | "partial"
+  | "failed"
+  | "rejected"
+  | "unverified";
+
+interface FlatpakOverrideResultBase {
+  app_id: string;
+  operation: FlatpakOverrideOperation;
+  message: string;
+  failed_steps: Array<"apply_override">;
+  ownership_status: FlatpakOwnershipStatus;
+}
+
+export interface FlatpakOverrideCompleteResult extends FlatpakOverrideResultBase {
+  success: true;
+  outcome: "complete";
+  status_available: true;
+  error: null;
+  warning: string | null;
+  retryable: false;
+  observed_state: FlatpakObservedState;
+}
+
+export interface FlatpakOverridePartialResult extends FlatpakOverrideResultBase {
+  success: false;
+  outcome: "partial";
+  status_available: true;
+  error_code: "partial_failure";
+  error: string;
+  warning: null;
+  retryable: true;
+  observed_state: FlatpakObservedState;
+}
+
+export interface FlatpakOverrideFailedResult extends FlatpakOverrideResultBase {
+  success: false;
+  outcome: "failed";
+  status_available: true;
+  error_code: "operation_failed";
+  error: string;
+  warning: null;
+  retryable: true;
+  observed_state: FlatpakObservedState;
+}
+
+export interface FlatpakOverrideRejectedResult extends FlatpakOverrideResultBase {
+  success: false;
+  outcome: "rejected";
+  status_available: false;
+  error_code: "precondition_failed";
+  error: string;
+  warning: null;
+  retryable: false;
+  observed_state?: never;
+}
+
+export interface FlatpakOverrideUnverifiedResult extends FlatpakOverrideResultBase {
+  success: false;
+  outcome: "unverified";
+  status_available: false;
+  error_code:
+    | "status_unavailable"
+    | "operation_busy"
+    | "ownership_unknown"
+    | "ownership_pending"
+    | "ownership_blocked";
+  error: string;
+  warning: null;
+  retryable: true;
+  observed_state?: never;
+}
+
+export type FlatpakOverrideResult =
+  | FlatpakOverrideCompleteResult
+  | FlatpakOverridePartialResult
+  | FlatpakOverrideFailedResult
+  | FlatpakOverrideRejectedResult
+  | FlatpakOverrideUnverifiedResult;
+
 // Profile management interfaces
-export interface ProfilesResult {
+export interface ProfilesResult extends RecoveryMetadata {
   success: boolean;
   profiles?: string[];
   current_profile?: string;
@@ -127,7 +260,7 @@ export interface ProfilesResult {
   error?: string;
 }
 
-export interface ProfileResult {
+export interface ProfileResult extends RecoveryMetadata {
   success: boolean;
   profile_name?: string;
   message?: string;
@@ -138,6 +271,7 @@ export interface ProfileResult {
 export const installLsfgVk = callable<[], InstallationResult>("install_lsfg_vk");
 export const uninstallLsfgVk = callable<[], InstallationResult>("uninstall_lsfg_vk");
 export const checkLsfgVkInstalled = callable<[], InstallationStatus>("check_lsfg_vk_installed");
+export const recoverState = callable<[], RecoveryResult>("recover_state");
 export const checkLosslessScalingDll = callable<[], DllDetectionResult>("check_lossless_scaling_dll");
 export const getDllStats = callable<[], DllStatsResult>("get_dll_stats");
 export const getLsfgConfig = callable<[], ConfigResult>("get_lsfg_config");
@@ -152,8 +286,8 @@ export const checkFlatpakExtensionStatus = callable<[], FlatpakExtensionStatus>(
 export const installFlatpakExtension = callable<[string], FlatpakOperationResult>("install_flatpak_extension");
 export const uninstallFlatpakExtension = callable<[string], FlatpakOperationResult>("uninstall_flatpak_extension");
 export const getFlatpakApps = callable<[], FlatpakAppInfo>("get_flatpak_apps");
-export const setFlatpakAppOverride = callable<[string], FlatpakOperationResult>("set_flatpak_app_override");
-export const removeFlatpakAppOverride = callable<[string], FlatpakOperationResult>("remove_flatpak_app_override");
+export const setFlatpakAppOverride = callable<[string], FlatpakOverrideResult>("set_flatpak_app_override");
+export const removeFlatpakAppOverride = callable<[string], FlatpakOverrideResult>("remove_flatpak_app_override");
 
 // Updated config function using object-based configuration (single source of truth)
 export const updateLsfgConfig = callable<

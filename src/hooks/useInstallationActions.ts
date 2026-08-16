@@ -4,7 +4,8 @@ import {
   showInstallSuccessToast, 
   showInstallErrorToast,
   showUninstallSuccessToast, 
-  showUninstallErrorToast 
+  showUninstallErrorToast,
+  showRecoveryWarningToast,
 } from "../utils/toastUtils";
 import t from "../i18n/i18n";
 
@@ -26,6 +27,7 @@ export function useInstallationActions() {
         setIsInstalled(true);
         setInstallationStatus(t("STATUS_ENGINE_INSTALLED", "Experimental lsfg-vk installed"));
         showInstallSuccessToast();
+        if (result.recovery_pending) showRecoveryWarningToast(result);
 
         // Reload lsfg config after installation
         if (reloadConfig) {
@@ -33,7 +35,8 @@ export function useInstallationActions() {
         }
       } else {
         setInstallationStatus(`${t("STATUS_INSTALL_FAILED", "Installation failed:")} ${result.error}`);
-        showInstallErrorToast(result.error);
+        if (result.error_code) showRecoveryWarningToast(result);
+        else showInstallErrorToast(result.error);
       }
     } catch (error) {
       setInstallationStatus(`${t("STATUS_INSTALL_FAILED", "Installation failed:")} ${error}`);
@@ -56,9 +59,11 @@ export function useInstallationActions() {
         setIsInstalled(false);
         setInstallationStatus(t("STATUS_ENGINE_REMOVED", "Experimental lsfg-vk removed successfully!"));
         showUninstallSuccessToast();
+        if (result.recovery_pending) showRecoveryWarningToast(result);
       } else {
         setInstallationStatus(`${t("STATUS_UNINSTALL_FAILED", "Uninstallation failed:")} ${result.error}`);
-        showUninstallErrorToast(result.error);
+        if (result.error_code) showRecoveryWarningToast(result);
+        else showUninstallErrorToast(result.error);
       }
     } catch (error) {
       setInstallationStatus(`${t("STATUS_UNINSTALL_FAILED", "Uninstallation failed:")} ${error}`);
