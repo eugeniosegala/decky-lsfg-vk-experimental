@@ -1,0 +1,76 @@
+{
+  "schema": 1,
+  "minimum_runs": 5,
+  "max_baseline_relative_mad": 0.03,
+  "environment_keys": [
+    "target_id",
+    "os_build",
+    "kernel",
+    "mesa",
+    "gamescope",
+    "display_mode",
+    "tdp_watts",
+    "gpu_clock_policy",
+    "workload_id",
+    "workload_build",
+    "workload_settings_hash"
+  ],
+  "metrics": {
+    "frame_time_p95_ms": {
+      "direction": "lower",
+      "max_relative_regression": 0.05,
+      "max_absolute_regression": 0.5,
+      "rationale": "Protect sustained frame pacing while tolerating sub-millisecond capture noise."
+    },
+    "frame_time_p99_ms": {
+      "direction": "lower",
+      "max_relative_regression": 0.05,
+      "max_absolute_regression": 1.0,
+      "rationale": "Protect tail latency and visible stutter without overfitting one outlier."
+    },
+    "missed_present_ratio": {
+      "direction": "lower",
+      "max_relative_regression": 0.05,
+      "max_absolute_regression": 0.001,
+      "rationale": "Prevent regressions in delivered-frame cadence."
+    },
+    "input_to_present_proxy_p95_ms": {
+      "direction": "lower",
+      "max_relative_regression": 0.05,
+      "max_absolute_regression": 1.0,
+      "rationale": "Guard the software input-to-present proxy; this is not input-to-photon latency."
+    },
+    "generated_frame_ssim": {
+      "direction": "higher",
+      "max_relative_regression": 0.001,
+      "max_absolute_regression": 0.001,
+      "rationale": "Reject a repeatable generated-frame similarity regression in the fixed capture scene."
+    },
+    "average_power_watts": {
+      "direction": "lower",
+      "max_relative_regression": 0.05,
+      "max_absolute_regression": 0.5,
+      "rationale": "Protect battery and thermal cost on the fixed-power target."
+    },
+    "process_crash_count": {
+      "direction": "hard_max",
+      "maximum": 0,
+      "rationale": "A validation run must not crash the workload, Gamescope, or plugin."
+    },
+    "black_frame_count": {
+      "direction": "hard_max",
+      "maximum": 0,
+      "rationale": "Any detected black generated frame is a release blocker."
+    },
+    "generated_frame_failure_count": {
+      "direction": "hard_max",
+      "maximum": 0,
+      "rationale": "The fixed validation workload must not report failed generated frames."
+    },
+    "thermal_throttle_event_count": {
+      "direction": "hard_max",
+      "maximum": 0,
+      "rationale": "Throttled runs are invalid performance evidence rather than a usable baseline."
+    }
+  }
+}

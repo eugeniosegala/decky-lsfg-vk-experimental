@@ -965,14 +965,8 @@ class FlatpakService(BaseService):
     ) -> Literal["managed", "unmanaged", "unknown", "pending", "blocked"]:
         record = document["apps"].get(app_id)
         if record is None:
-            config_path, dll_path = self._get_lsfg_paths()
-            relevant_paths = {
-                config_path, dll_path, str(self.lsfg_launch_script_path)
-            }
-            has_lsfg_state = any(observed_state.values()) or bool(
-                relevant_paths.intersection(states or {})
-            ) or any(key.startswith("@env:") for key in (states or {}))
-            return "unknown" if has_lsfg_state else "unmanaged"
+            has_app_layer_state = any(observed_state.values()) or bool(states)
+            return "unknown" if has_app_layer_state else "unmanaged"
         if record["status"] == "pending":
             return "pending"
         if states is None:
@@ -1061,9 +1055,7 @@ class FlatpakService(BaseService):
                 return None
             if current == after:
                 continue
-            if after == "absent" and current.startswith("grant_"):
-                options.append(f"--nofilesystem={path}")
-            elif after.startswith("grant_") and current == "absent":
+            if after.startswith("grant_") and current == "absent":
                 options.append(
                     f"--filesystem={path}:{after.removeprefix('grant_')}"
                 )
@@ -1121,29 +1113,23 @@ class FlatpakService(BaseService):
                     f"retry the recorded {pending['operation']} operation first",
                 )
             if pending["operation"] == "remove":
-                expected_before = self._boundary_states(before)
-                if states != expected_before:
-                    return self._ownership_failure(
-                        app_id,
-                        operation,
-                        "blocked",
-                        "pending remove state contains an unexpected external change",
-                    )
-                options = ["--reset"]
-            else:
-                before_states, after_states = self._pending_boundary_states(pending)
-                options = self._pending_repair_options(
-                    before_states, after_states, states
+                return self._ownership_failure(
+                    app_id,
+                    operation,
+                    "blocked",
+                    "pending remove state contains an unexpected external change",
                 )
-                if options is None or any(
-                    key.startswith("@") for key in states
-                ):
-                    return self._ownership_failure(
-                        app_id,
-                        operation,
-                        "blocked",
-                        "pending filesystem state contains an unexpected external change",
-                    )
+            before_states, after_states = self._pending_boundary_states(pending)
+            options = self._pending_repair_options(
+                before_states, after_states, states
+            )
+            if options is None or any(key.startswith("@") for key in states):
+                return self._ownership_failure(
+                    app_id,
+                    operation,
+                    "blocked",
+                    "pending filesystem state contains an unexpected external change",
+                )
 
             command_error = None
             try:

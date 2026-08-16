@@ -1,0 +1,131 @@
+name: Target hardware validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      baseline_sha:
+        description: Trusted 40-character baseline commit SHA
+        required: true
+        type: string
+      candidate_sha:
+        description: Reviewed 40-character candidate commit SHA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lsfg-target-hardware
+  cancel-in-progress: false
+
+jobs:
+  hardware-quality:
+    name: SteamOS/Bazzite hardware quality
+    environment: steam-deck-hardware
+    runs-on: [self-hosted, linux, x64, lsfg-hardware]
+    timeout-minutes: 60
+
+    steps:
+      - name: Require protected environment configuration
+        shell: bash
+        env:
+          HARDWARE_ENV_READY: ${{ vars.LSFG_HARDWARE_ENV_READY }}
+        run: |
+          set -euo pipefail
+          [[ "$HARDWARE_ENV_READY" == "true" ]] || {
+            echo 'Configure the protected steam-deck-hardware environment and set LSFG_HARDWARE_ENV_READY=true.' >&2
+            exit 1
+          }
+
+      - name: Validate immutable inputs
+        shell: bash
+        env:
+          BASELINE_SHA: ${{ inputs.baseline_sha }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          sha_pattern='^[0-9a-f]{40}$'
+          [[ "$BASELINE_SHA" =~ $sha_pattern ]] || {
+            echo 'baseline_sha must be a full lowercase commit SHA' >&2
+            exit 1
+          }
+          [[ "$CANDIDATE_SHA" =~ $sha_pattern ]] || {
+            echo 'candidate_sha must be a full lowercase commit SHA' >&2
+            exit 1
+          }
+
+      - name: Check out trusted gate implementation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          path: gate
+          persist-credentials: false
+
+      - name: Check out baseline
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.baseline_sha }}
+          path: baseline
+          persist-credentials: false
+
+      - name: Check out reviewed candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          path: candidate
+          persist-credentials: false
+
+      - name: Capture repeated target-hardware evidence
+        shell: bash
+        env:
+          BASELINE_SHA: ${{ inputs.baseline_sha }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          REPORT_DIR: ${{ runner.temp }}/lsfg-hardware-reports
+        run: |
+          set -euo pipefail
+          harness=/opt/lsfg-hardware/bin/capture-comparison
+          [[ -x "$harness" ]] || {
+            echo "Missing root-owned hardware harness: $harness" >&2
+            exit 1
+          }
+          [[ "$(stat -c '%u' "$harness")" == "0" ]] || {
+            echo 'The hardware harness must be owned by root.' >&2
+            exit 1
+          }
+          mode=$(stat -c '%a' "$harness")
+          (( (8#$mode & 8#022) == 0 )) || {
+            echo 'The hardware harness must not be group/world writable.' >&2
+            exit 1
+          }
+          mkdir -p "$REPORT_DIR"
+          "$harness" \
+            --baseline-source "$GITHUB_WORKSPACE/baseline" \
+            --baseline-sha "$BASELINE_SHA" \
+            --candidate-source "$GITHUB_WORKSPACE/candidate" \
+            --candidate-sha "$CANDIDATE_SHA" \
+            --output "$REPORT_DIR"
+
+      - name: Enforce hardware quality policy
+        shell: bash
+        env:
+          REPORT_DIR: ${{ runner.temp }}/lsfg-hardware-reports
+        run: |
+          set -euo pipefail
+          python3 gate/scripts/hardware_quality_gate.py \
+            --baseline "$REPORT_DIR/baseline.json" \
+            --candidate "$REPORT_DIR/candidate.json" \
+            --policy gate/.github/hardware-quality-policy.json \
+            --json-output "$REPORT_DIR/gate-result.json"
+
+      - name: Upload bounded evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: hardware-quality-${{ inputs.candidate_sha }}
+          path: |
+            ${{ runner.temp }}/lsfg-hardware-reports/baseline.json
+            ${{ runner.temp }}/lsfg-hardware-reports/candidate.json
+            ${{ runner.temp }}/lsfg-hardware-reports/gate-result.json
+          if-no-files-found: warn
+          retention-days: 3

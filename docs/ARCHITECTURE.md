@@ -76,33 +76,38 @@ actions for partial state. The observed contract distinguishes exact-path
 presence from access-mode readiness: preparing requires config `rw` and
 payload/wrapper `ro`.
 
-Flatpak does not provide a stable per-key reset API. The plugin therefore keeps
-a mode-`0600` ownership ledger in its configuration directory and writes a
-durable pending intent before invoking an external override mutation. Only
-paths proven absent at the app override layer are recorded as plugin-owned.
-Correct pre-existing grants are retained but never claimed; wrong modes,
-explicit denials, legacy environment values/unsets, corrupt ownership state,
-or external drift fail closed without an automatic cleanup command. Removal
-targets only exact grants recorded as plugin-owned and succeeds only after
-read-back proves those app-layer entries absent. A denial or mixed state leaves
-the durable intent pending/blocked for repair rather than reporting success.
+Flatpak does not provide a stable per-key operation that removes one app-layer
+override and reveals the lower-precedence baseline. The plugin therefore keeps
+a mode-`0600` ownership ledger and writes a durable pending intent before every
+external override mutation. Automatic setup is accepted only when the app's
+user override layer is empty, so the plugin can prove that it exclusively owns
+the resulting layer. Existing user/Flatseal grants, unrelated keys, wrong modes,
+explicit denials, environment values/unsets, corrupt ownership state, path
+changes, or external drift fail closed without mutation.
 
-The UI distinguishes prepared, partial, retained pre-existing, unknown,
+For an exclusively owned and strictly reverified layer, removal uses Flatpak's
+app-level `--reset` and succeeds only after read-back proves the layer is empty.
+It is never used for an app with pre-existing or externally changed overrides.
+Changing the configured DLL directory therefore requires a safe remove followed
+by a fresh enable; the plugin never converts an old grant into a persistent deny
+with `--nofilesystem`.
+
+The UI distinguishes prepared, partial, retained/unknown pre-existing,
 pending, and blocked state. It never offers ordinary removal for unowned or
-unknown access. Neither `--unset-env` nor Flatpak's broad `--reset` is used for
-automatic cleanup because either could alter unrelated user or lower-layer
-configuration.
+unknown access. `--unset-env` is never used for cleanup.
 
 The PR workflow also runs an isolated real Flatpak CLI integration suite on a
 Linux VM. It uses temporary `HOME` and XDG roots to verify production
-add/read-back/remove behavior, pre-existing grant preservation, access modes,
-partial-command reconciliation, and DLL path changes against Flatpak's actual
+add/read-back/reset behavior, refusal to touch pre-existing grants, access modes,
+partial-command reconciliation, and safe DLL path changes against Flatpak's actual
 user override keyfiles. It does not install or launch a game and never touches
 the runner's normal user overrides.
 
 Real Decky, Gamescope, presentation timing, visual quality, and frame pacing
 still require a SteamOS/Bazzite target. Generic CI must not be used as evidence
 that FPS, latency, power use, or generated-frame quality remained unchanged.
+The manual target-hardware workflow and report policy are documented in
+[`HARDWARE_VALIDATION.md`](HARDWARE_VALIDATION.md).
 
 ## Build and packaging
 

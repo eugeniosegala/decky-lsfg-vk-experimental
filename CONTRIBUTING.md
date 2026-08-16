@@ -37,6 +37,12 @@ pnpm run check:shell
 pnpm run build
 ```
 
+On Linux with Flatpak installed, the isolated real-CLI suite is available as:
+
+```bash
+RUN_FLATPAK_INTEGRATION=1 pnpm run test:flatpak-integration
+```
+
 ## Generated configuration contract
 
 `shared_config.py` is the configuration source of truth. After changing it,
@@ -72,6 +78,11 @@ The workflow uses a read-only `GITHUB_TOKEN`, does not receive deployment
 secrets, pins every reused GitHub action to an immutable full commit SHA, and
 cancels superseded runs on the same ref.
 
+Pull requests also run the production Flatpak service against a real Flatpak
+CLI in isolated temporary user/XDG directories. This locks the command syntax,
+keyfile parser, ownership intent, partial-retry, user-override preservation, and
+strict read-back semantics without touching a runner user's normal overrides.
+
 The networked package smoke test is manual so ordinary pull requests do not
 repeatedly download engine payloads. By default it verifies the ZIP without
 retaining an artifact. A dispatcher can explicitly request an uploaded ZIP for
@@ -80,7 +91,27 @@ or create a GitHub release.
 
 ## Testing boundaries
 
-The current unit suite covers launch-wrapper behavior, dual-architecture
-installation, and diagnostics. Changes to Flatpak overrides, DLL detection,
-profile CRUD, or frontend state should add focused regression coverage where
-practical. SteamOS/Decky integration still requires a real target device.
+### Merge evidence matrix
+
+| Change | Required evidence |
+| --- | --- |
+| Any code or generated file | Green `quality` job |
+| Flatpak service, parser, ownership, or UI contract | Green real `Flatpak integration` job |
+| Native payload, wrapper runtime environment, presentation/timing, shader, or performance policy | Reviewed target-hardware baseline/candidate report |
+| Release metadata or packaged payload | Manual `Package smoke` run before publishing |
+| Documentation only | Generated/link-sensitive checks that apply; no fabricated hardware evidence |
+
+Do not turn a noisy benchmark into a required check. Target-hardware evidence
+becomes blocking only after repeated unchanged baseline runs demonstrate that
+the selected workload and thresholds are stable.
+
+The current suite covers transactional configuration/profile/install/uninstall
+state, launch-wrapper behavior, dual-architecture installation, diagnostics,
+Flatpak ownership, frontend recovery/mutation contracts, and the hardware-report
+gate. Changes to DLL detection or rendered frontend component behavior still
+need focused regression coverage where practical.
+
+SteamOS/Decky/Gamescope performance and graphics evidence requires a dedicated
+target. See [docs/HARDWARE_VALIDATION.md](docs/HARDWARE_VALIDATION.md) before
+changing the native payload, presentation/timing policy, wrapper runtime
+environment, or performance-sensitive configuration.

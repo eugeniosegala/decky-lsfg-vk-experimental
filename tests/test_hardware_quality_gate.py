@@ -1,0 +1,195 @@
+from __future__ import annotations
+
+from contextlib import redirect_stdout
+import io
+import json
+from pathlib import Path
+import tempfile
+import unittest
+
+from scripts.hardware_quality_gate import QualityGateError, evaluate, main
+
+
+ENVIRONMENT = {
+    "target_id": "steam-deck-lcd-01",
+    "os_build": "steamos-test",
+    "kernel": "6.11-test",
+    "mesa": "25.1-test",
+    "gamescope": "3.16-test",
+    "display_mode": "1280x800@60",
+    "tdp_watts": 15,
+    "gpu_clock_policy": "fixed-1200mhz",
+    "workload_id": "lsfg-fixed-motion-v1",
+    "workload_build": "sha256:test",
+    "workload_settings_hash": "sha256:settings",
+}
+
+
+def _policy():
+    return {
+        "schema": 1,
+        "minimum_runs": 5,
+        "max_baseline_relative_mad": 0.03,
+        "environment_keys": list(ENVIRONMENT),
+        "metrics": {
+            "frame_time_p95_ms": {
+                "direction": "lower",
+                "max_relative_regression": 0.05,
+                "max_absolute_regression": 0.5,
+                "rationale": "frame pacing",
+            },
+            "generated_frame_ssim": {
+                "direction": "higher",
+                "max_relative_regression": 0.001,
+                "max_absolute_regression": 0.001,
+                "rationale": "image similarity",
+            },
+            "black_frame_count": {
+                "direction": "hard_max",
+                "maximum": 0,
+                "rationale": "black frames are forbidden",
+            },
+        },
+    }
+
+
+def _report(frame_time=10.0, ssim=0.999, black_frames=0):
+    return {
+        "schema": 1,
+        "environment": dict(ENVIRONMENT),
+        "subject": {"git_sha": "test"},
+        "runs": [
+            {
+                "frame_time_p95_ms": frame_time + offset,
+                "generated_frame_ssim": ssim,
+                "black_frame_count": black_frames,
+            }
+            for offset in (-0.1, -0.05, 0, 0.05, 0.1)
+        ],
+    }
+
+
+class HardwareQualityGateTests(unittest.TestCase):
+    def test_hardware_workflow_is_manual_approved_and_read_only(self):
+        root = Path(__file__).resolve().parents[1]
+        workflow = (root / ".github/workflows/hardware-validation.yml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertNotIn("pull_request:", workflow)
+        self.assertNotIn("pull_request_target:", workflow)
+        self.assertIn("contents: read", workflow)
+        self.assertIn("environment: steam-deck-hardware", workflow)
+        self.assertIn("LSFG_HARDWARE_ENV_READY", workflow)
+        self.assertIn("runs-on: [self-hosted, linux, x64, lsfg-hardware]", workflow)
+        self.assertIn("/opt/lsfg-hardware/bin/capture-comparison", workflow)
+        self.assertNotIn("${{ secrets.", workflow)
+
+    def test_repository_policy_accepts_a_stable_complete_report(self):
+        root = Path(__file__).resolve().parents[1]
+        policy = json.loads(
+            (root / ".github/hardware-quality-policy.json").read_text(encoding="utf-8")
+        )
+        run = {name: 0.0 for name in policy["metrics"]}
+        run["generated_frame_ssim"] = 1.0
+        report = {
+            "schema": 1,
+            "environment": dict(ENVIRONMENT),
+            "subject": {"git_sha": "test"},
+            "runs": [dict(run) for _ in range(policy["minimum_runs"])],
+        }
+
+        self.assertTrue(evaluate(report, report, policy)["passed"])
+
+    def test_equivalent_stable_reports_pass(self):
+        result = evaluate(_report(), _report(frame_time=10.2), _policy())
+        self.assertTrue(result["passed"])
+        self.assertEqual(result["failures"], [])
+
+    def test_environment_mismatch_rejects_comparison(self):
+        candidate = _report()
+        candidate["environment"]["mesa"] = "different"
+        with self.assertRaisesRegex(QualityGateError, "environments differ: mesa"):
+            evaluate(_report(), candidate, _policy())
+
+    def test_insufficient_repetitions_reject_evidence(self):
+        candidate = _report()
+        candidate["runs"] = candidate["runs"][:2]
+        with self.assertRaisesRegex(QualityGateError, "at least 5"):
+            evaluate(_report(), candidate, _policy())
+
+    def test_frame_time_regression_fails(self):
+        result = evaluate(_report(), _report(frame_time=11.0), _policy())
+        self.assertFalse(result["passed"])
+        self.assertRegex(result["failures"][0], "frame_time_p95_ms")
+
+    def test_visual_similarity_regression_fails(self):
+        result = evaluate(_report(), _report(ssim=0.990), _policy())
+        self.assertFalse(result["passed"])
+        self.assertTrue(
+            any("generated_frame_ssim" in item for item in result["failures"])
+        )
+
+    def test_hard_failure_counter_fails_even_when_baseline_matches(self):
+        candidate = _report()
+        candidate["runs"][0]["black_frame_count"] = 1
+        result = evaluate(_report(), candidate, _policy())
+        self.assertFalse(result["passed"])
+        self.assertTrue(any("black_frame_count" in item for item in result["failures"]))
+
+    def test_noisy_baseline_is_rejected_instead_of_blessing_a_regression(self):
+        baseline = _report()
+        for run, value in zip(baseline["runs"], (7.0, 8.0, 10.0, 12.0, 13.0)):
+            run["frame_time_p95_ms"] = value
+        result = evaluate(baseline, _report(), _policy())
+        self.assertFalse(result["passed"])
+        self.assertTrue(
+            any("baseline relative MAD" in item for item in result["failures"])
+        )
+
+    def test_nonfinite_and_boolean_metrics_are_rejected(self):
+        for value in (True, float("nan"), float("inf")):
+            with self.subTest(value=value):
+                candidate = _report()
+                candidate["runs"][0]["frame_time_p95_ms"] = value
+                with self.assertRaisesRegex(QualityGateError, "finite number"):
+                    evaluate(_report(), candidate, _policy())
+
+    def test_cli_writes_machine_readable_result_and_returns_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            paths = {
+                "baseline": root / "baseline.json",
+                "candidate": root / "candidate.json",
+                "policy": root / "policy.json",
+                "result": root / "result.json",
+            }
+            documents = {
+                "baseline": _report(),
+                "candidate": _report(frame_time=11.0),
+                "policy": _policy(),
+            }
+            for name, document in documents.items():
+                paths[name].write_text(json.dumps(document), encoding="utf-8")
+
+            with redirect_stdout(io.StringIO()):
+                return_code = main(
+                    [
+                        "--baseline",
+                        str(paths["baseline"]),
+                        "--candidate",
+                        str(paths["candidate"]),
+                        "--policy",
+                        str(paths["policy"]),
+                        "--json-output",
+                        str(paths["result"]),
+                    ]
+                )
+
+            self.assertEqual(return_code, 1)
+            self.assertFalse(json.loads(paths["result"].read_text())["passed"])
+
+
+if __name__ == "__main__":
+    unittest.main()

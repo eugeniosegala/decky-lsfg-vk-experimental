@@ -406,6 +406,22 @@ class FlatpakOverrideContractTests(unittest.TestCase):
         self.assertIsNotNone(observed)
         self.assertFalse(observed["vk_implicit_layer_path_env"])
 
+    def test_unrelated_app_layer_setting_blocks_automatic_ownership(self):
+        output = "[Context]\nfilesystems=;\nsockets=wayland;\n"
+        with patch.object(
+            self.service,
+            "_run_flatpak_command",
+            return_value=_completed(stdout=output),
+        ) as command:
+            result = self.service.set_app_override(APP_ID)
+
+        self.assertEqual(command.call_count, 1)
+        self.assertEqual(
+            (result["success"], result["error_code"], result["ownership_status"]),
+            (False, "ownership_unknown", "unknown"),
+        )
+        self.assertFalse(self.service._flatpak_ownership_path.exists())
+
     def test_invalid_app_id_is_rejected_before_any_flatpak_command(self):
         for operation in ("set", "remove"):
             for app_id in ("--reset", "bad/id", "x" * 256):

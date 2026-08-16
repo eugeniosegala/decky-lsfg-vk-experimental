@@ -290,7 +290,7 @@ test("a list-level failure exposes only bounded sanitized diagnostic text", asyn
   assert.equal(merged.error.includes("\n"), false);
 });
 
-test("unknown legacy access can be adopted but not destructively removed", async () => {
+test("unknown user-managed access exposes no automatic mutation", async () => {
   const { describeFlatpakAppActions } = await helper();
   const app = availableApp("one", {
     ownership_status: "unknown",
@@ -299,7 +299,7 @@ test("unknown legacy access can be adopted but not destructively removed", async
   const actions = describeFlatpakAppActions(app);
   assert.equal(actions.toggle, undefined);
   assert.equal(actions.status, "unknown");
-  assert.deepEqual(actions.explicit, ["set"]);
+  assert.deepEqual(actions.explicit, []);
 });
 
 test("managed partial state exposes finish and remove actions", async () => {

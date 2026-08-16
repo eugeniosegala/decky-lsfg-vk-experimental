@@ -197,7 +197,7 @@ export function describeFlatpakAppActions(app = {}) {
     ?? (anyOverride ? "unknown" : "unmanaged");
 
   if (ownershipStatus === "unknown") {
-    return { status: "unknown", explicit: ["set"] };
+    return { status: "unknown", explicit: [] };
   }
   if (ownershipStatus === "managed" && prepared) {
     return { status: "prepared", toggle: "remove", explicit: [] };
