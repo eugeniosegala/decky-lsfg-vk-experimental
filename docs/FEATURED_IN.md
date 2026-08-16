@@ -48,6 +48,9 @@ more SteamOS users discover and evaluate the project.
 - [ROG XBOX ALLY Z2A : Je teste Lossless Scaling 2.0 vs Lossless Scaling 1.0](https://www.youtube.com/watch?v=vOzOYT3z4ds)
   by [Mike](https://www.youtube.com/@mpv99): French-language comparison of Lossless Scaling 2.0 and 1.0 on ROG Xbox
   Ally Z2A.
+- [God of War 3 Remastered Lossless Scaling Steam Deck ShadPS4 Performance + TEXTURE FIX](https://www.youtube.com/watch?v=S5exdG5TU8g)
+  by [Sonar Systems](https://www.youtube.com/@SonarSystemsCoUk): Steam Deck performance coverage of God of War 3
+  Remastered through ShadPS4 with Lossless Scaling.
 
 ## Coverage includes
 
