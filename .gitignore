@@ -89,6 +89,7 @@ htmlcov/
 # Local AI assistants, agents, MCP configuration, and runtime state.
 .codex/
 .omx/
+omx_wiki/
 .agents/
 .claude/
 .gemini/
