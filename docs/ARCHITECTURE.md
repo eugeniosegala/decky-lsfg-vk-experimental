@@ -91,9 +91,18 @@ The UI distinguishes prepared, partial, retained pre-existing, unknown,
 pending, and blocked state. It never offers ordinary removal for unowned or
 unknown access. Neither `--unset-env` nor Flatpak's broad `--reset` is used for
 automatic cleanup because either could alter unrelated user or lower-layer
-configuration. Real Flatpak and Gamescope behavior still requires a
-SteamOS/Bazzite integration target; macOS and generic CI validate pure logic,
-durable local state, command construction, and read-back classification only.
+configuration.
+
+The PR workflow also runs an isolated real Flatpak CLI integration suite on a
+Linux VM. It uses temporary `HOME` and XDG roots to verify production
+add/read-back/remove behavior, pre-existing grant preservation, access modes,
+partial-command reconciliation, and DLL path changes against Flatpak's actual
+user override keyfiles. It does not install or launch a game and never touches
+the runner's normal user overrides.
+
+Real Decky, Gamescope, presentation timing, visual quality, and frame pacing
+still require a SteamOS/Bazzite target. Generic CI must not be used as evidence
+that FPS, latency, power use, or generated-frame quality remained unchanged.
 
 ## Build and packaging
 
@@ -115,6 +124,9 @@ tag, and publishes a GitHub prerelease. It is intentionally excluded from CI.
 - `pnpm check` — full non-publishing local/PR gate; regenerates configuration
   bindings and fails if either they or the generated translation bundle drift.
 - `pnpm test` — Python unit tests plus dependency-free frontend contract tests.
+- `pnpm run test:flatpak-integration` — opt-in Linux test against the real
+  Flatpak CLI; CI enables it with `RUN_FLATPAK_INTEGRATION=1` in isolated XDG
+  directories.
 - `pnpm typecheck` — strict TypeScript check.
 - `pnpm run build` — i18n validation and production frontend bundle.
 - `pnpm run package:local` — networked package verification.

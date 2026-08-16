@@ -44,3 +44,47 @@ jobs:
 
       - name: Run repository quality gate
         run: pnpm check
+
+  flatpak-integration:
+    name: Flatpak integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CI: true
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install Flatpak CLI
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends flatpak
+          flatpak --version
+
+      - name: Exercise isolated real Flatpak overrides
+        env:
+          RUN_FLATPAK_INTEGRATION: "1"
+          HOME: ${{ runner.temp }}/lsfg-flatpak-home
+          XDG_DATA_HOME: ${{ runner.temp }}/lsfg-flatpak-data
+          XDG_CONFIG_HOME: ${{ runner.temp }}/lsfg-flatpak-config
+          XDG_STATE_HOME: ${{ runner.temp }}/lsfg-flatpak-state
+          XDG_RUNTIME_DIR: ${{ runner.temp }}/lsfg-flatpak-runtime
+        run: |
+          mkdir -p \
+            "$HOME" \
+            "$XDG_DATA_HOME" \
+            "$XDG_CONFIG_HOME" \
+            "$XDG_STATE_HOME" \
+            "$XDG_RUNTIME_DIR"
+          chmod 700 "$XDG_RUNTIME_DIR"
+          python3 -m unittest tests.integration.test_flatpak_cli_integration -v

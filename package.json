@@ -22,6 +22,7 @@
     "package:publish": "./scripts/publish-package.sh",
     "test:python": "python3 -m unittest discover -s tests -p 'test_*.py'",
     "test:frontend": "node --test tests/frontend-*.test.mjs",
+    "test:flatpak-integration": "python3 -m unittest tests.integration.test_flatpak_cli_integration -v",
     "test": "pnpm run test:python && pnpm run test:frontend"
   },
   "repository": {
