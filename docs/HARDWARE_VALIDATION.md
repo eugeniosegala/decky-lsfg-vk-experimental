@@ -78,7 +78,7 @@ writes `baseline.json` and `candidate.json`. Each report contains:
 ```
 
 Baseline and candidate environment fields must match exactly. The gate rejects
-missing/non-finite metrics, fewer than five runs, and a baseline whose median
+reports over 1 MiB, missing/non-finite metrics, fewer than five runs, and a baseline whose median
 absolute deviation is too high. This prevents a noisy or thermally throttled
 capture from blessing a regression. It also requires full Git and engine SHA-256
 identities and verifies that each report's Git SHA matches the immutable commit

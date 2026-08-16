@@ -22,6 +22,7 @@ REPORT_SCHEMA = 1
 POLICY_SCHEMA = 1
 GIT_SHA_LENGTH = 40
 SHA256_HEX_LENGTH = 64
+MAX_JSON_BYTES = 1_048_576
 
 
 class QualityGateError(ValueError):
@@ -30,7 +31,11 @@ class QualityGateError(ValueError):
 
 def _load_json(path: Path) -> dict[str, Any]:
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
+        with path.open("rb") as source:
+            payload = source.read(MAX_JSON_BYTES + 1)
+        if len(payload) > MAX_JSON_BYTES:
+            raise QualityGateError(f"{path} exceeds the {MAX_JSON_BYTES}-byte limit")
+        value = json.loads(payload.decode("utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise QualityGateError(f"cannot read {path}: {error}") from error
     if not isinstance(value, dict):

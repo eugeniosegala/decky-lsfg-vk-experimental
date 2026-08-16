@@ -1,13 +1,18 @@
 from __future__ import annotations
 
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 import io
 import json
 from pathlib import Path
 import tempfile
 import unittest
 
-from scripts.hardware_quality_gate import QualityGateError, evaluate, main
+from scripts.hardware_quality_gate import (
+    MAX_JSON_BYTES,
+    QualityGateError,
+    evaluate,
+    main,
+)
 
 
 ENVIRONMENT = {
@@ -191,7 +196,7 @@ class HardwareQualityGateTests(unittest.TestCase):
             for name, document in documents.items():
                 paths[name].write_text(json.dumps(document), encoding="utf-8")
 
-            with redirect_stdout(io.StringIO()):
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 return_code = main(
                     [
                         "--baseline",
@@ -229,6 +234,30 @@ class HardwareQualityGateTests(unittest.TestCase):
                 candidate["subject"][field] = value
                 with self.assertRaisesRegex(QualityGateError, field):
                     evaluate(_report(), candidate, _policy())
+
+    def test_cli_rejects_oversized_evidence_before_parsing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            oversized = root / "oversized.json"
+            oversized.write_bytes(b"{" + b" " * MAX_JSON_BYTES)
+
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                return_code = main(
+                    [
+                        "--baseline",
+                        str(oversized),
+                        "--candidate",
+                        str(oversized),
+                        "--policy",
+                        str(oversized),
+                        "--baseline-sha",
+                        BASELINE_SHA,
+                        "--candidate-sha",
+                        CANDIDATE_SHA,
+                    ]
+                )
+
+            self.assertEqual(return_code, 2)
 
 
 if __name__ == "__main__":
