@@ -33,8 +33,9 @@ photodiode, latency analyzer, or suitable high-speed camera.
 ## Why the trace contract exists
 
 The v1 trace contract is **synthetic conformance only**. It gives CI a strict
-event vocabulary with which to test provenance, causality, temporal content
-order, lifecycle closure, and summary arithmetic. It does not accept native
+event vocabulary with which to retain and format-check self-declared provenance
+identifiers and test causality, temporal content order, lifecycle closure, and
+summary arithmetic. It does not accept native
 runtime traces, apply performance thresholds, or prove that the bundled native
 engine has good latency. Native evidence requires a future schema v2 with
 runtime semantics that v1 intentionally does not guess.
@@ -62,6 +63,12 @@ Validate a trace and write a canonical result:
 python3 scripts/latency_trace_gate.py trace.jsonl \
   --json-output latency-result.json
 ```
+
+File output is written to a temporary file in the destination directory,
+flushed with `fsync`, and atomically replaced. A result file is trusted only
+when it came from the current invocation **and** that invocation returned exit
+code `0`. If validation or replacement fails, an older result file may still
+exist at the requested path; its contents are stale and untrusted.
 
 Exit codes are stable:
 
@@ -106,7 +113,7 @@ Producers must finish and close an immutable trace file before invoking the
 validator; changes to its identity, size, modification time, or metadata-change
 time during validation are rejected.
 
-Header fields bind the trace to:
+Header fields retain the producer's self-declared identity for:
 
 - schema and producer;
 - the literal `synthetic_conformance` scope;
@@ -123,7 +130,10 @@ feedback has a non-negative integer normalized timestamp no later than the
 feedback event; `dropped` and `unknown` feedback have a null timestamp. Missing
 required feedback invalidates a complete trace. Missing capabilities produce
 `null` metrics with a reason rather than misleading zeros. Canonical valid
-results retain producer, subject, clock, capabilities, and workload provenance.
+results retain producer, subject, clock, capabilities, and workload identity.
+Schema v1 validates the format of subject hashes but does not resolve or compare
+them against a trusted repository, artifact store, or configuration source;
+they are self-declared provenance, not verified attestation.
 
 Every event has a contiguous global integer sequence starting at one, a non-negative timestamp,
 `context_id`, `epoch`, event name, and exact data object. Equal timestamps are
@@ -135,6 +145,10 @@ present-to-feedback, and deadline comparisons.
 
 Within each `(context_id, epoch)`, `real_index` is trace-relative: the first real
 frame is index zero and each subsequent real frame increments it by exactly one.
+All context epochs in one trace must declare the same `present_mode` and
+`refresh_interval_ns`. This homogeneous pair is retained as the top-level
+`context_profile`, so summaries do not silently combine unlike presentation
+conditions.
 
 The end marker immediately follows the final event in the same sequence and has
 an exact `lost_event_count` field. A complete trace is valid only when that value
@@ -159,9 +173,11 @@ real frame begins its lower present. Before that present starts, a positive batc
 must declare every slot, admit exactly one contiguous prefix, and declare any
 skipped suffix. This forward-causal boundary prevents later metadata from
 rewriting a real-present decision that already happened. Admission at a deadline
-is valid; admission after it is invalid. A `deadline_missed` event may reference
-only an admitted slot, never a skipped suffix, and must be followed by the exact
-generated present after its declared deadline.
+is valid; admission after it is invalid. Schema v1 has no `deadline_missed`
+event. Instead, `late_generated_present_call_count` is derived only when an
+admitted generated frame actually enters `present_call_started` after its
+declared deadline. A failed acquire or an idle acquired frame abandoned at
+context closure is not counted as a late present.
 
 Each adjacent real-frame pair may have only one plan in schema v1. Replanning
 would require explicit cancellation or supersession semantics in a later schema.
@@ -181,11 +197,19 @@ Contexts are keyed by `(context_id, epoch)`; an ID may be reused only with the
 next epoch and after its preceding epoch was destroyed. Real frames, generated
 batches, generation, acquire, present, and recovery calls must close exactly
 once. A generated output receives exactly one acquire attempt, including when
-that attempt returns success or suboptimal. Normal destruction requires complete
-lifecycle closure. Out-of-date, recovery-failed, or shutdown destruction may
-abandon idle frames/batches, but never repairs a started call with no matching
-return. Likewise, `simulation_started` is forward causal: its output ID must not
-already exist as a real or generated frame.
+that attempt returns success or suboptimal. `context_destroyed` declares an
+explicit `closure_policy`: `strict` requires every frame and batch lifecycle to
+be closed, while `allow_idle_abandonment` counts idle open frames/batches as
+abandoned. Neither policy repairs a started call with no matching return.
+Likewise, `simulation_started` is forward causal: its output ID must not already
+exist as a real or generated frame.
+
+`generated_batch_skipped` and `recovery_started` contain only identifiers and
+structural facts; schema v1 deliberately omits producer-asserted reason strings.
+At most one recovery may be active in a context epoch, every `recovery_id` is
+unique within that epoch, and `recovery_finished` must match the active ID. A
+`failed` finish is nonterminal evidence: a later retry is valid when it uses a
+fresh ID.
 
 Synthetic runtime-failure scenarios are valid *bad* conformance evidence.
 Acquire/present timeout,
@@ -212,11 +236,13 @@ nearest-rank p50/p95/p99. The summary includes:
   `input_observed_to_real_feedback_proxy_ns` from observed input to matching real
   presented feedback;
 - maximum declared queue depth;
-- planned, admitted, skipped, and deadline-missed generated **frame** counts;
+- planned, admitted, and skipped generated **frame** counts, plus derived late
+  generated present-call entries;
 - separate batch and context/epoch counts;
-- acquire/present outcomes; expected, received, presented, dropped, unknown, and
-  missing feedback counts; recovery attempts/failures; and explicitly abandoned
-  frames/batches.
+- acquire/present outcomes; expected, received, presented, dropped, and unknown
+  feedback counts; recovery attempts/failures; and explicitly abandoned
+  frames/batches. Missing required feedback invalidates the trace, so no
+  `missing_feedback_count` appears in a valid summary.
 
 Failed present attempts contribute only to outcome counters; they do not create
 latency samples. Dropped and unknown terminal feedback contribute to feedback
@@ -235,7 +261,7 @@ crashes, black frames, and generation failures.
    instrumentation boundary, binding between feedback and output provenance,
    and an immutable effective-configuration hash.
 4. Instrument the exact native source with bounded diagnostics-off overhead and
-   immutable source/artifact/config provenance.
+   immutable, independently verified source/artifact/config provenance.
 5. Prove whether the scheduler already prioritizes fresh real frames and where
    deadline risk enters before changing admission.
 6. Test injected-clock scheduling across 40/60/90/120 Hz and 2x/3x/4x, including

@@ -5,5 +5,5 @@
 {"record":"event","sequence":4,"timestamp_ns":500,"context_id":"ctx","epoch":0,"event":"real_frame_ready","data":{"real_frame_id":"real-0","real_index":0}}
 {"record":"event","sequence":5,"timestamp_ns":700,"context_id":"ctx","epoch":0,"event":"present_call_started","data":{"output_kind":"real","output_frame_id":"real-0","queue_depth":0,"content_order":{"right_real_index":0,"numerator":1,"denominator":1}}}
 {"record":"event","sequence":6,"timestamp_ns":750,"context_id":"ctx","epoch":0,"event":"present_call_returned","data":{"output_frame_id":"real-0","result":"success"}}
-{"record":"event","sequence":7,"timestamp_ns":800,"context_id":"ctx","epoch":0,"event":"context_destroyed","data":{"reason":"normal"}}
+{"record":"event","sequence":7,"timestamp_ns":800,"context_id":"ctx","epoch":0,"event":"context_destroyed","data":{"closure_policy":"strict"}}
 {"record":"end","sequence":8,"timestamp_ns":800,"status":"complete","lost_event_count":0}

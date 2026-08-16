@@ -139,7 +139,6 @@ class Trace:
                 {
                     "batch_id": batch_id,
                     "first_skipped_slot": admitted + 1,
-                    "reason": "deadline_risk",
                 },
             )
         for slot in range(1, admitted + 1):
@@ -162,15 +161,6 @@ class Trace:
             )
             if miss and slot == admitted:
                 self.now = deadlines[slot]
-                self.event(
-                    "deadline_missed",
-                    {
-                        "batch_id": batch_id,
-                        "generated_frame_id": frame_id,
-                        "deadline_ns": deadlines[slot],
-                    },
-                    step=1,
-                )
             self.event(
                 "present_call_started",
                 {
@@ -212,16 +202,14 @@ def build(scenario: str) -> list[dict[str, Any]]:
         trace.real_present(2)
 
     if scenario == "recovery":
-        # Runtime failure is valid evidence; recovery outcome remains visible.
+        # Exercise the recovery lifecycle without asserting an unverifiable cause.
         # The already-presented real frame is retained, and no lifecycle is open.
-        trace.event(
-            "recovery_started", {"recovery_id": "recovery-0", "reason": "swapchain"}
-        )
+        trace.event("recovery_started", {"recovery_id": "recovery-0"})
         trace.event(
             "recovery_finished", {"recovery_id": "recovery-0", "result": "recovered"}
         )
 
-    trace.event("context_destroyed", {"reason": "normal"})
+    trace.event("context_destroyed", {"closure_policy": "strict"})
     trace.end()
     return trace.records
 

@@ -9,7 +9,7 @@
 {"record":"event","sequence":8,"timestamp_ns":1000,"context_id":"ctx","epoch":0,"event":"generated_slot_planned","data":{"batch_id":"batch-1","generated_frame_id":"gen-2","slot_index":2,"slot_count":3,"deadline_ns":3000}}
 {"record":"event","sequence":9,"timestamp_ns":1000,"context_id":"ctx","epoch":0,"event":"generated_slot_planned","data":{"batch_id":"batch-1","generated_frame_id":"gen-3","slot_index":3,"slot_count":3,"deadline_ns":4000}}
 {"record":"event","sequence":10,"timestamp_ns":1100,"context_id":"ctx","epoch":0,"event":"generated_batch_admitted","data":{"batch_id":"batch-1","admitted_count":1}}
-{"record":"event","sequence":11,"timestamp_ns":1100,"context_id":"ctx","epoch":0,"event":"generated_batch_skipped","data":{"batch_id":"batch-1","first_skipped_slot":2,"reason":"deadline_risk"}}
+{"record":"event","sequence":11,"timestamp_ns":1100,"context_id":"ctx","epoch":0,"event":"generated_batch_skipped","data":{"batch_id":"batch-1","first_skipped_slot":2}}
 {"record":"event","sequence":12,"timestamp_ns":1200,"context_id":"ctx","epoch":0,"event":"generation_started","data":{"batch_id":"batch-1","generated_frame_id":"gen-1"}}
 {"record":"event","sequence":13,"timestamp_ns":1300,"context_id":"ctx","epoch":0,"event":"generation_finished","data":{"batch_id":"batch-1","generated_frame_id":"gen-1","gpu_duration_ns":null}}
 {"record":"event","sequence":14,"timestamp_ns":1400,"context_id":"ctx","epoch":0,"event":"acquire_started","data":{"output_frame_id":"gen-1"}}
@@ -18,5 +18,5 @@
 {"record":"event","sequence":17,"timestamp_ns":1650,"context_id":"ctx","epoch":0,"event":"present_call_returned","data":{"output_frame_id":"gen-1","result":"success"}}
 {"record":"event","sequence":18,"timestamp_ns":1700,"context_id":"ctx","epoch":0,"event":"present_call_started","data":{"output_kind":"real","output_frame_id":"real-1","queue_depth":1,"content_order":{"right_real_index":1,"numerator":1,"denominator":1}}}
 {"record":"event","sequence":19,"timestamp_ns":1750,"context_id":"ctx","epoch":0,"event":"present_call_returned","data":{"output_frame_id":"real-1","result":"success"}}
-{"record":"event","sequence":20,"timestamp_ns":1800,"context_id":"ctx","epoch":0,"event":"context_destroyed","data":{"reason":"normal"}}
+{"record":"event","sequence":20,"timestamp_ns":1800,"context_id":"ctx","epoch":0,"event":"context_destroyed","data":{"closure_policy":"strict"}}
 {"record":"end","sequence":21,"timestamp_ns":1800,"status":"complete","lost_event_count":0}

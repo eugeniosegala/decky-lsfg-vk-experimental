@@ -3,7 +3,7 @@
 {"record":"event","sequence":2,"timestamp_ns":100,"context_id":"ctx","epoch":0,"event":"real_frame_ready","data":{"real_frame_id":"real-0","real_index":0}}
 {"record":"event","sequence":3,"timestamp_ns":200,"context_id":"ctx","epoch":0,"event":"present_call_started","data":{"output_kind":"real","output_frame_id":"real-0","queue_depth":0,"content_order":{"right_real_index":0,"numerator":1,"denominator":1}}}
 {"record":"event","sequence":4,"timestamp_ns":250,"context_id":"ctx","epoch":0,"event":"present_call_returned","data":{"output_frame_id":"real-0","result":"out_of_date"}}
-{"record":"event","sequence":5,"timestamp_ns":300,"context_id":"ctx","epoch":0,"event":"recovery_started","data":{"recovery_id":"recovery-0","reason":"swapchain"}}
+{"record":"event","sequence":5,"timestamp_ns":300,"context_id":"ctx","epoch":0,"event":"recovery_started","data":{"recovery_id":"recovery-0"}}
 {"record":"event","sequence":6,"timestamp_ns":400,"context_id":"ctx","epoch":0,"event":"recovery_finished","data":{"recovery_id":"recovery-0","result":"failed"}}
-{"record":"event","sequence":7,"timestamp_ns":450,"context_id":"ctx","epoch":0,"event":"context_destroyed","data":{"reason":"recovery_failed"}}
+{"record":"event","sequence":7,"timestamp_ns":450,"context_id":"ctx","epoch":0,"event":"context_destroyed","data":{"closure_policy":"allow_idle_abandonment"}}
 {"record":"end","sequence":8,"timestamp_ns":450,"status":"complete","lost_event_count":0}

@@ -170,9 +170,9 @@ class LatencyTraceContractTests(unittest.TestCase):
             "presentation_feedback_unavailable",
         )
 
-    def test_dangling_simulation_is_invalid_for_every_destroy_reason(self):
-        for reason in ("normal", "out_of_date", "recovery_failed", "shutdown"):
-            with self.subTest(reason=reason):
+    def test_dangling_simulation_is_invalid_for_every_closure_policy(self):
+        for closure_policy in ("strict", "allow_idle_abandonment"):
+            with self.subTest(closure_policy=closure_policy):
                 records = _records()
                 records = [
                     record
@@ -186,7 +186,7 @@ class LatencyTraceContractTests(unittest.TestCase):
                 ]
                 for record in records:
                     if record.get("event") == "context_destroyed":
-                        record["data"]["reason"] = reason
+                        record["data"]["closure_policy"] = closure_policy
                 _renumber(records)
 
                 with self.assertRaisesRegex(
@@ -571,7 +571,7 @@ class LatencyTraceContractTests(unittest.TestCase):
         self.assertEqual(summary["presented_feedback_count"], 0)
         self.assertEqual(summary["dropped_feedback_count"], 1)
         self.assertEqual(summary["unknown_feedback_count"], 0)
-        self.assertEqual(summary["missing_feedback_count"], 0)
+        self.assertNotIn("missing_feedback_count", summary)
         self.assertEqual(
             summary["received_feedback_count"],
             summary["presented_feedback_count"]
@@ -602,7 +602,7 @@ class LatencyTraceContractTests(unittest.TestCase):
         self.assertEqual(summary["presented_feedback_count"], 0)
         self.assertEqual(summary["dropped_feedback_count"], 0)
         self.assertEqual(summary["unknown_feedback_count"], 1)
-        self.assertEqual(summary["missing_feedback_count"], 0)
+        self.assertNotIn("missing_feedback_count", summary)
         self.assertEqual(
             summary["received_feedback_count"],
             summary["presented_feedback_count"]
@@ -754,7 +754,7 @@ class LatencyTraceContractTests(unittest.TestCase):
 
         self.assertTrue(evaluate_trace(records)["valid"])
 
-    def test_late_present_requires_exact_deadline_miss_event(self):
+    def test_late_present_is_derived_from_present_call_timestamp(self):
         records = _records("valid-partial-prefix.jsonl")
         present_index = next(
             index
@@ -766,8 +766,8 @@ class LatencyTraceContractTests(unittest.TestCase):
         records[present_index + 1]["timestamp_ns"] = 2050
         for record in records[present_index + 2 :]:
             record["timestamp_ns"] = max(record["timestamp_ns"], 2050)
-        with self.assertRaisesRegex(LatencyTraceError, "deadline_missed"):
-            evaluate_trace(records)
+        result = evaluate_trace(records)
+        self.assertEqual(result["summary"]["late_generated_present_call_count"], 1)
 
         miss = {
             "record": "event",
@@ -785,10 +785,12 @@ class LatencyTraceContractTests(unittest.TestCase):
         records.insert(present_index, miss)
         for sequence, record in enumerate(records[1:], start=1):
             record["sequence"] = sequence
-        result = evaluate_trace(records)
-        self.assertEqual(result["summary"]["missed_generated_frame_count"], 1)
+        with self.assertRaisesRegex(
+            LatencyTraceError, "unknown event.*deadline_missed"
+        ):
+            evaluate_trace(records)
 
-    def test_deadline_miss_requires_admission_and_subsequent_late_present(self):
+    def test_legacy_deadline_miss_is_rejected_for_skipped_or_admitted_slots(self):
         records = _records("valid-partial-prefix.jsonl")
         generation_start = records.index(_event(records, "generation_started"))
         next(
@@ -815,7 +817,9 @@ class LatencyTraceContractTests(unittest.TestCase):
             record["sequence"] = sequence
             if sequence > generation_start:
                 record["timestamp_ns"] = max(record["timestamp_ns"], 3100)
-        with self.assertRaisesRegex(LatencyTraceError, "admitted"):
+        with self.assertRaisesRegex(
+            LatencyTraceError, "unknown event.*deadline_missed"
+        ):
             evaluate_trace(records)
 
         records = _records("valid-partial-prefix.jsonl")
@@ -840,13 +844,17 @@ class LatencyTraceContractTests(unittest.TestCase):
             },
         }
         records.insert(present_start, miss)
-        _event(records, "context_destroyed")["data"]["reason"] = "shutdown"
+        _event(records, "context_destroyed")["data"]["closure_policy"] = (
+            "allow_idle_abandonment"
+        )
         for record_index, record in enumerate(records[1:], start=1):
             sequence = record_index
             record["sequence"] = sequence
             if record_index >= present_start:
                 record["timestamp_ns"] = max(record["timestamp_ns"], 2001)
-        with self.assertRaisesRegex(LatencyTraceError, "subsequent late"):
+        with self.assertRaisesRegex(
+            LatencyTraceError, "unknown event.*deadline_missed"
+        ):
             evaluate_trace(records)
 
     def test_full_admission_needs_no_skip_but_partial_requires_one(self):
@@ -924,7 +932,7 @@ class LatencyTraceContractTests(unittest.TestCase):
         del records[5:7]
         records[5]["sequence"] = 5
         records[5]["timestamp_ns"] = 700
-        records[5]["data"]["reason"] = "shutdown"
+        records[5]["data"]["closure_policy"] = "allow_idle_abandonment"
         records[6]["sequence"] = 6
         records[6]["timestamp_ns"] = 700
         result = evaluate_trace(records)
@@ -960,7 +968,7 @@ class LatencyTraceContractTests(unittest.TestCase):
                     "context_id": "ctx",
                     "epoch": 1,
                     "event": "context_destroyed",
-                    "data": {"reason": "shutdown"},
+                    "data": {"closure_policy": "allow_idle_abandonment"},
                 },
             ]
         )
@@ -999,7 +1007,7 @@ class LatencyTraceContractTests(unittest.TestCase):
                 "context_id": "ctx-b",
                 "epoch": 0,
                 "event": "context_destroyed",
-                "data": {"reason": "shutdown"},
+                "data": {"closure_policy": "allow_idle_abandonment"},
             },
         ]
         records.extend(second_context_events)
@@ -1105,7 +1113,7 @@ class LatencyTraceContractTests(unittest.TestCase):
             for event, data, increment in (
                 (
                     "context_created",
-                    {"present_mode": "fifo", "refresh_interval_ns": 1},
+                    {"present_mode": "fifo", "refresh_interval_ns": 16666667},
                     0,
                 ),
                 ("real_frame_ready", {"real_frame_id": "real", "real_index": 0}, 1),
@@ -1128,7 +1136,7 @@ class LatencyTraceContractTests(unittest.TestCase):
                     {"output_frame_id": "real", "result": "success"},
                     latency + 2,
                 ),
-                ("context_destroyed", {"reason": "normal"}, latency + 3),
+                ("context_destroyed", {"closure_policy": "strict"}, latency + 3),
             ):
                 sequence += 1
                 records.append(
@@ -1414,6 +1422,587 @@ class LatencyTraceContractTests(unittest.TestCase):
                     trace.flush()
                     result = evaluate_trace(load_trace(Path(trace.name)))
                 self.assertEqual(result["measurement_scope"], "synthetic_conformance")
+
+
+class LatencyTraceV1CorrectionContractTests(unittest.TestCase):
+    """Regression contract for the minimal, claim-safe v1 correction."""
+
+    @staticmethod
+    def _insert_before_destroy(records: list[dict], events: list[dict]) -> None:
+        destroy_index = next(
+            index
+            for index, record in enumerate(records)
+            if record.get("event") == "context_destroyed"
+        )
+        records[destroy_index:destroy_index] = events
+        _renumber(records)
+
+    def test_context_destroyed_accepts_only_explicit_closure_policy(self):
+        records = _records()
+        self.assertTrue(evaluate_trace(records)["valid"])
+
+        legacy = deepcopy(records)
+        destroy = _event(legacy, "context_destroyed")
+        destroy["data"] = {"reason": "normal"}
+        with self.assertRaisesRegex(LatencyTraceError, "closure_policy|fields"):
+            evaluate_trace(legacy)
+
+    def test_allow_idle_abandonment_counts_only_idle_lifecycles(self):
+        records = _records()
+        del records[5:7]
+        destroy = _event(records, "context_destroyed")
+        destroy["data"]["closure_policy"] = "allow_idle_abandonment"
+        destroy["timestamp_ns"] = 700
+        records[-1]["timestamp_ns"] = 700
+        _renumber(records)
+
+        summary = evaluate_trace(records)["summary"]
+        self.assertEqual(summary["abandoned_frame_count"], 1)
+        self.assertEqual(summary["abandoned_batch_count"], 0)
+
+    def test_strict_closure_rejects_an_idle_open_frame(self):
+        records = _records()
+        del records[5:7]
+        _event(records, "context_destroyed")["timestamp_ns"] = 700
+        records[-1]["timestamp_ns"] = 700
+        _renumber(records)
+
+        with self.assertRaisesRegex(LatencyTraceError, "strict|lifecycles closed"):
+            evaluate_trace(records)
+
+    def test_generated_batch_skipped_has_no_producer_asserted_reason(self):
+        records = _records("valid-partial-prefix.jsonl")
+        self.assertTrue(evaluate_trace(records)["valid"])
+
+        legacy = deepcopy(records)
+        _event(legacy, "generated_batch_skipped")["data"]["reason"] = "deadline_risk"
+        with self.assertRaisesRegex(LatencyTraceError, "fields"):
+            evaluate_trace(legacy)
+
+    def test_recovery_started_has_no_producer_asserted_reason(self):
+        records = _records("valid-runtime-failure.jsonl")
+        self.assertTrue(evaluate_trace(records)["valid"])
+
+        legacy = deepcopy(records)
+        _event(legacy, "recovery_started")["data"]["reason"] = "swapchain"
+        with self.assertRaisesRegex(LatencyTraceError, "fields"):
+            evaluate_trace(legacy)
+
+    def test_only_one_recovery_may_be_active_per_context_epoch(self):
+        records = _records()
+        self._insert_before_destroy(
+            records,
+            [
+                {
+                    "record": "event",
+                    "sequence": 0,
+                    "timestamp_ns": 760,
+                    "context_id": "ctx",
+                    "epoch": 0,
+                    "event": "recovery_started",
+                    "data": {"recovery_id": "recovery-a"},
+                },
+                {
+                    "record": "event",
+                    "sequence": 0,
+                    "timestamp_ns": 770,
+                    "context_id": "ctx",
+                    "epoch": 0,
+                    "event": "recovery_started",
+                    "data": {"recovery_id": "recovery-b"},
+                },
+            ],
+        )
+        _event(records, "context_destroyed")["timestamp_ns"] = 780
+        records[-1]["timestamp_ns"] = 780
+
+        with self.assertRaisesRegex(LatencyTraceError, "active recovery"):
+            evaluate_trace(records)
+
+    def test_failed_recovery_is_nonterminal_and_fresh_id_retry_is_valid(self):
+        records = _records()
+        self._insert_before_destroy(
+            records,
+            [
+                {
+                    "record": "event",
+                    "sequence": 0,
+                    "timestamp_ns": 760,
+                    "context_id": "ctx",
+                    "epoch": 0,
+                    "event": "recovery_started",
+                    "data": {"recovery_id": "recovery-a"},
+                },
+                {
+                    "record": "event",
+                    "sequence": 0,
+                    "timestamp_ns": 770,
+                    "context_id": "ctx",
+                    "epoch": 0,
+                    "event": "recovery_finished",
+                    "data": {"recovery_id": "recovery-a", "result": "failed"},
+                },
+                {
+                    "record": "event",
+                    "sequence": 0,
+                    "timestamp_ns": 780,
+                    "context_id": "ctx",
+                    "epoch": 0,
+                    "event": "recovery_started",
+                    "data": {"recovery_id": "recovery-b"},
+                },
+                {
+                    "record": "event",
+                    "sequence": 0,
+                    "timestamp_ns": 790,
+                    "context_id": "ctx",
+                    "epoch": 0,
+                    "event": "recovery_finished",
+                    "data": {"recovery_id": "recovery-b", "result": "recovered"},
+                },
+            ],
+        )
+        _event(records, "context_destroyed")["timestamp_ns"] = 800
+        records[-1]["timestamp_ns"] = 800
+
+        summary = evaluate_trace(records)["summary"]
+        self.assertEqual(summary["recovery_attempt_count"], 2)
+        self.assertEqual(summary["recovery_failed_count"], 1)
+
+    def test_recovery_id_cannot_be_reused_after_finish(self):
+        records = _records()
+        events = []
+        for timestamp, event in (
+            (760, "recovery_started"),
+            (770, "recovery_finished"),
+            (780, "recovery_started"),
+        ):
+            data = {"recovery_id": "same-id"}
+            if event == "recovery_finished":
+                data["result"] = "failed"
+            events.append(
+                {
+                    "record": "event",
+                    "sequence": 0,
+                    "timestamp_ns": timestamp,
+                    "context_id": "ctx",
+                    "epoch": 0,
+                    "event": event,
+                    "data": data,
+                }
+            )
+        self._insert_before_destroy(records, events)
+        _event(records, "context_destroyed")["timestamp_ns"] = 790
+        records[-1]["timestamp_ns"] = 790
+
+        with self.assertRaisesRegex(LatencyTraceError, "recovery_id.*unique"):
+            evaluate_trace(records)
+
+    def test_destroy_while_recovery_is_active_is_invalid(self):
+        records = _records()
+        self._insert_before_destroy(
+            records,
+            [
+                {
+                    "record": "event",
+                    "sequence": 0,
+                    "timestamp_ns": 760,
+                    "context_id": "ctx",
+                    "epoch": 0,
+                    "event": "recovery_started",
+                    "data": {"recovery_id": "active"},
+                }
+            ],
+        )
+        _event(records, "context_destroyed")["timestamp_ns"] = 770
+        records[-1]["timestamp_ns"] = 770
+        with self.assertRaisesRegex(
+            LatencyTraceError, "active recovery|recovery.*lacking"
+        ):
+            evaluate_trace(records)
+
+    def test_recovery_finish_requires_the_matching_active_id(self):
+        records = _records()
+        self._insert_before_destroy(
+            records,
+            [
+                {
+                    "record": "event",
+                    "sequence": 0,
+                    "timestamp_ns": 760,
+                    "context_id": "ctx",
+                    "epoch": 0,
+                    "event": "recovery_finished",
+                    "data": {"recovery_id": "never-started", "result": "failed"},
+                }
+            ],
+        )
+        _event(records, "context_destroyed")["timestamp_ns"] = 770
+        records[-1]["timestamp_ns"] = 770
+        with self.assertRaisesRegex(LatencyTraceError, "matching.*recovery_started"):
+            evaluate_trace(records)
+
+    def test_late_generated_present_is_derived_without_deadline_event(self):
+        records = _records("valid-partial-prefix.jsonl")
+        start = next(
+            record
+            for record in records
+            if record.get("event") == "present_call_started"
+            and record["data"]["output_kind"] == "generated"
+        )
+        start["timestamp_ns"] = 2001
+        start_index = records.index(start)
+        for record in records[start_index + 1 :]:
+            record["timestamp_ns"] = max(record["timestamp_ns"], 2001)
+
+        summary = evaluate_trace(records)["summary"]
+        self.assertEqual(summary["late_generated_present_call_count"], 1)
+        self.assertNotIn("missed_generated_frame_count", summary)
+
+    def test_legacy_deadline_missed_event_is_rejected(self):
+        records = _records("valid-partial-prefix.jsonl")
+        present_index = next(
+            i
+            for i, record in enumerate(records)
+            if record.get("event") == "present_call_started"
+            and record["data"]["output_kind"] == "generated"
+        )
+        records[present_index]["timestamp_ns"] = 2001
+        records.insert(
+            present_index,
+            {
+                "record": "event",
+                "sequence": 0,
+                "timestamp_ns": 2001,
+                "context_id": "ctx",
+                "epoch": 0,
+                "event": "deadline_missed",
+                "data": {
+                    "batch_id": "batch-1",
+                    "generated_frame_id": "gen-1",
+                    "deadline_ns": 2000,
+                },
+            },
+        )
+        for record in records[present_index + 2 :]:
+            record["timestamp_ns"] = max(record["timestamp_ns"], 2001)
+        _renumber(records)
+        with self.assertRaisesRegex(
+            LatencyTraceError, "unknown event.*deadline_missed"
+        ):
+            evaluate_trace(records)
+
+    def test_failed_acquire_is_valid_without_present_or_abandonment(self):
+        for result in ("timeout", "out_of_date", "error"):
+            with self.subTest(result=result):
+                records = _records("valid-partial-prefix.jsonl")
+                finish = _event(records, "acquire_finished")
+                finish["data"]["result"] = result
+                start_index = next(
+                    i
+                    for i, record in enumerate(records)
+                    if record.get("event") == "present_call_started"
+                    and record["data"]["output_kind"] == "generated"
+                )
+                del records[start_index : start_index + 2]
+                _renumber(records)
+
+                summary = evaluate_trace(records)["summary"]
+                self.assertEqual(summary["acquire_results"][result], 1)
+                self.assertEqual(summary["abandoned_frame_count"], 0)
+                self.assertEqual(summary["late_generated_present_call_count"], 0)
+
+    def test_idle_acquired_frame_abandonment_is_not_a_late_present(self):
+        records = _records("valid-partial-prefix.jsonl")
+        start_index = next(
+            i
+            for i, record in enumerate(records)
+            if record.get("event") == "present_call_started"
+            and record["data"]["output_kind"] == "generated"
+        )
+        del records[start_index : start_index + 2]
+        destroy = _event(records, "context_destroyed")
+        destroy["data"]["closure_policy"] = "allow_idle_abandonment"
+        _renumber(records)
+
+        summary = evaluate_trace(records)["summary"]
+        self.assertEqual(summary["late_generated_present_call_count"], 0)
+        self.assertEqual(summary["abandoned_frame_count"], 1)
+
+    def test_context_profile_is_homogeneous_and_retained(self):
+        records = _records()
+        end = records.pop()
+        records.extend(
+            [
+                {
+                    "record": "event",
+                    "sequence": 0,
+                    "timestamp_ns": 800,
+                    "context_id": "ctx-b",
+                    "epoch": 0,
+                    "event": "context_created",
+                    "data": {"present_mode": "fifo", "refresh_interval_ns": 16666667},
+                },
+                {
+                    "record": "event",
+                    "sequence": 0,
+                    "timestamp_ns": 800,
+                    "context_id": "ctx-b",
+                    "epoch": 0,
+                    "event": "context_destroyed",
+                    "data": {"closure_policy": "strict"},
+                },
+            ]
+        )
+        records.append(end)
+        _renumber(records)
+        result = evaluate_trace(records)
+        self.assertEqual(
+            result["context_profile"],
+            {
+                "present_mode": "fifo",
+                "refresh_interval_ns": 16666667,
+            },
+        )
+
+        different = deepcopy(records)
+        different[-3]["data"]["present_mode"] = "mailbox"
+        with self.assertRaisesRegex(LatencyTraceError, "context_profile|homogeneous"):
+            evaluate_trace(different)
+
+    def test_subject_hashes_are_self_declared_and_retained_not_verified(self):
+        records = _records()
+        records[0]["subject"] = {
+            "plugin_git_sha": "1" * 40,
+            "engine_source_commit": "2" * 40,
+            "engine_sha256": "sha256:" + "3" * 64,
+            "config_sha256": "sha256:" + "4" * 64,
+        }
+        self.assertEqual(evaluate_trace(records)["subject"], records[0]["subject"])
+
+    def test_valid_summary_omits_impossible_missing_feedback_counter(self):
+        summary = evaluate_trace(_records())["summary"]
+        self.assertNotIn("missing_feedback_count", summary)
+
+    def test_canonical_result_has_exact_top_level_keys(self):
+        result = evaluate_trace(_records())
+
+        self.assertEqual(
+            set(result),
+            {
+                "valid",
+                "schema",
+                "trace_id",
+                "producer",
+                "measurement_scope",
+                "clock",
+                "subject",
+                "capabilities",
+                "workload_id",
+                "context_profile",
+                "summary",
+            },
+        )
+
+    def test_canonical_summary_has_exact_keys(self):
+        summary = evaluate_trace(_records())["summary"]
+
+        self.assertEqual(
+            set(summary),
+            {
+                "batch_count",
+                "planned_generated_frame_count",
+                "admitted_generated_frame_count",
+                "skipped_generated_frame_count",
+                "late_generated_present_call_count",
+                "maximum_queue_depth",
+                "acquire_results",
+                "present_results",
+                "expected_feedback_count",
+                "received_feedback_count",
+                "presented_feedback_count",
+                "dropped_feedback_count",
+                "unknown_feedback_count",
+                "recovery_attempt_count",
+                "recovery_failed_count",
+                "abandoned_frame_count",
+                "abandoned_batch_count",
+                "context_epoch_count",
+                "context_id_count",
+                "real_ready_to_present_call_proxy_ns",
+                "input_observed_to_present_call_entry_proxy_ns",
+                "host_generation_duration_ns",
+                "host_acquire_duration_ns",
+                "present_call_to_feedback_proxy_ns",
+                "real_present_call_to_feedback_proxy_ns",
+                "generated_present_call_to_feedback_proxy_ns",
+                "real_ready_to_presentation_feedback_proxy_ns",
+                "input_observed_to_real_feedback_proxy_ns",
+            },
+        )
+
+    def test_canonical_summary_distributions_have_exact_keys(self):
+        summary = evaluate_trace(_records())["summary"]
+        distribution_names = (
+            "real_ready_to_present_call_proxy_ns",
+            "input_observed_to_present_call_entry_proxy_ns",
+            "host_generation_duration_ns",
+            "host_acquire_duration_ns",
+            "present_call_to_feedback_proxy_ns",
+            "real_present_call_to_feedback_proxy_ns",
+            "generated_present_call_to_feedback_proxy_ns",
+            "real_ready_to_presentation_feedback_proxy_ns",
+            "input_observed_to_real_feedback_proxy_ns",
+        )
+
+        for name in distribution_names:
+            with self.subTest(distribution=name):
+                self.assertEqual(
+                    set(summary[name]),
+                    {"sample_count", "p50", "p95", "p99", "unavailable_reason"},
+                )
+
+    def test_canonical_summary_result_buckets_have_exact_keys(self):
+        summary = evaluate_trace(_records())["summary"]
+        expected = {"success", "suboptimal", "timeout", "out_of_date", "error"}
+
+        self.assertEqual(set(summary["acquire_results"]), expected)
+        self.assertEqual(set(summary["present_results"]), expected)
+
+    def test_line_limit_counts_json_bytes_not_lf_or_crlf_terminator(self):
+        splitter = latency_trace_gate._split_bounded_lines
+        for terminator in (b"\n", b"\r\n"):
+            with self.subTest(terminator=terminator):
+                self.assertEqual(
+                    splitter(b"x" * latency_trace_gate.MAX_LINE_BYTES + terminator),
+                    [b"x" * latency_trace_gate.MAX_LINE_BYTES],
+                )
+                with self.assertRaisesRegex(LatencyTraceError, "line 1 size"):
+                    splitter(
+                        b"x" * (latency_trace_gate.MAX_LINE_BYTES + 1) + terminator
+                    )
+
+    def test_cli_rejects_invalid_utf8_without_traceback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            trace = Path(directory) / "invalid-utf8.jsonl"
+            trace.write_bytes(b'{"record":"header"}\xff\n')
+            stderr = io.StringIO()
+            with redirect_stdout(io.StringIO()), redirect_stderr(stderr):
+                code = main([str(trace)])
+        self.assertEqual(code, EXIT_INVALID_TRACE)
+        self.assertNotIn("Traceback", stderr.getvalue())
+
+    def test_json_output_replace_failure_keeps_stale_file_untrusted_and_cleans_temp(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "result.json"
+            stale = b'{"valid":true,"stale":true}\n'
+            output.write_bytes(stale)
+            with mock.patch(
+                "scripts.latency_trace_gate.os.replace",
+                side_effect=OSError("replace failed"),
+            ):
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    code = main(
+                        [
+                            str(FIXTURES / "valid-real-only.jsonl"),
+                            "--json-output",
+                            str(output),
+                        ]
+                    )
+            self.assertEqual(code, EXIT_INVALID_TRACE)
+            self.assertEqual(output.read_bytes(), stale)
+            self.assertEqual([path.name for path in root.iterdir()], ["result.json"])
+
+    def test_json_output_is_fsynced_then_atomically_replaced_from_same_parent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "result.json"
+            real_replace = os.replace
+            real_fsync = os.fsync
+            operations = []
+
+            def observed_fsync(fd):
+                operations.append("fsync")
+                return real_fsync(fd)
+
+            def observed_replace(source, destination):
+                operations.append("replace")
+                return real_replace(source, destination)
+
+            with (
+                mock.patch(
+                    "scripts.latency_trace_gate.os.replace",
+                    side_effect=observed_replace,
+                ) as replace,
+                mock.patch(
+                    "scripts.latency_trace_gate.os.fsync",
+                    side_effect=observed_fsync,
+                ),
+            ):
+                latency_trace_gate._write_json({"valid": True}, output)
+
+            self.assertEqual(operations, ["fsync", "replace"])
+            replace.assert_called_once()
+            temporary, destination = map(Path, replace.call_args.args)
+            self.assertEqual(temporary.parent, output.parent)
+            self.assertEqual(destination, output)
+            self.assertEqual(
+                json.loads(output.read_text(encoding="utf-8")), {"valid": True}
+            )
+            self.assertEqual([path.name for path in root.iterdir()], ["result.json"])
+
+    def test_json_output_fsync_failure_keeps_stale_file_and_cleans_temp(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "result.json"
+            stale = b'{"valid":true,"stale":true}\n'
+            output.write_bytes(stale)
+
+            with mock.patch(
+                "scripts.latency_trace_gate.os.fsync",
+                side_effect=OSError("fsync failed"),
+            ):
+                with self.assertRaisesRegex(OSError, "fsync failed"):
+                    latency_trace_gate._write_json({"valid": True}, output)
+
+            self.assertEqual(output.read_bytes(), stale)
+            self.assertEqual([path.name for path in root.iterdir()], ["result.json"])
+
+    def test_simulator_scenarios_have_exact_semantic_summaries(self):
+        expected = {
+            "normal": (1, 1, 1, 0, 0, 0, 0, 3, 1),
+            "continuous": (2, 2, 2, 0, 0, 0, 0, 5, 2),
+            "prefix-skip": (1, 3, 1, 2, 0, 0, 0, 3, 1),
+            "deadline-miss": (1, 1, 1, 0, 1, 0, 0, 3, 1),
+            "recovery": (0, 0, 0, 0, 0, 1, 0, 1, 0),
+        }
+        simulator = ROOT / "scripts" / "latency_trace_simulator.py"
+        keys = (
+            "batch_count",
+            "planned_generated_frame_count",
+            "admitted_generated_frame_count",
+            "skipped_generated_frame_count",
+            "late_generated_present_call_count",
+            "recovery_attempt_count",
+            "recovery_failed_count",
+        )
+        for scenario, counts in expected.items():
+            with self.subTest(scenario=scenario):
+                payload = subprocess.run(
+                    [sys.executable, str(simulator), "--scenario", scenario],
+                    check=True,
+                    capture_output=True,
+                ).stdout
+                with tempfile.NamedTemporaryFile() as trace:
+                    trace.write(payload)
+                    trace.flush()
+                    summary = evaluate_trace(load_trace(Path(trace.name)))["summary"]
+                self.assertEqual(tuple(summary[key] for key in keys), counts[:7])
+                self.assertEqual(summary["present_results"]["success"], counts[7])
+                self.assertEqual(summary["acquire_results"]["success"], counts[8])
 
 
 if __name__ == "__main__":
