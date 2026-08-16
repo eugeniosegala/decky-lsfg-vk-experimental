@@ -14,18 +14,17 @@ SCRIPTS_DIR = PROJECT_DIR / "scripts"
 
 
 class PackagingContractTests(unittest.TestCase):
-    def _run_manifest_validator(self, script_name: str, manifest: dict):
-        script_text = (SCRIPTS_DIR / script_name).read_text(encoding="utf-8")
-        marker = "node -e '\n"
-        start = script_text.index(marker) + len(marker)
-        end = script_text.index("\n  ' \"$project_dir/package.json\"", start)
-        validator = script_text[start:end]
-
+    def _run_manifest_validator(self, mode: str, manifest: dict):
         with tempfile.TemporaryDirectory() as temp_dir:
             manifest_path = Path(temp_dir) / "package.json"
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
             return subprocess.run(
-                ["node", "-e", validator, str(manifest_path)],
+                [
+                    "node",
+                    str(SCRIPTS_DIR / "validate-package-manifest.mjs"),
+                    mode,
+                    str(manifest_path),
+                ],
                 check=False,
                 capture_output=True,
                 text=True,
@@ -53,7 +52,7 @@ class PackagingContractTests(unittest.TestCase):
         for remote_binary_count in (0, 1, 2):
             with self.subTest(remote_binary_count=remote_binary_count):
                 result = self._run_manifest_validator(
-                    "package-local.sh",
+                    "package-local",
                     self._manifest(remote_binary_count=remote_binary_count),
                 )
 
@@ -62,6 +61,12 @@ class PackagingContractTests(unittest.TestCase):
                         result.returncode, 0, result.stdout + result.stderr
                     )
                     self.assertEqual(result.stderr, "")
+                    self.assertEqual(
+                        result.stdout,
+                        "engine.tar.xz\t2.0.0-dev28-experimental.25\t"
+                        "https://example.invalid/engine.tar.xz\t"
+                        f"{'0' * 64}\t\t\t\n",
+                    )
                 else:
                     self.assertNotEqual(
                         result.returncode, 0, result.stdout + result.stderr
@@ -75,7 +80,7 @@ class PackagingContractTests(unittest.TestCase):
         for remote_binary_count in (0, 1, 2):
             with self.subTest(remote_binary_count=remote_binary_count):
                 result = self._run_manifest_validator(
-                    "publish-package.sh",
+                    "publish-package",
                     self._manifest(remote_binary_count=remote_binary_count),
                 )
 
@@ -84,6 +89,13 @@ class PackagingContractTests(unittest.TestCase):
                         result.returncode, 0, result.stdout + result.stderr
                     )
                     self.assertEqual(result.stderr, "")
+                    self.assertEqual(
+                        result.stdout,
+                        "engine.tar.xz\t2.0.0-dev28-experimental.25\t"
+                        "0.13.0-experimental.25\texample/project\tfalse\t"
+                        "https://example.invalid/engine.tar.xz\t"
+                        "v2.0.0-dev28-experimental.25\n",
+                    )
                 else:
                     self.assertNotEqual(
                         result.returncode, 0, result.stdout + result.stderr
@@ -92,6 +104,87 @@ class PackagingContractTests(unittest.TestCase):
                         "package.json must define exactly one remote_binary entry",
                         result.stderr,
                     )
+
+    def test_shared_validator_preserves_flatpak_fields_for_both_callers(self):
+        manifest = self._manifest()
+        manifest["remote_binary"][0]["flatpak_bundle"] = {
+            "name": "flatpaks.tar.xz",
+            "url": "https://example.invalid/flatpaks.tar.xz",
+            "sha256hash": "f" * 64,
+        }
+
+        package_local = self._run_manifest_validator("package-local", manifest)
+        publish_package = self._run_manifest_validator("publish-package", manifest)
+
+        self.assertEqual(
+            package_local.stdout,
+            "engine.tar.xz\t2.0.0-dev28-experimental.25\t"
+            "https://example.invalid/engine.tar.xz\t"
+            f"{'0' * 64}\tflatpaks.tar.xz\t"
+            "https://example.invalid/flatpaks.tar.xz\t"
+            f"{'f' * 64}\n",
+        )
+        self.assertEqual(package_local.stderr, "")
+        self.assertEqual(package_local.returncode, 0)
+        self.assertEqual(
+            publish_package.stdout,
+            "engine.tar.xz\t2.0.0-dev28-experimental.25\t"
+            "0.13.0-experimental.25\texample/project\ttrue\t"
+            "https://example.invalid/engine.tar.xz\t"
+            "v2.0.0-dev28-experimental.25\n",
+        )
+        self.assertEqual(publish_package.stderr, "")
+        self.assertEqual(publish_package.returncode, 0)
+
+    def test_package_local_shell_uses_shared_validator_mode_and_field_order(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "repo"
+            scripts = root / "scripts"
+            engine = Path(temp_dir) / "engine"
+            engine_scripts = engine / "scripts"
+            scripts.mkdir(parents=True)
+            engine_scripts.mkdir(parents=True)
+            shutil.copy2(SCRIPTS_DIR / "package-local.sh", scripts)
+            (root / "package.json").write_text("{}", encoding="utf-8")
+            (engine / "VERSION").write_text("actual-version\n", encoding="utf-8")
+            (engine_scripts / "package-local.sh").write_text("", encoding="utf-8")
+            (engine_scripts / "package-flatpaks.sh").write_text("", encoding="utf-8")
+            validator_log = root / "validator.log"
+            (scripts / "validate-package-manifest.mjs").write_text(
+                """import { appendFileSync } from "node:fs";
+appendFileSync(process.env.VALIDATOR_LOG, process.argv.slice(2).join("\\t"));
+process.stdout.write(
+  "engine.tar.xz\\texpected-version\\thttps://example.invalid/engine.tar.xz\\t" +
+  "0000000000000000000000000000000000000000000000000000000000000000" +
+  "\\t\\t\\t\\n",
+);
+""",
+                encoding="utf-8",
+            )
+
+            env = os.environ.copy()
+            env["VALIDATOR_LOG"] = str(validator_log)
+            result = subprocess.run(
+                [
+                    "bash",
+                    str(scripts / "package-local.sh"),
+                    "--local-engine-repo",
+                    str(engine),
+                ],
+                cwd=root,
+                env=env,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Decky:  expected-version", result.stderr)
+            self.assertIn("Engine: actual-version", result.stderr)
+            self.assertEqual(
+                validator_log.read_text(encoding="utf-8"),
+                f"package-local\t{root / 'package.json'}",
+            )
 
     def test_publish_rechecks_clean_worktree_after_local_packaging(self):
         result, commands, artifact_exists, package_invoked, _ = (
@@ -177,6 +270,7 @@ class PackagingContractTests(unittest.TestCase):
             scripts.mkdir(parents=True)
             fake_bin.mkdir()
             shutil.copy2(SCRIPTS_DIR / "publish-package.sh", scripts)
+            shutil.copy2(SCRIPTS_DIR / "validate-package-manifest.mjs", scripts)
             (root / "package.json").write_text(
                 json.dumps(self._manifest()), encoding="utf-8"
             )

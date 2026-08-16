@@ -77,27 +77,8 @@ if [[ -n "$(git -C "$project_dir" status --porcelain --untracked-files=normal)" 
 fi
 
 read -r archive_name engine_version package_version github_repository has_flatpak_bundle archive_url release_tag < <(
-  node -e '
-    const manifest = require(process.argv[1]);
-    if (!Array.isArray(manifest.remote_binary) || manifest.remote_binary.length !== 1) {
-      throw new Error("package.json must define exactly one remote_binary entry");
-    }
-    const [binary] = manifest.remote_binary;
-    const repositoryUrl = manifest.repository?.url;
-    const githubRepository = repositoryUrl
-      ?.replace(/^git\+https:\/\/github\.com\//, "")
-      .replace(/\.git$/, "");
-    const flatpak = binary?.flatpak_bundle;
-    if (!binary?.name || !binary?.version || !manifest.version || !githubRepository) {
-      process.exitCode = 1;
-      throw new Error("package.json must define version, GitHub repository, and one versioned remote_binary entry");
-    }
-    if (flatpak && (!flatpak.name || !flatpak.url || !flatpak.sha256hash)) {
-      process.exitCode = 1;
-      throw new Error("flatpak_bundle must define name, url, and sha256hash when present");
-    }
-    process.stdout.write(`${binary.name}\t${binary.version}\t${manifest.version}\t${githubRepository}\t${flatpak ? "true" : "false"}\t${binary.url ?? ""}\t${binary.release_tag ?? ""}\n`);
-  ' "$project_dir/package.json"
+  node "$script_dir/validate-package-manifest.mjs" \
+    publish-package "$project_dir/package.json"
 )
 
 notes_package_version="0.13.0-experimental.25"
