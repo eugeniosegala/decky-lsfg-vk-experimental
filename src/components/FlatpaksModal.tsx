@@ -169,6 +169,7 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
 
     try {
       const execution = await appMutationQueue.current.run<FlatpakOverrideResult, FlatpakAppInfo, FlatpakApp>({
+        operation,
         mutate: () => operation === 'set'
           ? setFlatpakAppOverride(app.app_id)
           : removeFlatpakAppOverride(app.app_id),
@@ -201,10 +202,12 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
         );
       } else {
         const summary = flatpakPresentationText(presentation.messageKey);
+        const errorMessage = presentation.detail ? `${summary}: ${presentation.detail}` : summary;
         setAppErrors((current) => ({
           ...current,
-          [app.app_id]: presentation.detail ? `${summary}: ${presentation.detail}` : summary,
+          [app.app_id]: errorMessage,
         }));
+        showErrorToast(summary, presentation.detail || app.app_name || app.app_id);
       }
     } catch (error) {
       console.error('Error changing app override:', error);
@@ -213,6 +216,10 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
         ...current,
         [app.app_id]: detail || t('FLATPAK_APPLICATION_ACTION_FAILED', 'Could not update'),
       }));
+      showErrorToast(
+        t('FLATPAK_APPLICATION_ACTION_FAILED', 'Could not update'),
+        detail || app.app_name || app.app_id,
+      );
       setAppMutationsDisabled(true);
     } finally {
       mutationActiveRef.current = false;
@@ -402,6 +409,24 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
                   } else if (actions.status === 'partial') {
                     statusColor = 'orange';
                     statusText = t('FLATPAK_STATUS_PARTIAL', 'Partial');
+                  } else if (actions.status === 'pending') {
+                    statusColor = '#f4a261';
+                    statusText = t('FLATPAK_STATUS_RECONCILIATION_PENDING', 'Reconciliation required');
+                  } else if (actions.status === 'blocked') {
+                    statusColor = '#f44336';
+                    statusText = t('FLATPAK_STATUS_MANUAL_REPAIR', 'Manual repair required');
+                  } else if (actions.status === 'unknown') {
+                    statusColor = 'orange';
+                    statusText = t(
+                      'FLATPAK_STATUS_OWNERSHIP_UNKNOWN',
+                      'Existing access - ownership unknown',
+                    );
+                  } else if (actions.status === 'retained') {
+                    statusColor = '#f4a261';
+                    statusText = t(
+                      'FLATPAK_STATUS_PREEXISTING_RETAINED',
+                      'Pre-existing Flatpak access retained',
+                    );
                   }
 
                   const appError = appErrors[app.app_id];
@@ -480,7 +505,16 @@ export const FlatpaksModal: FC<FlatpaksModalProps> = ({ closeModal }) => {
                               </ButtonItem>
                             </div>
                           )}
-                          {actions.status === 'unavailable' && (
+                          {actions.status === 'pending' && actions.explicit.length === 1 && (
+                            <ButtonItem
+                              layout="below"
+                              onClick={() => handleAppOverrideOperation(app, actions.explicit[0])}
+                              disabled={operationInProgress !== null || appMutationsDisabled}
+                            >
+                              {t('FLATPAK_RETRY_RECONCILIATION', 'Retry safe reconciliation')}
+                            </ButtonItem>
+                          )}
+                          {(actions.status === 'unavailable' || actions.status === 'blocked') && (
                             <ButtonItem
                               layout="below"
                               onClick={loadData}

@@ -122,6 +122,13 @@ export interface FlatpakObservedState {
   vk_add_implicit_layer_path_env: boolean;
 }
 
+export type FlatpakOwnershipStatus =
+  | "managed"
+  | "unmanaged"
+  | "unknown"
+  | "pending"
+  | "blocked";
+
 interface FlatpakAppBase {
   app_id: string;
   app_name: string;
@@ -130,6 +137,9 @@ interface FlatpakAppBase {
 
 export interface FlatpakAppAvailable extends FlatpakAppBase, FlatpakObservedState {
   status_available: true;
+  ownership_status: FlatpakOwnershipStatus;
+  ownership_operation?: FlatpakOverrideOperation;
+  ownership_error_code?: "ownership_pending" | "ownership_blocked";
   has_filesystem_override: boolean;
   has_wrapper_override: boolean;
   has_env_override: boolean;
@@ -172,6 +182,7 @@ interface FlatpakOverrideResultBase {
   operation: FlatpakOverrideOperation;
   message: string;
   failed_steps: Array<"apply_override">;
+  ownership_status: FlatpakOwnershipStatus;
 }
 
 export interface FlatpakOverrideCompleteResult extends FlatpakOverrideResultBase {
@@ -221,7 +232,12 @@ export interface FlatpakOverrideUnverifiedResult extends FlatpakOverrideResultBa
   success: false;
   outcome: "unverified";
   status_available: false;
-  error_code: "status_unavailable" | "operation_busy";
+  error_code:
+    | "status_unavailable"
+    | "operation_busy"
+    | "ownership_unknown"
+    | "ownership_pending"
+    | "ownership_blocked";
   error: string;
   warning: null;
   retryable: true;

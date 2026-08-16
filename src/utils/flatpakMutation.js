@@ -22,26 +22,27 @@ export function boundedFlatpakDetail(value) {
     : normalized;
 }
 
-function trustedState(app) {
-  if (!app) return undefined;
-  const source = app.status_available === true ? app : app.stale_state;
-  if (!source) return undefined;
-  return Object.fromEntries(OBSERVED_FIELDS.map((field) => [field, source[field]]));
-}
-
 function matchesMutationTarget(app, operation) {
   if (operation === "set") {
-    return app.config_filesystem_ready === true
-      && app.dll_filesystem_ready === true
-      && app.wrapper_filesystem_ready === true
-      && app.lsfg_config_env !== true
-      && app.vk_implicit_layer_path_env !== true
-      && app.vk_add_implicit_layer_path_env !== true;
+    return app.ownership_status === "managed"
+      && hasPreparedOverrideState(app);
   }
   if (operation === "remove") {
-    return OBSERVED_FIELDS.every((field) => app[field] === false);
+    return app.ownership_status === "unmanaged";
   }
   return false;
+}
+
+function hasPreparedOverrideState(app) {
+  return app.config_filesystem === true
+    && app.dll_filesystem === true
+    && app.wrapper_filesystem === true
+    && app.config_filesystem_ready === true
+    && app.dll_filesystem_ready === true
+    && app.wrapper_filesystem_ready === true
+    && app.lsfg_config_env !== true
+    && app.vk_implicit_layer_path_env !== true
+    && app.vk_add_implicit_layer_path_env !== true;
 }
 
 /** Merge a fresh list without converting unavailable observations into false state. */
@@ -56,17 +57,13 @@ export function mergeFlatpakApps(previousApps = [], listResult = {}) {
     };
   }
 
-  const previousById = new Map(previousApps.map((app) => [app.app_id, app]));
   const apps = listResult.apps.map((app) => {
     if (app.status_available === true) {
       return app;
     }
 
-    const priorState = trustedState(previousById.get(app.app_id));
     return {
       ...app,
-      stale: Boolean(priorState),
-      ...(priorState ? { stale_state: priorState } : {}),
       actionsDisabled: true,
     };
   });
@@ -75,7 +72,7 @@ export function mergeFlatpakApps(previousApps = [], listResult = {}) {
 }
 
 /** Run a mutation and exactly one authoritative refresh, regardless of outcome. */
-export async function runFlatpakMutation({ mutate, refresh, previousApps = [] }) {
+export async function runFlatpakMutation({ operation, mutate, refresh, previousApps = [] }) {
   let mutation;
   let mutationError;
   try {
@@ -95,6 +92,7 @@ export async function runFlatpakMutation({ mutate, refresh, previousApps = [] })
   }
 
   return {
+    operation,
     mutation,
     mutationError,
     refresh: refreshResult,
@@ -133,20 +131,33 @@ export function presentFlatpakMutationExecution(execution = {}, appId) {
   const refreshTrusted = execution.refresh?.success === true
     && refreshedApp?.status_available === true;
   const mutation = execution.mutation;
-  const targetVerified = refreshTrusted
-    && matchesMutationTarget(refreshedApp, mutation?.operation);
+  const requestedOperation = execution.operation ?? mutation?.operation;
+  const operationMatches = execution.operation == null
+    || mutation?.operation == null
+    || execution.operation === mutation.operation;
+  const mutationCompleted = mutation != null
+    && execution.mutationError == null
+    && operationMatches;
+  const targetVerified = mutationCompleted
+    && refreshTrusted
+    && matchesMutationTarget(refreshedApp, requestedOperation);
   const presentation = presentFlatpakMutation(
-    refreshTrusted
+    execution.mutationError
+      ? { outcome: "failed" }
+      : refreshTrusted
       ? (targetVerified ? mutation ?? {} : { outcome: "failed" })
       : { outcome: "unverified" },
   );
   const detail = presentation.kind === "success"
     ? boundedFlatpakDetail(mutation?.warning || mutation?.message)
     : boundedFlatpakDetail(
-      (refreshTrusted && !targetVerified
+      execution.mutationError
+      || (!operationMatches
+        ? "The backend response did not match the requested operation."
+        : undefined)
+      || (mutationCompleted && refreshTrusted && !targetVerified
         ? "The refreshed Flatpak state no longer matches the requested change."
         : mutation?.error)
-      || execution.mutationError
       || execution.refreshMessage
       || execution.refreshError,
     );
@@ -155,21 +166,49 @@ export function presentFlatpakMutationExecution(execution = {}, appId) {
 
 /** Describe safe controls for available app state. */
 export function describeFlatpakAppActions(app = {}) {
-  if (app.status_available !== true || app.actionsDisabled === true) {
+  if (
+    app.status_available === true
+    && app.actionsDisabled !== true
+    && app.ownership_status === "pending"
+    && (app.ownership_operation === "set" || app.ownership_operation === "remove")
+  ) {
+    return { status: "pending", explicit: [app.ownership_operation] };
+  }
+
+  if (
+    app.status_available === true
+    && app.actionsDisabled !== true
+    && app.ownership_status === "blocked"
+  ) {
+    return { status: "blocked", explicit: [] };
+  }
+
+  if (
+    app.status_available !== true
+    || app.actionsDisabled === true
+    || app.ownership_status === "pending"
+  ) {
     return { status: "unavailable", explicit: [] };
   }
 
-  const prepared = app.config_filesystem_ready === true
-    && app.dll_filesystem_ready === true
-    && app.wrapper_filesystem_ready === true
-    && app.lsfg_config_env !== true
-    && app.vk_implicit_layer_path_env !== true
-    && app.vk_add_implicit_layer_path_env !== true;
+  const prepared = hasPreparedOverrideState(app);
   const anyOverride = OBSERVED_FIELDS.some((field) => app[field] === true);
+  const ownershipStatus = app.ownership_status
+    ?? (anyOverride ? "unknown" : "unmanaged");
 
-  if (prepared) return { status: "prepared", toggle: "remove", explicit: [] };
-  if (!anyOverride) return { status: "none", toggle: "set", explicit: [] };
-  return { status: "partial", explicit: ["set", "remove"] };
+  if (ownershipStatus === "unknown") {
+    return { status: "unknown", explicit: ["set"] };
+  }
+  if (ownershipStatus === "managed" && prepared) {
+    return { status: "prepared", toggle: "remove", explicit: [] };
+  }
+  if (ownershipStatus === "managed") {
+    return { status: "partial", explicit: ["set", "remove"] };
+  }
+  if (anyOverride) {
+    return { status: "retained", toggle: "set", explicit: [] };
+  }
+  return { status: "none", toggle: "set", explicit: [] };
 }
 
 /** Serialize mutation plus refresh so a late older refresh cannot win. */

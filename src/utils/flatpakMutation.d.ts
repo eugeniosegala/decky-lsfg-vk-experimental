@@ -13,6 +13,13 @@ export interface FlatpakObservedState {
   vk_add_implicit_layer_path_env: boolean;
 }
 
+export type FlatpakOwnershipStatus =
+  | "managed"
+  | "unmanaged"
+  | "unknown"
+  | "pending"
+  | "blocked";
+
 export interface FlatpakMutationPresentation {
   kind: "success" | "error";
   messageKey: string;
@@ -21,18 +28,18 @@ export interface FlatpakMutationPresentation {
 export function boundedFlatpakDetail(value: unknown): string;
 
 export interface FlatpakMutationArguments<TMutation, TRefresh, TApp> {
+  operation?: FlatpakOverrideOperation;
   mutate: () => Promise<TMutation>;
   refresh: () => Promise<TRefresh>;
   previousApps?: TApp[];
 }
 
 export type FlatpakDisplayApp<TApp> = TApp & {
-  stale?: boolean;
-  stale_state?: FlatpakObservedState;
   actionsDisabled?: boolean;
 };
 
 export interface FlatpakMutationExecution<TMutation, TRefresh, TApp> {
+  operation?: FlatpakOverrideOperation;
   mutation?: TMutation;
   mutationError?: unknown;
   refresh?: TRefresh;
@@ -70,6 +77,8 @@ export function presentFlatpakMutationExecution<
   TApp extends Partial<FlatpakObservedState> & {
     app_id: string;
     status_available?: boolean;
+    ownership_status?: FlatpakOwnershipStatus;
+    ownership_operation?: FlatpakOverrideOperation;
   },
 >(
   execution: Partial<FlatpakMutationExecution<TMutation, TRefresh, TApp>>,
@@ -83,8 +92,10 @@ export function presentFlatpakMutationExecution<
 export function describeFlatpakAppActions(app: Partial<FlatpakObservedState> & {
   status_available?: boolean;
   actionsDisabled?: boolean;
+  ownership_status?: FlatpakOwnershipStatus;
+  ownership_operation?: FlatpakOverrideOperation;
 }): {
-  status: "prepared" | "partial" | "none" | "unavailable";
+  status: "prepared" | "partial" | "pending" | "blocked" | "unknown" | "retained" | "none" | "unavailable";
   toggle?: FlatpakOverrideOperation;
   explicit: FlatpakOverrideOperation[];
 };

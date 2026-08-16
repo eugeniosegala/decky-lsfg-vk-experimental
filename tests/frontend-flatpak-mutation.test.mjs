@@ -8,6 +8,7 @@ const complete = {
   success: true,
   outcome: "complete",
   status_available: true,
+  ownership_status: "unmanaged",
   error_code: undefined,
   operation: "remove",
 };
@@ -88,6 +89,22 @@ test("refreshes exactly once when the mutation RPC throws", async () => {
   assert.match(result.mutationError.message, /RPC disconnected/);
 });
 
+test("a thrown mutation keeps its original error after a successful refresh", async () => {
+  const { presentFlatpakMutationExecution, runFlatpakMutation } = await helper();
+  const execution = await runFlatpakMutation({
+    operation: "set",
+    mutate: async () => { throw new Error("RPC disconnected"); },
+    refresh: async () => ({ success: true, apps: [availableApp("one")] }),
+  });
+
+  const presentation = presentFlatpakMutationExecution(execution, "one");
+
+  assert.equal(presentation.kind, "error");
+  assert.equal(presentation.targetVerified, false);
+  assert.match(presentation.detail, /RPC disconnected/);
+  assert.doesNotMatch(presentation.detail, /no longer matches/);
+});
+
 test("surfaces refresh failure separately and retains previous authoritative apps", async () => {
   const { runFlatpakMutation } = await helper();
   const previousApps = [availableApp("one", { wrapper_filesystem: true })];
@@ -132,6 +149,7 @@ test("complete mutation is success only when refreshed state matches its target"
     mutation: { ...complete, operation: "set" },
     refresh: { success: true },
     apps: [availableApp("one", {
+      ownership_status: "managed",
       config_filesystem: true,
       dll_filesystem: true,
       wrapper_filesystem: true,
@@ -175,6 +193,38 @@ test("complete mutation is not success when a concurrent change reverses its tar
   assert.match(presentation.detail, /no longer matches/);
 });
 
+test("a mismatched response cannot override the locally requested operation", async () => {
+  const { presentFlatpakMutationExecution } = await helper();
+  const presentation = presentFlatpakMutationExecution({
+    operation: "set",
+    mutation: { ...complete, operation: "remove" },
+    refresh: { success: true },
+    apps: [availableApp("one")],
+  }, "one");
+
+  assert.equal(presentation.kind, "error");
+  assert.equal(presentation.targetVerified, false);
+  assert.match(presentation.detail, /requested operation/i);
+});
+
+test("readiness flags without path presence cannot verify a set operation", async () => {
+  const { presentFlatpakMutationExecution } = await helper();
+  const presentation = presentFlatpakMutationExecution({
+    mutation: { ...complete, operation: "set" },
+    refresh: { success: true },
+    apps: [availableApp("one", {
+      ownership_status: "managed",
+      config_filesystem_ready: true,
+      dll_filesystem_ready: true,
+      wrapper_filesystem_ready: true,
+    })],
+  }, "one");
+
+  assert.equal(presentation.kind, "error");
+  assert.equal(presentation.refreshTrusted, true);
+  assert.equal(presentation.targetVerified, false);
+});
+
 test("frontend diagnostics are single-line and bounded", async () => {
   const { boundedFlatpakDetail } = await helper();
   const detail = boundedFlatpakDetail("secret\0\n\t\u202e" + "x".repeat(5000));
@@ -183,7 +233,7 @@ test("frontend diagnostics are single-line and bounded", async () => {
   assert.equal(detail.includes("\u202e"), false);
 });
 
-test("an unavailable app retains prior trusted booleans only as stale display data", async () => {
+test("an unavailable app does not retain hidden stale permission state", async () => {
   const { mergeFlatpakApps } = await helper();
   const previous = [availableApp("one", {
     config_filesystem: true,
@@ -199,8 +249,8 @@ test("an unavailable app retains prior trusted booleans only as stale display da
   };
   const merged = mergeFlatpakApps(previous, { success: true, apps: [unavailable] });
   assert.equal(merged.apps[0].status_available, false);
-  assert.equal(merged.apps[0].stale, true);
-  assert.equal(merged.apps[0].stale_state.wrapper_filesystem, true);
+  assert.equal(merged.apps[0].stale, undefined);
+  assert.equal(merged.apps[0].stale_state, undefined);
   assert.equal(merged.apps[0].actionsDisabled, true);
   assert.equal(merged.apps[0].wrapper_filesystem, undefined);
 });
@@ -240,12 +290,89 @@ test("a list-level failure exposes only bounded sanitized diagnostic text", asyn
   assert.equal(merged.error.includes("\n"), false);
 });
 
-test("partial state exposes explicit finish and remove actions instead of a toggle", async () => {
+test("unknown legacy access can be adopted but not destructively removed", async () => {
   const { describeFlatpakAppActions } = await helper();
-  const app = availableApp("one", { config_filesystem: true });
+  const app = availableApp("one", {
+    ownership_status: "unknown",
+    config_filesystem: true,
+  });
   const actions = describeFlatpakAppActions(app);
   assert.equal(actions.toggle, undefined);
+  assert.equal(actions.status, "unknown");
+  assert.deepEqual(actions.explicit, ["set"]);
+});
+
+test("managed partial state exposes finish and remove actions", async () => {
+  const { describeFlatpakAppActions } = await helper();
+  const app = availableApp("one", {
+    ownership_status: "managed",
+    config_filesystem: true,
+  });
+  const actions = describeFlatpakAppActions(app);
+  assert.equal(actions.status, "partial");
   assert.deepEqual(actions.explicit, ["set", "remove"]);
+});
+
+test("a verified remove may preserve unowned baseline grants", async () => {
+  const { presentFlatpakMutationExecution } = await helper();
+  const presentation = presentFlatpakMutationExecution({
+    mutation: complete,
+    refresh: { success: true },
+    apps: [availableApp("one", {
+      ownership_status: "unmanaged",
+      config_filesystem: true,
+      config_filesystem_ready: true,
+    })],
+  }, "one");
+
+  assert.equal(presentation.kind, "success");
+  assert.equal(presentation.targetVerified, true);
+});
+
+test("unmanaged pre-existing access is shown as retained and never removable", async () => {
+  const { describeFlatpakAppActions } = await helper();
+  const actions = describeFlatpakAppActions(availableApp("one", {
+    ownership_status: "unmanaged",
+    config_filesystem: true,
+    config_filesystem_ready: true,
+  }));
+
+  assert.equal(actions.status, "retained");
+  assert.equal(actions.toggle, "set");
+  assert.deepEqual(actions.explicit, []);
+});
+
+test("pending ownership exposes only its recorded reconciliation operation", async () => {
+  const { describeFlatpakAppActions } = await helper();
+  const pendingSet = describeFlatpakAppActions(availableApp("one", {
+    ownership_status: "pending",
+    ownership_operation: "set",
+  }));
+  const pendingRemove = describeFlatpakAppActions(availableApp("one", {
+    ownership_status: "pending",
+    ownership_operation: "remove",
+  }));
+
+  assert.equal(pendingSet.status, "pending");
+  assert.deepEqual(pendingSet.explicit, ["set"]);
+  assert.equal(pendingRemove.status, "pending");
+  assert.deepEqual(pendingRemove.explicit, ["remove"]);
+});
+
+test("pending without a recorded operation stays unavailable and blocked requires manual repair", async () => {
+  const { describeFlatpakAppActions } = await helper();
+  const pending = describeFlatpakAppActions(
+    availableApp("pending", { ownership_status: "pending" }),
+  );
+  const blocked = describeFlatpakAppActions(availableApp("blocked", {
+    ownership_status: "blocked",
+    ownership_operation: "set",
+  }));
+
+  assert.equal(pending.status, "unavailable");
+  assert.deepEqual(pending.explicit, []);
+  assert.equal(blocked.status, "blocked");
+  assert.deepEqual(blocked.explicit, []);
 });
 
 test("serializes a second mutation until the first mutation and refresh finish", async () => {
