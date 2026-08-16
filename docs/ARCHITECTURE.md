@@ -89,7 +89,8 @@ tag, and publishes a GitHub prerelease. It is intentionally excluded from CI.
 ## Verification
 
 - `pnpm check` — full non-publishing local/PR gate; regenerates configuration
-  bindings and fails if either they or the generated translation bundle drift.
+  bindings, validates the pinned payload manifest, and fails if either the
+  bindings or generated translation bundle drift.
 - `pnpm test` — current Python unit suite.
 - `pnpm typecheck` — strict TypeScript check.
 - `pnpm run build` — i18n validation and production frontend bundle.

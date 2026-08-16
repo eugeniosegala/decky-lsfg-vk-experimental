@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import tempfile
 import unittest
@@ -35,7 +36,13 @@ class PackagingContractTests(unittest.TestCase):
         binary = {
             "name": "engine.tar.xz",
             "version": "2.0.0-dev28-experimental.25",
-            "url": "https://example.invalid/engine.tar.xz",
+            "lineage_version": "2.0.0-dev28",
+            "source_repository": "https://github.com/example/engine",
+            "source_commit": "1" * 40,
+            "url": (
+                "https://github.com/example/engine/releases/download/"
+                "v2.0.0-dev28-experimental.25/engine.tar.xz"
+            ),
             "sha256hash": "0" * 64,
             "release_tag": "v2.0.0-dev28-experimental.25",
         }
@@ -64,7 +71,8 @@ class PackagingContractTests(unittest.TestCase):
                     self.assertEqual(
                         result.stdout,
                         "engine.tar.xz\t2.0.0-dev28-experimental.25\t"
-                        "https://example.invalid/engine.tar.xz\t"
+                        "https://github.com/example/engine/releases/download/"
+                        "v2.0.0-dev28-experimental.25/engine.tar.xz\t"
                         f"{'0' * 64}\t\t\t\n",
                     )
                 else:
@@ -93,7 +101,8 @@ class PackagingContractTests(unittest.TestCase):
                         result.stdout,
                         "engine.tar.xz\t2.0.0-dev28-experimental.25\t"
                         "0.13.0-experimental.25\texample/project\tfalse\t"
-                        "https://example.invalid/engine.tar.xz\t"
+                        "https://github.com/example/engine/releases/download/"
+                        "v2.0.0-dev28-experimental.25/engine.tar.xz\t"
                         "v2.0.0-dev28-experimental.25\n",
                     )
                 else:
@@ -109,7 +118,10 @@ class PackagingContractTests(unittest.TestCase):
         manifest = self._manifest()
         manifest["remote_binary"][0]["flatpak_bundle"] = {
             "name": "flatpaks.tar.xz",
-            "url": "https://example.invalid/flatpaks.tar.xz",
+            "url": (
+                "https://github.com/example/engine/releases/download/"
+                "v2.0.0-dev28-experimental.25/flatpaks.tar.xz"
+            ),
             "sha256hash": "f" * 64,
         }
 
@@ -119,9 +131,11 @@ class PackagingContractTests(unittest.TestCase):
         self.assertEqual(
             package_local.stdout,
             "engine.tar.xz\t2.0.0-dev28-experimental.25\t"
-            "https://example.invalid/engine.tar.xz\t"
+            "https://github.com/example/engine/releases/download/"
+            "v2.0.0-dev28-experimental.25/engine.tar.xz\t"
             f"{'0' * 64}\tflatpaks.tar.xz\t"
-            "https://example.invalid/flatpaks.tar.xz\t"
+            "https://github.com/example/engine/releases/download/"
+            "v2.0.0-dev28-experimental.25/flatpaks.tar.xz\t"
             f"{'f' * 64}\n",
         )
         self.assertEqual(package_local.stderr, "")
@@ -130,11 +144,110 @@ class PackagingContractTests(unittest.TestCase):
             publish_package.stdout,
             "engine.tar.xz\t2.0.0-dev28-experimental.25\t"
             "0.13.0-experimental.25\texample/project\ttrue\t"
-            "https://example.invalid/engine.tar.xz\t"
+            "https://github.com/example/engine/releases/download/"
+            "v2.0.0-dev28-experimental.25/engine.tar.xz\t"
             "v2.0.0-dev28-experimental.25\n",
         )
         self.assertEqual(publish_package.stderr, "")
         self.assertEqual(publish_package.returncode, 0)
+
+    def test_repository_manifest_passes_every_validation_mode(self):
+        for mode in ("check", "package-local", "publish-package"):
+            with self.subTest(mode=mode):
+                result = subprocess.run(
+                    [
+                        "node",
+                        str(SCRIPTS_DIR / "validate-package-manifest.mjs"),
+                        mode,
+                        str(PROJECT_DIR / "package.json"),
+                    ],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                if mode == "check":
+                    self.assertEqual(result.stdout, "")
+
+    def test_manifest_rejects_unsafe_remote_binary_fields(self):
+        mutations = {
+            "non_string_name": ("name", ["engine.tar.xz"]),
+            "path_traversal_name": ("name", "../../escape.tar.xz"),
+            "newline_name": ("name", "engine\nINJECT.tar.xz"),
+            "tabbed_version": ("version", "2.0.0\tshifted"),
+            "insecure_url": ("url", "http://github.com/example/engine.tar.xz"),
+            "file_url": ("url", "file:///etc/passwd"),
+            "wrong_url_host": ("url", "https://example.invalid/engine.tar.xz"),
+            "mismatched_url_name": (
+                "url",
+                "https://github.com/example/engine/releases/download/"
+                "v2.0.0-dev28-experimental.25/other.tar.xz",
+            ),
+            "short_checksum": ("sha256hash", "f"),
+            "non_hex_checksum": ("sha256hash", "z" * 64),
+            "mismatched_release_tag": ("release_tag", "v9.9.9"),
+            "invalid_source_repository": (
+                "source_repository",
+                "ssh://attacker.invalid/repo",
+            ),
+            "invalid_source_commit": ("source_commit", "not-a-commit"),
+        }
+
+        for case, (field, value) in mutations.items():
+            for mode in ("check", "package-local", "publish-package"):
+                with self.subTest(case=case, mode=mode):
+                    manifest = self._manifest()
+                    manifest["remote_binary"][0][field] = value
+                    result = self._run_manifest_validator(mode, manifest)
+                    self.assertNotEqual(
+                        result.returncode, 0, result.stdout + result.stderr
+                    )
+
+    def test_manifest_rejects_invalid_repository_and_flatpak_fields(self):
+        invalid_repositories = (
+            "ssh://attacker.invalid/repo",
+            "https://github.com/example/project",
+            "git+https://github.com/example/project.git\nINJECT",
+        )
+        for repository_url in invalid_repositories:
+            for mode in ("check", "publish-package"):
+                with self.subTest(repository_url=repository_url, mode=mode):
+                    manifest = self._manifest()
+                    manifest["repository"]["url"] = repository_url
+                    result = self._run_manifest_validator(mode, manifest)
+                    self.assertNotEqual(
+                        result.returncode, 0, result.stdout + result.stderr
+                    )
+
+        invalid_flatpaks = (
+            {
+                "name": "../flatpaks.tar.xz",
+                "url": "https://github.com/x/y",
+                "sha256hash": "f" * 64,
+            },
+            {
+                "name": "flatpaks.tar.xz",
+                "url": "file:///tmp/flatpaks.tar.xz",
+                "sha256hash": "f" * 64,
+            },
+            {
+                "name": "flatpaks.tar.xz",
+                "url": (
+                    "https://github.com/example/engine/releases/download/"
+                    "v2.0.0-dev28-experimental.25/flatpaks.tar.xz"
+                ),
+                "sha256hash": "bad",
+            },
+        )
+        for flatpak_bundle in invalid_flatpaks:
+            for mode in ("check", "package-local", "publish-package"):
+                with self.subTest(flatpak_bundle=flatpak_bundle, mode=mode):
+                    manifest = self._manifest()
+                    manifest["remote_binary"][0]["flatpak_bundle"] = flatpak_bundle
+                    result = self._run_manifest_validator(mode, manifest)
+                    self.assertNotEqual(
+                        result.returncode, 0, result.stdout + result.stderr
+                    )
 
     def test_package_local_shell_uses_shared_validator_mode_and_field_order(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -145,6 +258,7 @@ class PackagingContractTests(unittest.TestCase):
             scripts.mkdir(parents=True)
             engine_scripts.mkdir(parents=True)
             shutil.copy2(SCRIPTS_DIR / "package-local.sh", scripts)
+            shutil.copy2(SCRIPTS_DIR / "package-output-path.sh", scripts)
             (root / "package.json").write_text("{}", encoding="utf-8")
             (engine / "VERSION").write_text("actual-version\n", encoding="utf-8")
             (engine_scripts / "package-local.sh").write_text("", encoding="utf-8")
@@ -183,7 +297,7 @@ process.stdout.write(
             self.assertIn("Engine: actual-version", result.stderr)
             self.assertEqual(
                 validator_log.read_text(encoding="utf-8"),
-                f"package-local\t{root / 'package.json'}",
+                f"package-local\t{root.resolve() / 'package.json'}",
             )
 
     def test_publish_rechecks_clean_worktree_after_local_packaging(self):
@@ -255,6 +369,167 @@ process.stdout.write(
         self.assertNotIn("tag -a", commands)
         self.assertNotIn("push origin", commands)
 
+    def test_publish_rejects_tracked_output_through_symlinked_parent(self):
+        real_git = shutil.which("git")
+        self.assertIsNotNone(real_git)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "repo"
+            scripts = root / "scripts"
+            fake_bin = root / "fake-bin"
+            scripts.mkdir(parents=True)
+            fake_bin.mkdir()
+            shutil.copy2(SCRIPTS_DIR / "publish-package.sh", scripts)
+            shutil.copy2(SCRIPTS_DIR / "package-output-path.sh", scripts)
+            shutil.copy2(SCRIPTS_DIR / "validate-package-manifest.mjs", scripts)
+            manifest_path = root / "package.json"
+            manifest_path.write_text(json.dumps(self._manifest()), encoding="utf-8")
+            original_manifest = manifest_path.read_bytes()
+            (root / "alias").symlink_to(".", target_is_directory=True)
+            package_invoked = root / "package-invoked"
+            self._write_executable(
+                scripts / "package-local.sh",
+                "#!/bin/sh\ntouch \"$FAKE_PACKAGE_INVOKED\"\nprintf 'overwritten\\n' > \"$1\"\n",
+            )
+            self._write_executable(fake_bin / "gh", "#!/bin/sh\nexit 0\n")
+
+            subprocess.run(
+                [real_git, "init", "-q", "-b", "main"], cwd=root, check=True
+            )
+            subprocess.run(
+                [real_git, "config", "user.email", "tests@example.invalid"],
+                cwd=root,
+                check=True,
+            )
+            subprocess.run(
+                [real_git, "config", "user.name", "Packaging Tests"],
+                cwd=root,
+                check=True,
+            )
+            subprocess.run([real_git, "add", "."], cwd=root, check=True)
+            subprocess.run(
+                [real_git, "commit", "-qm", "fixture"], cwd=root, check=True
+            )
+            subprocess.run(
+                [real_git, "tag", "v0.13.0-experimental.24"], cwd=root, check=True
+            )
+
+            env = os.environ.copy()
+            env.update(
+                {
+                    "PATH": f"{fake_bin}{os.pathsep}{env['PATH']}",
+                    "FAKE_PACKAGE_INVOKED": str(package_invoked),
+                }
+            )
+            result = subprocess.run(
+                [
+                    "bash",
+                    str(scripts / "publish-package.sh"),
+                    str(root / "alias" / "package.json"),
+                ],
+                cwd=root,
+                env=env,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("Refusing to publish to tracked output path", result.stderr)
+            self.assertFalse(package_invoked.exists())
+            self.assertEqual(manifest_path.read_bytes(), original_manifest)
+
+    def test_package_local_rejects_tracked_output_through_symlinked_parent(self):
+        real_git = shutil.which("git")
+        self.assertIsNotNone(real_git)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "repo"
+            scripts = root / "scripts"
+            scripts.mkdir(parents=True)
+            shutil.copy2(SCRIPTS_DIR / "package-local.sh", scripts)
+            shutil.copy2(SCRIPTS_DIR / "package-output-path.sh", scripts)
+            shutil.copy2(SCRIPTS_DIR / "validate-package-manifest.mjs", scripts)
+            manifest_path = root / "package.json"
+            manifest_path.write_text(json.dumps(self._manifest()), encoding="utf-8")
+            original_manifest = manifest_path.read_bytes()
+            (root / "alias").symlink_to(".", target_is_directory=True)
+
+            subprocess.run(
+                [real_git, "init", "-q", "-b", "main"], cwd=root, check=True
+            )
+            subprocess.run(
+                [real_git, "config", "user.email", "tests@example.invalid"],
+                cwd=root,
+                check=True,
+            )
+            subprocess.run(
+                [real_git, "config", "user.name", "Packaging Tests"],
+                cwd=root,
+                check=True,
+            )
+            subprocess.run([real_git, "add", "."], cwd=root, check=True)
+            subprocess.run(
+                [real_git, "commit", "-qm", "fixture"], cwd=root, check=True
+            )
+
+            unsafe_outputs = (
+                root / "alias" / "package.json",
+                root / "missing-parent" / ".." / "package.json",
+                root / "PACKAGE.JSON",
+            )
+            for output_path in unsafe_outputs:
+                with self.subTest(output_path=output_path):
+                    result = subprocess.run(
+                        ["bash", str(scripts / "package-local.sh"), str(output_path)],
+                        cwd=root,
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                    )
+
+                    self.assertNotEqual(
+                        result.returncode, 0, result.stdout + result.stderr
+                    )
+                    self.assertIn(
+                        "Refusing to package to tracked output path", result.stderr
+                    )
+                    self.assertEqual(manifest_path.read_bytes(), original_manifest)
+
+            alternate_root = Path(str(root).replace("/var/", "/VAR/", 1))
+            if alternate_root != root and alternate_root.exists():
+                self.assertTrue(os.path.samefile(root, alternate_root))
+                result = subprocess.run(
+                    [
+                        "bash",
+                        str(alternate_root / "scripts" / "package-local.sh"),
+                        str(manifest_path),
+                    ],
+                    cwd=alternate_root,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn(
+                    "Refusing to package to tracked output path", result.stderr
+                )
+                self.assertEqual(manifest_path.read_bytes(), original_manifest)
+
+            git_config = root / ".git" / "config"
+            original_git_config = git_config.read_bytes()
+            metadata_output = root / "missing-parent" / ".." / ".git" / "config"
+            result = subprocess.run(
+                ["bash", str(scripts / "package-local.sh"), str(metadata_output)],
+                cwd=root,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("inside repository metadata", result.stderr)
+            self.assertEqual(git_config.read_bytes(), original_git_config)
+
     def _run_publish_fixture(
         self,
         status_after_package: str,
@@ -270,6 +545,7 @@ process.stdout.write(
             scripts.mkdir(parents=True)
             fake_bin.mkdir()
             shutil.copy2(SCRIPTS_DIR / "publish-package.sh", scripts)
+            shutil.copy2(SCRIPTS_DIR / "package-output-path.sh", scripts)
             shutil.copy2(SCRIPTS_DIR / "validate-package-manifest.mjs", scripts)
             (root / "package.json").write_text(
                 json.dumps(self._manifest()), encoding="utf-8"
@@ -436,6 +712,68 @@ exit 0
             self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn("diff --exit-code", checked_paths)
             self.assertIn("src/i18n/languages.json", checked_paths)
+
+    def test_i18n_generation_failure_preserves_existing_output(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            scripts = root / "scripts"
+            defaults = root / "defaults" / "i18n"
+            output_dir = root / "src" / "i18n"
+            fake_bin = root / "fake-bin"
+            scripts.mkdir()
+            defaults.mkdir(parents=True)
+            output_dir.mkdir(parents=True)
+            fake_bin.mkdir()
+            shutil.copy2(SCRIPTS_DIR / "build_i18n_json.sh", scripts)
+            (defaults / "template.json").write_text("{}\n", encoding="utf-8")
+            output = output_dir / "languages.json"
+            output.write_bytes(b"original generated translations\n")
+            self._write_executable(fake_bin / "node", "#!/bin/sh\nexit 7\n")
+
+            env = os.environ.copy()
+            env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+            result = subprocess.run(
+                ["bash", str(scripts / "build_i18n_json.sh")],
+                cwd=root,
+                env=env,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 7, result.stdout + result.stderr)
+            self.assertEqual(output.read_bytes(), b"original generated translations\n")
+            self.assertEqual(list(output_dir.glob(".languages.json.*")), [])
+
+    def test_i18n_generation_publishes_readable_file_mode(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            scripts = root / "scripts"
+            defaults = root / "defaults" / "i18n"
+            output_dir = root / "src" / "i18n"
+            scripts.mkdir()
+            defaults.mkdir(parents=True)
+            output_dir.mkdir(parents=True)
+            shutil.copy2(SCRIPTS_DIR / "build_i18n_json.sh", scripts)
+            (defaults / "template.json").write_text(
+                '{"status":"ok"}\n', encoding="utf-8"
+            )
+
+            result = subprocess.run(
+                ["bash", str(scripts / "build_i18n_json.sh")],
+                cwd=root,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            output = output_dir / "languages.json"
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(
+                json.loads(output.read_text(encoding="utf-8")),
+                {"template": {"status": "ok"}},
+            )
+            self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o644)
 
     def test_staged_deletion_of_generated_output_fails_tracked_file_check(self):
         real_git = shutil.which("git")

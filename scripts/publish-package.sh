@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 script_dir="$project_dir/scripts"
+source "$script_dir/package-output-path.sh"
 output_path=""
 output_path_set=false
 
@@ -120,24 +121,11 @@ elif [[ "$output_path" != /* ]]; then
   output_path="$project_dir/$output_path"
 fi
 
-output_path="$(node -e '
-  const path = require("node:path");
-  process.stdout.write(path.resolve(process.argv[1]));
-' "$output_path")"
+output_path="$(canonicalize_package_output_path "$output_path")"
+reject_unsafe_repository_output "$project_dir" "$output_path" "publish"
 output_relative_path=""
 if [[ "$output_path" == "$project_dir/"* ]]; then
   output_relative_path="${output_path#"$project_dir/"}"
-  if git -C "$project_dir" ls-files --error-unmatch -- \
-      ":(literal)$output_relative_path" >/dev/null 2>&1; then
-    echo "Refusing to publish to tracked output path: $output_path" >&2
-    exit 1
-  else
-    ls_files_status=$?
-    if [[ "$ls_files_status" -ne 1 ]]; then
-      echo "Could not classify the in-repository output path: $output_path" >&2
-      exit 1
-    fi
-  fi
 fi
 
 "$script_dir/package-local.sh" "$output_path"

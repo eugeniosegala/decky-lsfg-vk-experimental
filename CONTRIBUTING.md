@@ -5,7 +5,7 @@
 - Node.js 20, 22, or 24
 - pnpm 10 (the repository pins pnpm 10.18.0 through Corepack)
 - Python 3.12 or newer
-- Bash for the packaging and diagnostic scripts
+- Bash and Git for the packaging and diagnostic scripts
 
 Enable the pinned package manager and install dependencies:
 
@@ -24,14 +24,16 @@ pnpm check
 ```
 
 The gate verifies generated configuration bindings, Python byte-compilation,
-shell syntax, all Python unit tests, strict TypeScript type checking, i18n
-consistency, and the production frontend bundle.
+shell syntax, the repository's pinned payload manifest, all Python unit tests,
+strict TypeScript type checking, i18n consistency, and the production frontend
+bundle.
 
 Individual commands are also available:
 
 ```bash
 pnpm test
 pnpm typecheck
+pnpm run check:manifest
 pnpm run check:generated
 pnpm run check:shell
 pnpm run build

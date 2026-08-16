@@ -2,8 +2,9 @@
 # Build a complete, manually installable Decky plugin archive.
 set -euo pipefail
 
-project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 script_dir="$project_dir/scripts"
+source "$script_dir/package-output-path.sh"
 output_path=""
 output_path_set=false
 engine_archive_path=""
@@ -147,7 +148,7 @@ if [[ "$build_64_only" == true && -z "$local_engine_repo" ]]; then
   exit 2
 fi
 
-for command in curl node npm python3 strings tar zip unzip; do
+for command in curl git node npm python3 strings tar zip unzip; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "Required command not found: $command" >&2
     exit 1
@@ -300,6 +301,8 @@ case "$output_path" in
   /*) ;;
   *) output_path="$project_dir/$output_path" ;;
 esac
+output_path="$(canonicalize_package_output_path "$output_path")"
+reject_unsafe_repository_output "$project_dir" "$output_path" "package"
 
 staging_dir="$(mktemp -d "${TMPDIR:-/tmp}/decky-lsfg-vk-package.XXXXXX")"
 package_name="Decky LSFG-VK Experimental"
