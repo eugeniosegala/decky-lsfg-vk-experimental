@@ -4,8 +4,11 @@ Flatpak service for managing lsfg-vk Flatpak runtime extensions.
 
 import subprocess
 import os
+import re
+import threading
+import unicodedata
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Literal, Optional
 
 from .base_service import BaseService
 from .config_schema import ConfigurationManager
@@ -17,7 +20,25 @@ from .constants import (
     FLATPAK_EXTENSION_NAME,
     FLATPAK_IMPLICIT_LAYER_DIR,
 )
-from .types import BaseResponse
+from .types import (
+    BaseResponse,
+    FlatpakObservedState,
+    FlatpakOverrideOperation,
+    FlatpakOverrideOperationResponse,
+)
+
+
+FLATPAK_DIAGNOSTIC_LIMIT = 512
+FLATPAK_OVERRIDE_STEP = "apply_override"
+FLATPAK_APP_ID_MAX_LENGTH = 255
+FLATPAK_APP_ID_PATTERN = re.compile(
+    rf"[A-Za-z0-9][A-Za-z0-9._-]{{0,{FLATPAK_APP_ID_MAX_LENGTH - 1}}}\Z"
+)
+LEGACY_ENVIRONMENT_FIELDS = {
+    "LSFGVK_CONFIG": "lsfg_config_env",
+    "VK_IMPLICIT_LAYER_PATH": "vk_implicit_layer_path_env",
+    "VK_ADD_IMPLICIT_LAYER_PATH": "vk_add_implicit_layer_path_env",
+}
 
 
 class FlatpakExtensionStatus(BaseResponse):
@@ -39,15 +60,6 @@ class FlatpakAppInfo(BaseResponse):
         self.total_apps = total_apps
 
 
-class FlatpakOverrideResponse(BaseResponse):
-    """Response for Flatpak override operations"""
-    def __init__(self, success: bool = False, message: str = "", error: str = "",
-                 app_id: str = "", operation: str = ""):
-        super().__init__(success, message, error)
-        self.app_id = app_id
-        self.operation = operation
-
-
 class FlatpakService(BaseService):
     """Service for handling Flatpak runtime extensions and app overrides"""
 
@@ -57,6 +69,7 @@ class FlatpakService(BaseService):
         self.extension_id_24_08 = f"{FLATPAK_EXTENSION_NAME}/x86_64/24.08"
         self.extension_id_25_08 = f"{FLATPAK_EXTENSION_NAME}/x86_64/25.08"
         self.flatpak_command = None
+        self._app_override_lock = threading.Lock()
 
     def _get_lsfg_paths(self) -> tuple[str, str]:
         """Return the config directory and read-only directory containing Lossless.dll.
@@ -346,29 +359,52 @@ class FlatpakService(BaseService):
                     app_name = parts[0].strip()
                     app_id = parts[1].strip()
 
-                    # Check override status
-                    override_status = self._check_app_override_status(app_id)
-
-                    apps.append({
+                    observation, observation_error = self._observe_app_override_status(app_id)
+                    app = {
                         "app_id": app_id,
                         "app_name": app_name,
                         "wrapper_path": str(self.lsfg_launch_script_path),
-                        "has_filesystem_override": override_status["filesystem"],
-                        "has_wrapper_override": override_status["wrapper"],
-                        "has_env_override": override_status["legacy_env"],
-                    })
+                    }
+                    if observation is None:
+                        app.update({
+                            "status_available": False,
+                            "status_error_code": "status_unavailable",
+                            "status_error": observation_error,
+                        })
+                    else:
+                        app.update(observation)
+                        app.update({
+                            "status_available": True,
+                            "has_filesystem_override": (
+                                observation["config_filesystem_ready"]
+                                and observation["dll_filesystem_ready"]
+                            ),
+                            "has_wrapper_override": observation["wrapper_filesystem_ready"],
+                            "has_env_override": any(
+                                observation[field]
+                                for field in LEGACY_ENVIRONMENT_FIELDS.values()
+                            ),
+                        })
+                    apps.append(app)
 
             return self._success_response(FlatpakAppInfo,
                                         f"Found {len(apps)} Flatpak applications",
                                         apps=apps, total_apps=len(apps))
 
-        except subprocess.CalledProcessError as e:
-            error_msg = f"Error getting Flatpak apps: {e.stderr if e.stderr else str(e)}"
+        except Exception as e:
+            detail = e.stderr if isinstance(e, subprocess.CalledProcessError) and e.stderr else e
+            error_msg = self._sanitize_flatpak_detail(
+                f"Error getting Flatpak apps: {detail}"
+            )
             self.log.error(error_msg)
             return self._error_response(FlatpakAppInfo, error_msg, apps=[], total_apps=0)
 
-    def _check_app_override_status(self, app_id: str) -> Dict[str, bool]:
-        """Check whether an app can execute the per-game experimental wrapper."""
+    def _observe_app_override_status(
+        self, app_id: str
+    ) -> tuple[Optional[FlatpakObservedState], Optional[str]]:
+        """Strictly observe the override state without inventing an all-false result."""
+        if not self._valid_app_id(app_id):
+            return None, "Invalid Flatpak application identifier."
         try:
             result = self._run_flatpak_command(
                 ["override", "--user", "--show", app_id],
@@ -376,7 +412,8 @@ class FlatpakService(BaseService):
             )
 
             if result.returncode != 0:
-                return {"filesystem": False, "wrapper": False, "legacy_env": False}
+                detail = self._sanitize_flatpak_detail(result.stderr or result.stdout)
+                return None, detail or "Flatpak could not read the application overrides."
 
             output = result.stdout
             config_path, dll_directory = self._get_lsfg_paths()
@@ -395,14 +432,24 @@ class FlatpakService(BaseService):
                     filesystem_section = line
                     break
             
-            has_config_fs = self._filesystem_override_present(filesystem_section, config_path)
-            has_dll_fs = self._filesystem_override_present(filesystem_section, dll_directory)
-            has_wrapper_fs = self._filesystem_override_present(filesystem_section, wrapper_path)
+            has_config_fs, config_fs_ready = self._filesystem_override_state(
+                filesystem_section, config_path, "rw"
+            )
+            has_dll_fs, dll_fs_ready = self._filesystem_override_state(
+                filesystem_section, dll_directory, "ro"
+            )
+            has_wrapper_fs, wrapper_fs_ready = self._filesystem_override_state(
+                filesystem_section, wrapper_path, "ro"
+            )
 
-            filesystem_override = has_config_fs and has_dll_fs
-
-            has_lsfg_config_env = False
-            has_isolated_layer_env = False
+            environment_state = {
+                field: False for field in LEGACY_ENVIRONMENT_FIELDS.values()
+            }
+            expected_environment = {
+                "LSFGVK_CONFIG": f"{config_path}/conf.toml",
+                "VK_IMPLICIT_LAYER_PATH": FLATPAK_IMPLICIT_LAYER_DIR,
+                "VK_ADD_IMPLICIT_LAYER_PATH": FLATPAK_IMPLICIT_LAYER_DIR,
+            }
             in_environment = False
             
             for line in output.split('\n'):
@@ -411,40 +458,56 @@ class FlatpakService(BaseService):
                     in_environment = True
                 elif line.startswith("[") and line != "[Environment]":
                     in_environment = False
-                elif in_environment and line.startswith(f"LSFGVK_CONFIG={config_path}/conf.toml"):
-                    has_lsfg_config_env = True
-                elif in_environment and (
-                    line.startswith(f"VK_IMPLICIT_LAYER_PATH={FLATPAK_IMPLICIT_LAYER_DIR}")
-                    or line.startswith(f"VK_ADD_IMPLICIT_LAYER_PATH={FLATPAK_IMPLICIT_LAYER_DIR}")
-                ):
-                    has_isolated_layer_env = True
-
-            legacy_env_override = has_lsfg_config_env or has_isolated_layer_env
+                elif in_environment:
+                    variable, separator, value = line.partition("=")
+                    if separator and variable in LEGACY_ENVIRONMENT_FIELDS:
+                        # ``--unset-env`` is represented separately in Context.
+                        # Only plugin-owned legacy values are safe to neutralize;
+                        # unrelated user values must be preserved.
+                        environment_state[LEGACY_ENVIRONMENT_FIELDS[variable]] = (
+                            value == expected_environment[variable]
+                        )
 
             self.log.debug(
-                "Override status for %s: resources=%s (%s/%s), wrapper=%s, legacy_env=%s (%s/%s)",
+                "Override status for %s: config=%s dll=%s wrapper=%s legacy_env=%s",
                 app_id,
-                filesystem_override,
                 has_config_fs,
                 has_dll_fs,
                 has_wrapper_fs,
-                legacy_env_override,
-                has_lsfg_config_env,
-                has_isolated_layer_env,
+                environment_state,
             )
-            
+
             return {
-                "filesystem": filesystem_override,
-                "wrapper": has_wrapper_fs,
-                "legacy_env": legacy_env_override,
-            }
+                "config_filesystem": has_config_fs,
+                "dll_filesystem": has_dll_fs,
+                "wrapper_filesystem": has_wrapper_fs,
+                "config_filesystem_ready": config_fs_ready,
+                "dll_filesystem_ready": dll_fs_ready,
+                "wrapper_filesystem_ready": wrapper_fs_ready,
+                **environment_state,
+            }, None
 
         except Exception as e:
-            self.log.error(f"Error checking override status for {app_id}: {e}")
-            return {"filesystem": False, "wrapper": False, "legacy_env": False}
+            detail = self._sanitize_flatpak_detail(e)
+            self.log.error("Error checking override status for %s: %s", app_id, detail)
+            return None, detail or "Flatpak override status is unavailable."
 
-    def _filesystem_override_present(self, filesystem_section: str, host_path: str) -> bool:
-        """Match Flatpak's absolute or home-relative permission representation.
+    @staticmethod
+    def _sanitize_flatpak_detail(value: object) -> str:
+        """Return bounded single-line diagnostic text safe for the local UI/log."""
+        printable = "".join(
+            " " if unicodedata.category(character) in {"Cc", "Cf", "Cs"} else character
+            for character in str(value or "")
+        )
+        normalized = " ".join(printable.split())
+        if len(normalized) <= FLATPAK_DIAGNOSTIC_LIMIT:
+            return normalized
+        return f"{normalized[:FLATPAK_DIAGNOSTIC_LIMIT - 1]}…"
+
+    def _filesystem_override_state(
+        self, filesystem_section: str, host_path: str, required_mode: Literal["ro", "rw"]
+    ) -> tuple[bool, bool]:
+        """Return exact-path presence and required-mode readiness separately.
 
         ``flatpak override --show`` may render a user-home path as ``~/.…``
         even though the plugin originally set it as an absolute path. Accept
@@ -462,152 +525,385 @@ class FlatpakService(BaseService):
             accepted_paths.add(f"~/{relative_path.as_posix()}")
 
         _, _, raw_entries = filesystem_section.partition("=")
-        enabled = False
+        present = False
+        ready = False
         for entry in raw_entries.split(";"):
             entry = entry.strip()
             if not entry:
                 continue
             denied = entry.startswith("!")
-            permission_path = entry[1:] if denied else entry
-            permission_path = permission_path.split(":", 1)[0]
+            permission = entry[1:] if denied else entry
+            permission_path, separator, mode = permission.rpartition(":")
+            if not separator or mode not in {"ro", "rw", "create"}:
+                permission_path = permission
+                mode = "rw"
             if permission_path in accepted_paths:
                 if denied:
-                    return False
-                enabled = True
+                    return False, False
+                present = True
+                ready = mode == required_mode
 
-        return enabled
+        return present, ready
 
-    def set_app_override(self, app_id: str) -> FlatpakOverrideResponse:
-        """Set lsfg-vk overrides for a Flatpak app"""
+    def _override_rejected(
+        self, app_id: str, operation: FlatpakOverrideOperation, error: str
+    ) -> FlatpakOverrideOperationResponse:
+        return {
+            "success": False,
+            "outcome": "rejected",
+            "status_available": False,
+            "error_code": "precondition_failed",
+            "retryable": False,
+            "app_id": app_id,
+            "operation": operation,
+            "message": "",
+            "error": error,
+            "warning": None,
+            "failed_steps": [],
+        }
+
+    @staticmethod
+    def _valid_app_id(app_id: str) -> bool:
+        """Reject values that could be parsed as options or omit the APP target."""
+        return isinstance(app_id, str) and bool(FLATPAK_APP_ID_PATTERN.fullmatch(app_id))
+
+    def _observe_before_mutation(
+        self, app_id: str, operation: FlatpakOverrideOperation
+    ) -> tuple[Optional[FlatpakObservedState], Optional[FlatpakOverrideOperationResponse]]:
+        observed_state, observation_error = self._observe_app_override_status(app_id)
+        if observed_state is not None:
+            return observed_state, None
+        detail = observation_error or "Flatpak override status is unavailable."
+        return None, self._override_unverified(
+            app_id,
+            operation,
+            self._sanitize_flatpak_detail(
+                "No settings were changed because the current override state "
+                f"could not be read: {detail}"
+            ),
+        )
+
+    def _override_unverified(
+        self,
+        app_id: str,
+        operation: FlatpakOverrideOperation,
+        error: str,
+        error_code: Literal["status_unavailable", "operation_busy"] = "status_unavailable",
+        failed: bool = False,
+    ) -> FlatpakOverrideOperationResponse:
+        return {
+            "success": False,
+            "outcome": "unverified",
+            "status_available": False,
+            "error_code": error_code,
+            "retryable": True,
+            "app_id": app_id,
+            "operation": operation,
+            "message": "",
+            "error": error,
+            "warning": None,
+            "failed_steps": [FLATPAK_OVERRIDE_STEP] if failed else [],
+        }
+
+    def _override_precondition_unavailable(
+        self,
+        app_id: str,
+        operation: FlatpakOverrideOperation,
+        error: Exception,
+    ) -> FlatpakOverrideOperationResponse:
+        """Return a truthful RPC response when a prerequisite probe raises."""
+        detail = self._sanitize_flatpak_detail(error)
+        self.log.warning(
+            "Flatpak override prerequisite failed app=%s operation=%s: %s",
+            app_id,
+            operation,
+            detail,
+        )
+        return self._override_unverified(
+            app_id,
+            operation,
+            self._sanitize_flatpak_detail(
+                "No settings were changed because a prerequisite check failed: "
+                f"{detail}"
+            ),
+        )
+
+    def _override_execution_unavailable(
+        self,
+        app_id: str,
+        operation: FlatpakOverrideOperation,
+        error: Exception,
+    ) -> FlatpakOverrideOperationResponse:
+        """Fail closed when an unexpected error occurs after mutation starts."""
+        detail = self._sanitize_flatpak_detail(error)
+        self.log.error(
+            "Flatpak override result handling failed app=%s operation=%s: %s",
+            app_id,
+            operation,
+            detail,
+        )
+        return self._override_unverified(
+            app_id,
+            operation,
+            self._sanitize_flatpak_detail(
+                "The operation may have changed settings, but its final state "
+                f"could not be verified: {detail}"
+            ),
+            failed=True,
+        )
+
+    def _classify_override_result(
+        self,
+        app_id: str,
+        operation: FlatpakOverrideOperation,
+        observed_state: FlatpakObservedState,
+        command_error: Optional[str],
+    ) -> FlatpakOverrideOperationResponse:
+        filesystems_present = (
+            observed_state["config_filesystem"],
+            observed_state["dll_filesystem"],
+            observed_state["wrapper_filesystem"],
+        )
+        filesystems_ready = (
+            observed_state["config_filesystem_ready"],
+            observed_state["dll_filesystem_ready"],
+            observed_state["wrapper_filesystem_ready"],
+        )
+        legacy_environment = tuple(
+            observed_state[field] for field in LEGACY_ENVIRONMENT_FIELDS.values()
+        )
+
+        if operation == "set":
+            target_matches = filesystems_ready + tuple(
+                not present for present in legacy_environment
+            )
+        else:
+            all_values = filesystems_present + legacy_environment
+            target_matches = tuple(not present for present in all_values)
+
+        complete = all(target_matches)
+        partial = not complete and any(target_matches)
+
+        failed_steps = [FLATPAK_OVERRIDE_STEP] if command_error else []
+        if complete:
+            message = (
+                f"lsfg-vk per-game wrapper access prepared for {app_id}"
+                if operation == "set"
+                else f"lsfg-vk overrides removed for {app_id}"
+            )
+            warning = None
+            if command_error:
+                warning = self._sanitize_flatpak_detail(
+                    "The requested state was verified, although Flatpak reported: "
+                    f"{command_error}"
+                )
+            response: FlatpakOverrideOperationResponse = {
+                "success": True,
+                "outcome": "complete",
+                "status_available": True,
+                "retryable": False,
+                "app_id": app_id,
+                "operation": operation,
+                "message": message,
+                "error": None,
+                "warning": warning,
+                "failed_steps": failed_steps,
+                "observed_state": observed_state,
+            }
+        else:
+            outcome = "partial" if partial else "failed"
+            error_code = "partial_failure" if partial else "operation_failed"
+            summary = (
+                "Flatpak applied only part of the requested override state."
+                if partial
+                else "Flatpak did not reach the requested override state."
+            )
+            error = self._sanitize_flatpak_detail(
+                f"{summary} {command_error}" if command_error else summary
+            )
+            response = {
+                "success": False,
+                "outcome": outcome,
+                "status_available": True,
+                "error_code": error_code,
+                "retryable": True,
+                "app_id": app_id,
+                "operation": operation,
+                "message": "",
+                "error": error,
+                "warning": None,
+                "failed_steps": failed_steps,
+                "observed_state": observed_state,
+            }
+
+        self.log.info(
+            "Flatpak override result app=%s operation=%s outcome=%s failed_steps=%s",
+            app_id,
+            operation,
+            response["outcome"],
+            failed_steps,
+        )
+        return response
+
+    def _apply_and_observe_override(
+        self, app_id: str, operation: FlatpakOverrideOperation, arguments: List[str]
+    ) -> FlatpakOverrideOperationResponse:
+        command_error = None
+        try:
+            result = self._run_flatpak_command(
+                arguments,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0:
+                command_error = self._sanitize_flatpak_detail(
+                    result.stderr or result.stdout or f"Flatpak exited with {result.returncode}."
+                )
+        except Exception as error:
+            command_error = self._sanitize_flatpak_detail(error)
+
+        observed_state, observation_error = self._observe_app_override_status(app_id)
+        if observed_state is None:
+            detail = observation_error or "Flatpak override status is unavailable."
+            error = self._sanitize_flatpak_detail(
+                "The operation may have changed settings, but the current state "
+                f"could not be verified: {detail}"
+            )
+            return self._override_unverified(
+                app_id,
+                operation,
+                error,
+                failed=command_error is not None,
+            )
+        return self._classify_override_result(
+            app_id, operation, observed_state, command_error
+        )
+
+    def _try_override_lock(
+        self, app_id: str, operation: FlatpakOverrideOperation
+    ) -> Optional[FlatpakOverrideOperationResponse]:
+        if self._app_override_lock.acquire(blocking=False):
+            return None
+        return self._override_unverified(
+            app_id,
+            operation,
+            "Another Flatpak application change is still in progress. Refresh shortly.",
+            error_code="operation_busy",
+        )
+
+    def set_app_override(self, app_id: str) -> FlatpakOverrideOperationResponse:
+        """Prepare one Flatpak app and report its strictly observed final state."""
+        if not self._valid_app_id(app_id):
+            return self._override_rejected(
+                app_id, "set", "Invalid Flatpak application identifier."
+            )
+        busy = self._try_override_lock(app_id, "set")
+        if busy is not None:
+            return busy
+        mutation_started = False
         try:
             if not self.check_flatpak_available():
-                return self._error_response(FlatpakOverrideResponse,
-                                          "Flatpak is not available on this system",
-                                          app_id=app_id, operation="set")
+                return self._override_rejected(
+                    app_id, "set", "Flatpak is not available on this system"
+                )
 
             runtime_version = self._get_app_runtime_version(app_id)
             if runtime_version is None:
-                return self._error_response(
-                    FlatpakOverrideResponse,
+                return self._override_rejected(
+                    app_id,
+                    "set",
                     "Could not determine a supported Flatpak runtime for this application. "
                     "Install the matching experimental runtime extension first.",
-                    app_id=app_id,
-                    operation="set",
                 )
             if not self._is_extension_installed(runtime_version):
-                return self._error_response(
-                    FlatpakOverrideResponse,
+                return self._override_rejected(
+                    app_id,
+                    "set",
                     f"Install the experimental {runtime_version} runtime extension before enabling this application.",
-                    app_id=app_id,
-                    operation="set",
                 )
 
             if not self.lsfg_launch_script_path.is_file():
-                return self._error_response(
-                    FlatpakOverrideResponse,
+                return self._override_rejected(
+                    app_id,
+                    "set",
                     "Install Experimental LSFG-VK before preparing a Flatpak application.",
-                    app_id=app_id,
-                    operation="set",
                 )
 
             config_path, dll_directory = self._get_lsfg_paths()
             wrapper_path = str(self.lsfg_launch_script_path)
+            initial_state, read_error = self._observe_before_mutation(app_id, "set")
+            if initial_state is None:
+                assert read_error is not None
+                return read_error
 
-            filesystem_overrides = [
+            arguments = [
+                "override",
+                "--user",
                 f"--filesystem={config_path}:rw",
                 f"--filesystem={dll_directory}:ro",
                 f"--filesystem={wrapper_path}:ro",
+                *[
+                    f"--unset-env={variable}"
+                    for variable, field in LEGACY_ENVIRONMENT_FIELDS.items()
+                    if initial_state[field]
+                ],
+                app_id,
             ]
-            
-            for override in filesystem_overrides:
-                result = self._run_flatpak_command(
-                    ["override", "--user", override, app_id],
-                    capture_output=True, text=True
-                )
-                if result.returncode != 0:
-                    error_msg = f"Failed to set filesystem override {override}: {result.stderr}"
-                    return self._error_response(FlatpakOverrideResponse, error_msg,
-                                              app_id=app_id, operation="set")
+            mutation_started = True
+            return self._apply_and_observe_override(app_id, "set", arguments)
+        except Exception as error:
+            if mutation_started:
+                return self._override_execution_unavailable(app_id, "set", error)
+            return self._override_precondition_unavailable(app_id, "set", error)
+        finally:
+            self._app_override_lock.release()
 
-            # Older experimental versions activated the layer globally for the
-            # Flatpak app. Remove those values during upgrade: the mounted
-            # wrapper now applies them only to an individual Heroic game.
-            for variable in (
-                "LSFGVK_CONFIG",
-                "VK_IMPLICIT_LAYER_PATH",
-                "VK_ADD_IMPLICIT_LAYER_PATH",
-            ):
-                result = self._run_flatpak_command(
-                    ["override", "--user", f"--unset-env={variable}", app_id],
-                    capture_output=True, text=True
-                )
-                if result.returncode != 0:
-                    error_msg = f"Failed to clear legacy environment override {variable}: {result.stderr}"
-                    return self._error_response(FlatpakOverrideResponse, error_msg,
-                                              app_id=app_id, operation="set")
-
-            self.log.info(f"Prepared per-game lsfg-vk wrapper access for {app_id}")
-            return self._success_response(FlatpakOverrideResponse,
-                                        f"lsfg-vk per-game wrapper access prepared for {app_id}",
-                                        app_id=app_id, operation="set")
-
-        except Exception as e:
-            error_msg = f"Error setting overrides for {app_id}: {str(e)}"
-            self.log.error(error_msg)
-            return self._error_response(FlatpakOverrideResponse, error_msg,
-                                      app_id=app_id, operation="set")
-
-    def remove_app_override(self, app_id: str) -> FlatpakOverrideResponse:
-        """Remove lsfg-vk overrides for a Flatpak app"""
+    def remove_app_override(self, app_id: str) -> FlatpakOverrideOperationResponse:
+        """Remove managed overrides and report the strictly observed final state."""
+        if not self._valid_app_id(app_id):
+            return self._override_rejected(
+                app_id, "remove", "Invalid Flatpak application identifier."
+            )
+        busy = self._try_override_lock(app_id, "remove")
+        if busy is not None:
+            return busy
+        mutation_started = False
         try:
             if not self.check_flatpak_available():
-                return self._error_response(FlatpakOverrideResponse,
-                                          "Flatpak is not available on this system",
-                                          app_id=app_id, operation="remove")
+                return self._override_rejected(
+                    app_id, "remove", "Flatpak is not available on this system"
+                )
 
             config_path, dll_directory = self._get_lsfg_paths()
             wrapper_path = str(self.lsfg_launch_script_path)
-            
-            filesystem_overrides = [
-                f"--nofilesystem={dll_directory}",
-                f"--nofilesystem={config_path}",
-                f"--nofilesystem={wrapper_path}",
-            ]
-            
-            removal_errors = []
-            
-            # Remove filesystem overrides
-            for override in filesystem_overrides:
-                result = self._run_flatpak_command(
-                    ["override", "--user", override, app_id],
-                    capture_output=True, text=True
-                )
-                if result.returncode != 0:
-                    removal_errors.append(f"{override}: {result.stderr}")
+            initial_state, read_error = self._observe_before_mutation(app_id, "remove")
+            if initial_state is None:
+                assert read_error is not None
+                return read_error
 
-            for variable in (
-                "LSFGVK_CONFIG",
-                "VK_IMPLICIT_LAYER_PATH",
-                "VK_ADD_IMPLICIT_LAYER_PATH",
-            ):
-                result = self._run_flatpak_command(
-                    ["override", "--user", f"--unset-env={variable}", app_id],
-                    capture_output=True, text=True
+            options = []
+            if initial_state["dll_filesystem"]:
+                options.append(f"--nofilesystem={dll_directory}")
+            if initial_state["config_filesystem"]:
+                options.append(f"--nofilesystem={config_path}")
+            if initial_state["wrapper_filesystem"]:
+                options.append(f"--nofilesystem={wrapper_path}")
+            options.extend(
+                f"--unset-env={variable}"
+                for variable, field in LEGACY_ENVIRONMENT_FIELDS.items()
+                if initial_state[field]
+            )
+            if not options:
+                return self._classify_override_result(
+                    app_id, "remove", initial_state, command_error=None
                 )
 
-                if result.returncode != 0:
-                    removal_errors.append(f"unset-env {variable}: {result.stderr}")
-
-            if removal_errors:
-                self.log.warning(f"Some override removals had issues for {app_id}: {'; '.join(removal_errors)}")
-            
-            self.log.info(f"Completed override removal for {app_id}")
-            return self._success_response(FlatpakOverrideResponse,
-                                        f"lsfg-vk overrides removed for {app_id}",
-                                        app_id=app_id, operation="remove")
-
-        except Exception as e:
-            error_msg = f"Error removing overrides for {app_id}: {str(e)}"
-            self.log.error(error_msg)
-            return self._error_response(FlatpakOverrideResponse, error_msg,
-                                      app_id=app_id, operation="remove")
+            arguments = ["override", "--user", *options, app_id]
+            mutation_started = True
+            return self._apply_and_observe_override(app_id, "remove", arguments)
+        except Exception as error:
+            if mutation_started:
+                return self._override_execution_unavailable(app_id, "remove", error)
+            return self._override_precondition_unavailable(app_id, "remove", error)
+        finally:
+            self._app_override_lock.release()
