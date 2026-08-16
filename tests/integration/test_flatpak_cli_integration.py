@@ -36,6 +36,66 @@ from py_modules.lsfg_vk.flatpak_service import FlatpakService  # noqa: E402
 RUN_REAL_FLATPAK = os.environ.get("RUN_FLATPAK_INTEGRATION") == "1"
 REAL_FLATPAK = shutil.which("flatpak")
 
+FAULT_WRAPPER_SOURCE = r"""#!/usr/bin/env python3
+import os
+import subprocess
+import sys
+
+real = os.environ["LSFG_TEST_REAL_FLATPAK"]
+args = sys.argv[1:]
+marker = os.environ.get("LSFG_TEST_FAILURE_MARKER")
+if (
+    os.environ.get("LSFG_TEST_FAILURE_MODE") == "remove-readback"
+    and args[:3] == ["override", "--user", "--show"]
+    and marker
+    and os.path.exists(marker)
+):
+    os.unlink(marker)
+    print("injected failure while verifying a completed remove", file=sys.stderr)
+    raise SystemExit(43)
+if (
+    os.environ.get("LSFG_TEST_FAILURE_MODE") == "partial-set"
+    and args[:2] == ["override", "--user"]
+    and "--show" not in args
+    and any(arg.startswith("--filesystem=") for arg in args)
+):
+    app_id = args[-1]
+    config_path = os.environ["LSFG_TEST_CONFIG_PATH"]
+    completed = subprocess.run(
+        [
+            real,
+            "override",
+            "--user",
+            f"--filesystem={config_path}:rw",
+            app_id,
+        ],
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise SystemExit(completed.returncode)
+    print("injected failure after applying only the config grant", file=sys.stderr)
+    raise SystemExit(42)
+if (
+    os.environ.get("LSFG_TEST_FAILURE_MODE") == "remove-readback"
+    and args[:3] == ["override", "--user", "--reset"]
+):
+    completed = subprocess.run([real, *args], check=False)
+    if completed.returncode != 0:
+        raise SystemExit(completed.returncode)
+    if not marker:
+        raise SystemExit("LSFG_TEST_FAILURE_MARKER is required")
+    with open(marker, "w", encoding="utf-8") as destination:
+        destination.write("fail-next-readback\n")
+    raise SystemExit(42)
+
+os.execvpe(real, [real, *args], os.environ.copy())
+"""
+
+
+class FlatpakFaultWrapperSourceTests(unittest.TestCase):
+    def test_fault_wrapper_source_compiles(self):
+        compile(FAULT_WRAPPER_SOURCE, "flatpak-fault-wrapper", "exec")
+
 
 @unittest.skipUnless(
     RUN_REAL_FLATPAK and sys.platform.startswith("linux") and REAL_FLATPAK,
@@ -93,63 +153,7 @@ class RealFlatpakOverrideIntegrationTests(unittest.TestCase):
         self.wrapper_path.chmod(0o755)
 
         self.fault_wrapper = self.root / "flatpak-fault-wrapper"
-        self.fault_wrapper.write_text(
-            """#!/usr/bin/env python3
-import os
-import subprocess
-import sys
-
-real = os.environ["LSFG_TEST_REAL_FLATPAK"]
-args = sys.argv[1:]
-marker = os.environ.get("LSFG_TEST_FAILURE_MARKER")
-if (
-    os.environ.get("LSFG_TEST_FAILURE_MODE") == "remove-readback"
-    and args[:3] == ["override", "--user", "--show"]
-    and marker
-    and os.path.exists(marker)
-):
-    os.unlink(marker)
-    print("injected failure while verifying a completed remove", file=sys.stderr)
-    raise SystemExit(43)
-if (
-    os.environ.get("LSFG_TEST_FAILURE_MODE") == "partial-set"
-    and args[:2] == ["override", "--user"]
-    and "--show" not in args
-    and any(arg.startswith("--filesystem=") for arg in args)
-):
-    app_id = args[-1]
-    config_path = os.environ["LSFG_TEST_CONFIG_PATH"]
-    completed = subprocess.run(
-        [
-            real,
-            "override",
-            "--user",
-            f"--filesystem={config_path}:rw",
-            app_id,
-        ],
-        check=False,
-    )
-    if completed.returncode != 0:
-        raise SystemExit(completed.returncode)
-    print("injected failure after applying only the config grant", file=sys.stderr)
-    raise SystemExit(42)
-if (
-    os.environ.get("LSFG_TEST_FAILURE_MODE") == "remove-readback"
-    and args[:3] == ["override", "--user", "--reset"]
-):
-    completed = subprocess.run([real, *args], check=False)
-    if completed.returncode != 0:
-        raise SystemExit(completed.returncode)
-    if not marker:
-        raise SystemExit("LSFG_TEST_FAILURE_MARKER is required")
-    with open(marker, "w", encoding="utf-8") as destination:
-        destination.write("fail-next-readback\n")
-    raise SystemExit(42)
-
-os.execvpe(real, [real, *args], os.environ.copy())
-""",
-            encoding="utf-8",
-        )
+        self.fault_wrapper.write_text(FAULT_WRAPPER_SOURCE, encoding="utf-8")
         self.fault_wrapper.chmod(0o755)
 
     def _app_id(self, scenario: str) -> str:
@@ -304,9 +308,7 @@ os.execvpe(real, [real, *args], os.environ.copy())
 
         self.assertFalse(interrupted["success"], interrupted)
         self.assertEqual(interrupted["outcome"], "unverified")
-        self.assertEqual(
-            interrupted["ownership_status"], "pending", interrupted
-        )
+        self.assertEqual(interrupted["ownership_status"], "pending", interrupted)
 
         restarted = self._service()
         with self._ready_service(restarted, self.dll_a):
