@@ -4,8 +4,12 @@ Flatpak service for managing lsfg-vk Flatpak runtime extensions.
 
 import subprocess
 import os
+import re
+import unicodedata
+import json
+from dataclasses import replace
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Literal, Optional
 
 from .base_service import BaseService
 from .config_schema import ConfigurationManager
@@ -16,8 +20,39 @@ from .constants import (
     FLATPAK_25_08_FILENAME,
     FLATPAK_EXTENSION_NAME,
     FLATPAK_IMPLICIT_LAYER_DIR,
+    FLATPAK_OVERRIDE_OWNERSHIP_FILENAME,
 )
-from .types import BaseResponse
+from .state_transaction import (
+    MutationBlockedError,
+    MutationBusyError,
+    MutationCoordinator,
+    PathLayout,
+    read_bytes_nofollow,
+)
+from .types import (
+    BaseResponse,
+    FlatpakObservedState,
+    FlatpakOverrideOperation,
+    FlatpakOverrideOperationResponse,
+)
+
+
+FLATPAK_DIAGNOSTIC_LIMIT = 512
+FLATPAK_OVERRIDE_STEP = "apply_override"
+FLATPAK_APP_ID_MAX_LENGTH = 255
+FLATPAK_APP_ID_PATTERN = re.compile(
+    rf"[A-Za-z0-9][A-Za-z0-9._-]{{0,{FLATPAK_APP_ID_MAX_LENGTH - 1}}}\Z"
+)
+LEGACY_ENVIRONMENT_FIELDS = {
+    "LSFGVK_CONFIG": "lsfg_config_env",
+    "VK_IMPLICIT_LAYER_PATH": "vk_implicit_layer_path_env",
+    "VK_ADD_IMPLICIT_LAYER_PATH": "vk_add_implicit_layer_path_env",
+}
+FLATPAK_OWNERSHIP_SCHEMA = 1
+FLATPAK_OWNERSHIP_MAX_BYTES = 1024 * 1024
+FLATPAK_FILESYSTEM_ROLES = ("config", "dll", "wrapper")
+FLATPAK_MANAGED_MODES = {"config": "rw", "dll": "ro", "wrapper": "ro"}
+FLATPAK_FILESYSTEM_MODES = frozenset(("ro", "rw", "create"))
 
 
 class FlatpakExtensionStatus(BaseResponse):
@@ -39,15 +74,6 @@ class FlatpakAppInfo(BaseResponse):
         self.total_apps = total_apps
 
 
-class FlatpakOverrideResponse(BaseResponse):
-    """Response for Flatpak override operations"""
-    def __init__(self, success: bool = False, message: str = "", error: str = "",
-                 app_id: str = "", operation: str = ""):
-        super().__init__(success, message, error)
-        self.app_id = app_id
-        self.operation = operation
-
-
 class FlatpakService(BaseService):
     """Service for handling Flatpak runtime extensions and app overrides"""
 
@@ -58,6 +84,202 @@ class FlatpakService(BaseService):
         self.extension_id_25_08 = f"{FLATPAK_EXTENSION_NAME}/x86_64/25.08"
         self.flatpak_command = None
 
+    @property
+    def _flatpak_ownership_path(self) -> Path:
+        return self.config_dir / FLATPAK_OVERRIDE_OWNERSHIP_FILENAME
+
+    def _flatpak_mutation_coordinator(self) -> MutationCoordinator:
+        layout = PathLayout.from_home(self.user_home)
+        layout = replace(
+            layout,
+            config_dir=self.config_dir,
+            lock_file=self.config_dir / ".state-mutation.lock",
+            journal_file=self.config_dir / ".state-transaction.json",
+            flatpak_override_ownership=self._flatpak_ownership_path,
+        )
+        return MutationCoordinator(layout)
+
+    def _load_flatpak_ownership(self) -> dict[str, Any]:
+        """Load the strict ownership ledger without following a symlink."""
+        path = self._flatpak_ownership_path
+        try:
+            content = read_bytes_nofollow(path)
+        except FileNotFoundError:
+            return {"schema": FLATPAK_OWNERSHIP_SCHEMA, "apps": {}}
+        if len(content) > FLATPAK_OWNERSHIP_MAX_BYTES:
+            raise MutationBlockedError("Flatpak ownership ledger is too large")
+        try:
+            document = json.loads(content)
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise MutationBlockedError("Flatpak ownership ledger is corrupt") from error
+        self._validate_flatpak_ownership_document(document)
+        return document
+
+    def _validate_flatpak_ownership_document(self, document: object) -> None:
+        """Reject a ledger that this version could not safely recover later."""
+        if (
+            not isinstance(document, dict)
+            or set(document) != {"schema", "apps"}
+            or document["schema"] != FLATPAK_OWNERSHIP_SCHEMA
+            or not isinstance(document["apps"], dict)
+        ):
+            raise MutationBlockedError("Flatpak ownership ledger has an unsupported schema")
+        for app_id, record in document["apps"].items():
+            self._validate_flatpak_ownership_record(app_id, record)
+
+    def _validate_flatpak_ownership_record(self, app_id: object, record: object) -> None:
+        if not isinstance(app_id, str) or not self._valid_app_id(app_id):
+            raise MutationBlockedError("Flatpak ownership ledger contains an invalid app ID")
+        if not isinstance(record, dict) or record.get("status") not in {
+            "active", "baseline", "pending"
+        }:
+            raise MutationBlockedError("Flatpak ownership ledger contains an invalid record")
+        if record["status"] == "pending":
+            if (
+                set(record) != {"status", "operation", "before", "after"}
+                or record.get("operation") not in {"set", "remove"}
+            ):
+                raise MutationBlockedError("Flatpak ownership ledger contains an invalid intent")
+            for boundary in (record["before"], record["after"]):
+                if boundary is not None:
+                    self._validate_flatpak_active_record(boundary)
+            self._validate_flatpak_pending_transition(record)
+            return
+        self._validate_flatpak_active_record(record)
+
+    @staticmethod
+    def _validate_flatpak_active_record(record: object) -> None:
+        if (
+            not isinstance(record, dict)
+            or set(record) != {"status", "paths", "retired_paths"}
+            or record.get("status") not in {"active", "baseline"}
+            or not isinstance(record.get("paths"), dict)
+            or not isinstance(record.get("retired_paths"), list)
+        ):
+            raise MutationBlockedError("Flatpak ownership ledger contains an invalid record")
+        paths = record["paths"]
+        if set(paths) != set(FLATPAK_FILESYSTEM_ROLES):
+            raise MutationBlockedError("Flatpak ownership ledger contains an incomplete path set")
+        for role, entry in paths.items():
+            if not isinstance(entry, dict) or set(entry) != {"path", "owned", "present"}:
+                raise MutationBlockedError("Flatpak ownership ledger contains an invalid path")
+            path, owned, present = entry["path"], entry["owned"], entry["present"]
+            if (
+                role not in FLATPAK_FILESYSTEM_ROLES
+                or not isinstance(path, str)
+                or not Path(path).is_absolute()
+                or not isinstance(owned, bool)
+                or not isinstance(present, bool)
+                or (owned and not present)
+            ):
+                raise MutationBlockedError("Flatpak ownership ledger contains an invalid path")
+        if len({entry["path"] for entry in paths.values()}) != len(paths):
+            raise MutationBlockedError(
+                "Flatpak ownership ledger contains overlapping managed paths"
+            )
+        if record["status"] == "active" and not all(
+            entry["present"] for entry in paths.values()
+        ):
+            raise MutationBlockedError(
+                "Flatpak active ownership state contains an absent path"
+            )
+        if record["status"] == "active" and (
+            record["retired_paths"]
+            or not all(entry["owned"] for entry in paths.values())
+        ):
+            raise MutationBlockedError(
+                "Flatpak active ownership state is not exclusive"
+            )
+        if record["status"] == "baseline" and any(
+            entry["owned"] for entry in paths.values()
+        ):
+            raise MutationBlockedError(
+                "Flatpak baseline ownership state claims plugin-owned access"
+            )
+        if any(
+            not isinstance(path, str) or not Path(path).is_absolute()
+            for path in record["retired_paths"]
+        ) or len(set(record["retired_paths"])) != len(record["retired_paths"]):
+            raise MutationBlockedError("Flatpak ownership ledger contains invalid history")
+        active_paths = {entry["path"] for entry in paths.values()}
+        if active_paths.intersection(record["retired_paths"]):
+            raise MutationBlockedError(
+                "Flatpak ownership ledger has active paths in retired history"
+            )
+
+    @staticmethod
+    def _validate_flatpak_pending_transition(record: dict[str, Any]) -> None:
+        """Accept only transitions emitted by set/remove ownership planning."""
+        operation = record["operation"]
+        before, after = record["before"], record["after"]
+        if operation == "remove":
+            if (
+                before is None
+                or before["status"] != "active"
+                or after is not None
+            ):
+                raise MutationBlockedError(
+                    "Flatpak ownership ledger contains an invalid remove intent"
+                )
+            if before["retired_paths"] or not all(
+                entry["owned"] for entry in before["paths"].values()
+            ):
+                raise MutationBlockedError(
+                    "Flatpak ownership ledger contains an unsafe remove transition"
+                )
+            return
+
+        if after is None or after["status"] != "active" or (
+            before is not None and before["status"] not in {"active", "baseline"}
+        ):
+            raise MutationBlockedError(
+                "Flatpak ownership ledger contains an invalid set intent"
+            )
+        if before is None:
+            if after["retired_paths"] or not all(
+                entry["owned"] for entry in after["paths"].values()
+            ):
+                raise MutationBlockedError(
+                    "Flatpak initial ownership intent is not exclusive"
+                )
+            return
+
+        if before["status"] != "active" or before != after:
+            raise MutationBlockedError(
+                "Flatpak set intent must not replace an active ownership boundary"
+            )
+
+    def _write_flatpak_ownership(
+        self, coordinator: MutationCoordinator, document: dict[str, Any]
+    ) -> None:
+        self._validate_flatpak_ownership_document(document)
+        content = (
+            json.dumps(document, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+            + "\n"
+        ).encode("utf-8")
+        if len(content) > FLATPAK_OWNERSHIP_MAX_BYTES:
+            raise MutationBlockedError("Flatpak ownership ledger is too large")
+        result = coordinator.commit(
+            "flatpak", {self._flatpak_ownership_path: (content, 0o600)}, []
+        )
+        if result.refresh_required:
+            raise MutationBlockedError(
+                "recovered another state transaction; retry the Flatpak operation"
+            )
+
+    def _remove_flatpak_ownership(
+        self, coordinator: MutationCoordinator, document: dict[str, Any], app_id: str
+    ) -> None:
+        document["apps"].pop(app_id, None)
+        if document["apps"]:
+            self._write_flatpak_ownership(coordinator, document)
+        else:
+            result = coordinator.commit("flatpak", {}, [self._flatpak_ownership_path])
+            if result.refresh_required:
+                raise MutationBlockedError(
+                    "recovered another state transaction; retry the Flatpak operation"
+                )
+
     def _get_lsfg_paths(self) -> tuple[str, str]:
         """Return the config directory and read-only directory containing Lossless.dll.
 
@@ -65,22 +287,37 @@ class FlatpakService(BaseService):
         load Lossless Scaling. If the user selected a custom DLL path, grant that
         DLL's directory instead.
         """
-        home_path = os.path.expanduser("~")
         config_path = str(self.config_dir)
-        dll_directory = f"{home_path}/.local/share/Steam/steamapps/common"
-
-        if not self.config_file_path.exists():
+        dll_directory = str(
+            self.user_home / ".local/share/Steam/steamapps/common"
+        )
+        try:
+            config_content = read_bytes_nofollow(self.config_file_path).decode("utf-8")
+        except FileNotFoundError:
             return config_path, dll_directory
 
         try:
             profile_data = ConfigurationManager.parse_toml_content_multi_profile(
-                self.config_file_path.read_text(encoding="utf-8")
+                config_content
             )
-            configured_dll = profile_data["global_config"].get("dll", "")
-            if configured_dll:
-                dll_directory = str(Path(str(configured_dll)).parent)
         except Exception as error:
-            self.log.debug("Could not read configured DLL path for Flatpak override: %s", error)
+            raise MutationBlockedError(
+                "The persisted LSFG configuration could not be parsed safely"
+            ) from error
+
+        configured_dll = str(profile_data["global_config"].get("dll", "")).strip()
+        if configured_dll:
+            configured_path = Path(configured_dll)
+            if "\x00" in configured_dll or not configured_path.is_absolute():
+                raise MutationBlockedError(
+                    "The configured Lossless.dll path must be absolute"
+                )
+            configured_path = Path(os.path.normpath(str(configured_path)))
+            if configured_path.parent == Path("/"):
+                raise MutationBlockedError(
+                    "The configured Lossless.dll path would grant filesystem root access"
+                )
+            dll_directory = str(configured_path.parent)
 
         return config_path, dll_directory
 
@@ -336,6 +573,13 @@ class FlatpakService(BaseService):
                 capture_output=True, text=True, check=True
             )
 
+            try:
+                ownership = self._load_flatpak_ownership()
+                ownership_blocked = False
+            except MutationBlockedError:
+                ownership = {"schema": FLATPAK_OWNERSHIP_SCHEMA, "apps": {}}
+                ownership_blocked = True
+
             apps = []
             for line in result.stdout.strip().split('\n'):
                 if not line.strip():
@@ -346,29 +590,77 @@ class FlatpakService(BaseService):
                     app_name = parts[0].strip()
                     app_id = parts[1].strip()
 
-                    # Check override status
-                    override_status = self._check_app_override_status(app_id)
-
-                    apps.append({
+                    observation, observation_error, exact_states = (
+                        self._observe_app_override_snapshot(app_id)
+                    )
+                    app = {
                         "app_id": app_id,
                         "app_name": app_name,
                         "wrapper_path": str(self.lsfg_launch_script_path),
-                        "has_filesystem_override": override_status["filesystem"],
-                        "has_wrapper_override": override_status["wrapper"],
-                        "has_env_override": override_status["legacy_env"],
-                    })
+                    }
+                    if observation is None:
+                        app.update({
+                            "status_available": False,
+                            "status_error_code": "status_unavailable",
+                            "status_error": observation_error,
+                        })
+                    else:
+                        app.update(observation)
+                        record = ownership["apps"].get(app_id)
+                        ownership_status = (
+                            "blocked"
+                            if ownership_blocked
+                            else self._flatpak_ownership_status(
+                                app_id, observation, ownership, exact_states
+                            )
+                        )
+                        app.update({
+                            "status_available": True,
+                            "has_filesystem_override": (
+                                observation["config_filesystem_ready"]
+                                and observation["dll_filesystem_ready"]
+                            ),
+                            "has_wrapper_override": observation["wrapper_filesystem_ready"],
+                            "has_env_override": any(
+                                observation[field]
+                                for field in LEGACY_ENVIRONMENT_FIELDS.values()
+                            ),
+                            "ownership_status": ownership_status,
+                        })
+                        if ownership_status == "pending" and record is not None:
+                            app.update({
+                                "ownership_operation": record["operation"],
+                                "ownership_error_code": "ownership_pending",
+                            })
+                        elif ownership_status == "blocked":
+                            app["ownership_error_code"] = "ownership_blocked"
+                    apps.append(app)
 
             return self._success_response(FlatpakAppInfo,
                                         f"Found {len(apps)} Flatpak applications",
                                         apps=apps, total_apps=len(apps))
 
-        except subprocess.CalledProcessError as e:
-            error_msg = f"Error getting Flatpak apps: {e.stderr if e.stderr else str(e)}"
+        except Exception as e:
+            detail = e.stderr if isinstance(e, subprocess.CalledProcessError) and e.stderr else e
+            error_msg = self._sanitize_flatpak_detail(
+                f"Error getting Flatpak apps: {detail}"
+            )
             self.log.error(error_msg)
             return self._error_response(FlatpakAppInfo, error_msg, apps=[], total_apps=0)
 
-    def _check_app_override_status(self, app_id: str) -> Dict[str, bool]:
-        """Check whether an app can execute the per-game experimental wrapper."""
+    def _observe_app_override_status(
+        self, app_id: str
+    ) -> tuple[Optional[FlatpakObservedState], Optional[str]]:
+        """Strictly observe the override state without inventing an all-false result."""
+        observed, error, _modes = self._observe_app_override_snapshot(app_id)
+        return observed, error
+
+    def _observe_app_override_snapshot(
+        self, app_id: str
+    ) -> tuple[Optional[FlatpakObservedState], Optional[str], dict[str, str]]:
+        """Observe the public state plus exact effective modes used by ownership."""
+        if not self._valid_app_id(app_id):
+            return None, "Invalid Flatpak application identifier.", {}
         try:
             result = self._run_flatpak_command(
                 ["override", "--user", "--show", app_id],
@@ -376,7 +668,8 @@ class FlatpakService(BaseService):
             )
 
             if result.returncode != 0:
-                return {"filesystem": False, "wrapper": False, "legacy_env": False}
+                detail = self._sanitize_flatpak_detail(result.stderr or result.stdout)
+                return None, detail or "Flatpak could not read the application overrides.", {}
 
             output = result.stdout
             config_path, dll_directory = self._get_lsfg_paths()
@@ -395,14 +688,24 @@ class FlatpakService(BaseService):
                     filesystem_section = line
                     break
             
-            has_config_fs = self._filesystem_override_present(filesystem_section, config_path)
-            has_dll_fs = self._filesystem_override_present(filesystem_section, dll_directory)
-            has_wrapper_fs = self._filesystem_override_present(filesystem_section, wrapper_path)
+            has_config_fs, config_fs_ready = self._filesystem_override_state(
+                filesystem_section, config_path, "rw"
+            )
+            has_dll_fs, dll_fs_ready = self._filesystem_override_state(
+                filesystem_section, dll_directory, "ro"
+            )
+            has_wrapper_fs, wrapper_fs_ready = self._filesystem_override_state(
+                filesystem_section, wrapper_path, "ro"
+            )
 
-            filesystem_override = has_config_fs and has_dll_fs
-
-            has_lsfg_config_env = False
-            has_isolated_layer_env = False
+            environment_state = {
+                field: False for field in LEGACY_ENVIRONMENT_FIELDS.values()
+            }
+            expected_environment = {
+                "LSFGVK_CONFIG": f"{config_path}/conf.toml",
+                "VK_IMPLICIT_LAYER_PATH": FLATPAK_IMPLICIT_LAYER_DIR,
+                "VK_ADD_IMPLICIT_LAYER_PATH": FLATPAK_IMPLICIT_LAYER_DIR,
+            }
             in_environment = False
             
             for line in output.split('\n'):
@@ -411,40 +714,114 @@ class FlatpakService(BaseService):
                     in_environment = True
                 elif line.startswith("[") and line != "[Environment]":
                     in_environment = False
-                elif in_environment and line.startswith(f"LSFGVK_CONFIG={config_path}/conf.toml"):
-                    has_lsfg_config_env = True
-                elif in_environment and (
-                    line.startswith(f"VK_IMPLICIT_LAYER_PATH={FLATPAK_IMPLICIT_LAYER_DIR}")
-                    or line.startswith(f"VK_ADD_IMPLICIT_LAYER_PATH={FLATPAK_IMPLICIT_LAYER_DIR}")
-                ):
-                    has_isolated_layer_env = True
-
-            legacy_env_override = has_lsfg_config_env or has_isolated_layer_env
+                elif in_environment:
+                    variable, separator, value = line.partition("=")
+                    if separator and variable in LEGACY_ENVIRONMENT_FIELDS:
+                        # ``--unset-env`` is represented separately in Context.
+                        # Only plugin-owned legacy values are safe to neutralize;
+                        # unrelated user values must be preserved.
+                        environment_state[LEGACY_ENVIRONMENT_FIELDS[variable]] = (
+                            value == expected_environment[variable]
+                        )
 
             self.log.debug(
-                "Override status for %s: resources=%s (%s/%s), wrapper=%s, legacy_env=%s (%s/%s)",
+                "Override status for %s: config=%s dll=%s wrapper=%s legacy_env=%s",
                 app_id,
-                filesystem_override,
                 has_config_fs,
                 has_dll_fs,
                 has_wrapper_fs,
-                legacy_env_override,
-                has_lsfg_config_env,
-                has_isolated_layer_env,
+                environment_state,
             )
-            
-            return {
-                "filesystem": filesystem_override,
-                "wrapper": has_wrapper_fs,
-                "legacy_env": legacy_env_override,
+
+            observed: FlatpakObservedState = {
+                "config_filesystem": has_config_fs,
+                "dll_filesystem": has_dll_fs,
+                "wrapper_filesystem": has_wrapper_fs,
+                "config_filesystem_ready": config_fs_ready,
+                "dll_filesystem_ready": dll_fs_ready,
+                "wrapper_filesystem_ready": wrapper_fs_ready,
+                **environment_state,
             }
+            return observed, None, self._parse_override_exact_states(
+                output, filesystem_section
+            )
 
         except Exception as e:
-            self.log.error(f"Error checking override status for {app_id}: {e}")
-            return {"filesystem": False, "wrapper": False, "legacy_env": False}
+            detail = self._sanitize_flatpak_detail(e)
+            self.log.error("Error checking override status for %s: %s", app_id, detail)
+            return None, detail or "Flatpak override status is unavailable.", {}
 
-    def _filesystem_override_present(self, filesystem_section: str, host_path: str) -> bool:
-        """Match Flatpak's absolute or home-relative permission representation.
+    def _parse_override_exact_states(
+        self, output: str, filesystem_section: str
+    ) -> dict[str, str]:
+        """Return exact app-layer grant/deny and legacy-environment states."""
+        states: dict[str, str] = {}
+        _, _, raw_entries = filesystem_section.partition("=")
+        denied_paths: set[str] = set()
+        for raw_entry in raw_entries.split(";"):
+            entry = raw_entry.strip()
+            if not entry:
+                continue
+            denied = entry.startswith("!")
+            permission = entry[1:] if denied else entry
+            permission_path, separator, mode = permission.rpartition(":")
+            if not separator or mode not in FLATPAK_FILESYSTEM_MODES:
+                permission_path, mode = permission, "rw"
+            if permission_path.startswith("~/"):
+                permission_path = str(self.user_home / permission_path[2:])
+            if denied:
+                denied_paths.add(permission_path)
+                states[permission_path] = "deny"
+            elif permission_path not in denied_paths:
+                states[permission_path] = f"grant_{mode}"
+        in_environment = False
+        in_context = False
+        section = ""
+        for raw_line in output.splitlines():
+            line = raw_line.strip()
+            if line == "[Environment]":
+                section = "Environment"
+                in_environment, in_context = True, False
+            elif line == "[Context]":
+                section = "Context"
+                in_environment, in_context = False, True
+            elif line.startswith("["):
+                section = line
+                in_environment = in_context = False
+            elif in_environment:
+                variable, separator, _value = line.partition("=")
+                if separator:
+                    states[f"@env:{variable}"] = "value"
+            elif in_context and line.startswith("unset-environment="):
+                for variable in line.partition("=")[2].split(";"):
+                    if variable:
+                        states[f"@env:{variable}"] = "unset"
+            elif in_context and line.startswith("filesystems="):
+                continue
+            elif in_context and line and not line.startswith("filesystems="):
+                key = line.partition("=")[0]
+                states[f"@other:Context:{key}"] = "present"
+            elif line and "=" in line:
+                key = line.partition("=")[0]
+                states[f"@other:{section}:{key}"] = "present"
+        return states
+
+    @staticmethod
+    def _sanitize_flatpak_detail(value: object) -> str:
+        """Return bounded single-line diagnostic text safe for the local UI/log."""
+        printable = "".join(
+            " " if unicodedata.category(character) in {"Cc", "Cf", "Cs"} else character
+            for character in str(value or "")
+        )
+        normalized = " ".join(printable.split())
+        if len(normalized) <= FLATPAK_DIAGNOSTIC_LIMIT:
+            return normalized
+        return f"{normalized[:FLATPAK_DIAGNOSTIC_LIMIT - 1]}…"
+
+    def _filesystem_override_state(
+        self, filesystem_section: str, host_path: str, required_mode: Literal["ro", "rw"]
+    ) -> tuple[bool, bool]:
+        """Return exact-path presence and required-mode readiness separately.
 
         ``flatpak override --show`` may render a user-home path as ``~/.…``
         even though the plugin originally set it as an absolute path. Accept
@@ -462,152 +839,899 @@ class FlatpakService(BaseService):
             accepted_paths.add(f"~/{relative_path.as_posix()}")
 
         _, _, raw_entries = filesystem_section.partition("=")
-        enabled = False
+        present = False
+        ready = False
         for entry in raw_entries.split(";"):
             entry = entry.strip()
             if not entry:
                 continue
             denied = entry.startswith("!")
-            permission_path = entry[1:] if denied else entry
-            permission_path = permission_path.split(":", 1)[0]
+            permission = entry[1:] if denied else entry
+            permission_path, separator, mode = permission.rpartition(":")
+            if not separator or mode not in {"ro", "rw", "create"}:
+                permission_path = permission
+                mode = "rw"
             if permission_path in accepted_paths:
                 if denied:
-                    return False
-                enabled = True
+                    return False, False
+                present = True
+                ready = mode == required_mode
 
-        return enabled
+        return present, ready
 
-    def set_app_override(self, app_id: str) -> FlatpakOverrideResponse:
-        """Set lsfg-vk overrides for a Flatpak app"""
-        try:
-            if not self.check_flatpak_available():
-                return self._error_response(FlatpakOverrideResponse,
-                                          "Flatpak is not available on this system",
-                                          app_id=app_id, operation="set")
+    def _override_rejected(
+        self, app_id: str, operation: FlatpakOverrideOperation, error: str
+    ) -> FlatpakOverrideOperationResponse:
+        return {
+            "success": False,
+            "outcome": "rejected",
+            "status_available": False,
+            "error_code": "precondition_failed",
+            "retryable": False,
+            "app_id": app_id,
+            "operation": operation,
+            "message": "",
+            "error": error,
+            "warning": None,
+            "failed_steps": [],
+            "ownership_status": "unmanaged",
+        }
 
-            runtime_version = self._get_app_runtime_version(app_id)
-            if runtime_version is None:
-                return self._error_response(
-                    FlatpakOverrideResponse,
-                    "Could not determine a supported Flatpak runtime for this application. "
-                    "Install the matching experimental runtime extension first.",
-                    app_id=app_id,
-                    operation="set",
+    @staticmethod
+    def _valid_app_id(app_id: str) -> bool:
+        """Reject values that could be parsed as options or omit the APP target."""
+        return isinstance(app_id, str) and bool(FLATPAK_APP_ID_PATTERN.fullmatch(app_id))
+
+    def _observe_before_owned_mutation(
+        self, app_id: str, operation: FlatpakOverrideOperation
+    ) -> tuple[
+        Optional[FlatpakObservedState],
+        dict[str, str],
+        Optional[FlatpakOverrideOperationResponse],
+    ]:
+        observed_state, observation_error, modes = self._observe_app_override_snapshot(app_id)
+        if observed_state is not None:
+            return observed_state, modes, None
+        detail = observation_error or "Flatpak override status is unavailable."
+        return None, {}, self._override_unverified(
+            app_id,
+            operation,
+            self._sanitize_flatpak_detail(
+                "No settings were changed because the current override state "
+                f"could not be read: {detail}"
+            ),
+        )
+
+    def _ownership_failure(
+        self,
+        app_id: str,
+        operation: FlatpakOverrideOperation,
+        status: Literal["unknown", "pending", "blocked"],
+        detail: str,
+    ) -> FlatpakOverrideOperationResponse:
+        return self._override_unverified(
+            app_id,
+            operation,
+            self._sanitize_flatpak_detail(
+                f"No settings were changed because Flatpak override ownership is {status}: "
+                f"{detail}"
+            ),
+            error_code={
+                "unknown": "ownership_unknown",
+                "pending": "ownership_pending",
+                "blocked": "ownership_blocked",
+            }[status],
+            ownership_status=status,
+        )
+
+    def _override_unverified(
+        self,
+        app_id: str,
+        operation: FlatpakOverrideOperation,
+        error: str,
+        error_code: Literal[
+            "status_unavailable",
+            "operation_busy",
+            "ownership_unknown",
+            "ownership_pending",
+            "ownership_blocked",
+        ] = "status_unavailable",
+        failed: bool = False,
+        ownership_status: Literal[
+            "managed", "unmanaged", "unknown", "pending", "blocked"
+        ] = "unknown",
+    ) -> FlatpakOverrideOperationResponse:
+        return {
+            "success": False,
+            "outcome": "unverified",
+            "status_available": False,
+            "error_code": error_code,
+            "retryable": True,
+            "app_id": app_id,
+            "operation": operation,
+            "message": "",
+            "error": error,
+            "warning": None,
+            "failed_steps": [FLATPAK_OVERRIDE_STEP] if failed else [],
+            "ownership_status": ownership_status,
+        }
+
+    def _flatpak_ownership_status(
+        self,
+        app_id: str,
+        observed_state: FlatpakObservedState,
+        document: dict[str, Any],
+        states: Optional[dict[str, str]] = None,
+    ) -> Literal["managed", "unmanaged", "unknown", "pending", "blocked"]:
+        record = document["apps"].get(app_id)
+        if record is None:
+            has_app_layer_state = any(observed_state.values()) or bool(states)
+            return "unknown" if has_app_layer_state else "unmanaged"
+        if record["status"] == "pending":
+            return "pending"
+        if states is None:
+            return "managed"
+        if not self._exclusive_boundary_matches(record, states):
+            return "blocked"
+        return "managed" if record["status"] == "active" else "unmanaged"
+
+    @classmethod
+    def _exclusive_boundary_matches(
+        cls, record: dict[str, Any], states: dict[str, str]
+    ) -> bool:
+        return states == cls._boundary_states(record)
+
+    @staticmethod
+    def _active_boundary_matches(
+        record: dict[str, Any], states: dict[str, str]
+    ) -> bool:
+        for role, entry in record["paths"].items():
+            expected = (
+                f"grant_{FLATPAK_MANAGED_MODES[role]}"
+                if entry["present"]
+                else "absent"
+            )
+            if states.get(entry["path"], "absent") != expected:
+                return False
+        return all(
+            states.get(path, "absent") == "absent" for path in record["retired_paths"]
+        )
+
+    @staticmethod
+    def _boundary_states(
+        record: dict[str, Any], *, remove_owned: bool = False
+    ) -> dict[str, str]:
+        expected: dict[str, str] = {}
+        for role, entry in record["paths"].items():
+            if remove_owned and entry["owned"]:
+                expected[entry["path"]] = "absent"
+            elif entry["present"]:
+                expected[entry["path"]] = f"grant_{FLATPAK_MANAGED_MODES[role]}"
+            else:
+                expected[entry["path"]] = "absent"
+        expected.update({path: "absent" for path in record["retired_paths"]})
+        return expected
+
+    @classmethod
+    def _pending_boundary_states(
+        cls, pending: dict[str, Any]
+    ) -> tuple[dict[str, str], dict[str, str]]:
+        before, after = pending["before"], pending["after"]
+        before_states = (
+            cls._boundary_states(before)
+            if before is not None
+            else cls._boundary_states(after, remove_owned=True)
+        )
+        after_states = (
+            cls._boundary_states(after)
+            if after is not None
+            else cls._boundary_states(before, remove_owned=True)
+        )
+        if pending["operation"] == "set" and before is not None:
+            for role, entry in after["paths"].items():
+                if entry["path"] not in before_states:
+                    before_states[entry["path"]] = (
+                        "absent"
+                        if entry["owned"]
+                        else f"grant_{FLATPAK_MANAGED_MODES[role]}"
+                    )
+            for entry in before["paths"].values():
+                if not entry["owned"] and entry["path"] not in after_states:
+                    after_states[entry["path"]] = before_states[entry["path"]]
+        return before_states, after_states
+
+    @staticmethod
+    def _pending_repair_options(
+        before_states: dict[str, str],
+        after_states: dict[str, str],
+        current_states: dict[str, str],
+    ) -> Optional[list[str]]:
+        options: list[str] = []
+        for path in sorted(set(before_states) | set(after_states)):
+            before = before_states.get(path, "absent")
+            after = after_states.get(path, "absent")
+            current = current_states.get(path, "absent")
+            if current not in {before, after}:
+                return None
+            if current == after:
+                continue
+            if after.startswith("grant_") and current == "absent":
+                options.append(
+                    f"--filesystem={path}:{after.removeprefix('grant_')}"
                 )
-            if not self._is_extension_installed(runtime_version):
-                return self._error_response(
-                    FlatpakOverrideResponse,
-                    f"Install the experimental {runtime_version} runtime extension before enabling this application.",
-                    app_id=app_id,
-                    operation="set",
+            else:
+                return None
+        return options
+
+    def _reconcile_pending_ownership(
+        self,
+        coordinator: MutationCoordinator,
+        document: dict[str, Any],
+        app_id: str,
+        operation: FlatpakOverrideOperation,
+    ) -> Optional[FlatpakOverrideOperationResponse]:
+        pending = document["apps"].get(app_id)
+        if pending is None or pending["status"] != "pending":
+            return None
+        observed, error, states = self._observe_app_override_snapshot(app_id)
+        if observed is None:
+            return self._override_unverified(
+                app_id,
+                operation,
+                self._sanitize_flatpak_detail(
+                    "A pending ownership intent could not be reconciled because the "
+                    f"current state is unavailable: {error or 'status unavailable'}"
+                ),
+                error_code="ownership_pending",
+                ownership_status="pending",
+            )
+        if any(key.startswith("@env:") for key in states):
+            return self._ownership_failure(
+                app_id, operation, "blocked", "pending state contains legacy environment overrides"
+            )
+        before, after = pending["before"], pending["after"]
+        after_matches = (
+            self._exclusive_boundary_matches(after, states)
+            if after is not None
+            else not states
+        )
+        before_matches = (
+            self._exclusive_boundary_matches(before, states)
+            if before is not None
+            else not states
+        )
+        if after_matches:
+            stable = after
+        elif before_matches:
+            stable = before
+        else:
+            if operation != pending["operation"]:
+                return self._ownership_failure(
+                    app_id,
+                    operation,
+                    "pending",
+                    f"retry the recorded {pending['operation']} operation first",
+                )
+            if pending["operation"] == "remove":
+                return self._ownership_failure(
+                    app_id,
+                    operation,
+                    "blocked",
+                    "pending remove state contains an unexpected external change",
+                )
+            before_states, after_states = self._pending_boundary_states(pending)
+            options = self._pending_repair_options(
+                before_states, after_states, states
+            )
+            if options is None or any(key.startswith("@") for key in states):
+                return self._ownership_failure(
+                    app_id,
+                    operation,
+                    "blocked",
+                    "pending filesystem state contains an unexpected external change",
                 )
 
-            if not self.lsfg_launch_script_path.is_file():
-                return self._error_response(
-                    FlatpakOverrideResponse,
-                    "Install Experimental LSFG-VK before preparing a Flatpak application.",
-                    app_id=app_id,
-                    operation="set",
+            command_error = None
+            try:
+                command = self._run_flatpak_command(
+                    ["override", "--user", *options, app_id],
+                    capture_output=True,
+                    text=True,
+                )
+                if command.returncode != 0:
+                    command_error = self._sanitize_flatpak_detail(
+                        command.stderr
+                        or command.stdout
+                        or f"Flatpak exited with {command.returncode}."
+                    )
+            except Exception as error:
+                command_error = self._sanitize_flatpak_detail(error)
+
+            final, final_error, final_states = self._observe_app_override_snapshot(
+                app_id
+            )
+            if final is None:
+                return self._override_unverified(
+                    app_id,
+                    operation,
+                    self._sanitize_flatpak_detail(
+                        "The pending operation may have changed settings, but its "
+                        "current state could not be verified: "
+                        f"{final_error or 'status unavailable'}"
+                    ),
+                    error_code="ownership_pending",
+                    failed=command_error is not None,
+                    ownership_status="pending",
                 )
 
-            config_path, dll_directory = self._get_lsfg_paths()
-            wrapper_path = str(self.lsfg_launch_script_path)
-
-            filesystem_overrides = [
-                f"--filesystem={config_path}:rw",
-                f"--filesystem={dll_directory}:ro",
-                f"--filesystem={wrapper_path}:ro",
-            ]
-            
-            for override in filesystem_overrides:
-                result = self._run_flatpak_command(
-                    ["override", "--user", override, app_id],
-                    capture_output=True, text=True
-                )
-                if result.returncode != 0:
-                    error_msg = f"Failed to set filesystem override {override}: {result.stderr}"
-                    return self._error_response(FlatpakOverrideResponse, error_msg,
-                                              app_id=app_id, operation="set")
-
-            # Older experimental versions activated the layer globally for the
-            # Flatpak app. Remove those values during upgrade: the mounted
-            # wrapper now applies them only to an individual Heroic game.
-            for variable in (
-                "LSFGVK_CONFIG",
-                "VK_IMPLICIT_LAYER_PATH",
-                "VK_ADD_IMPLICIT_LAYER_PATH",
+            if after is not None and self._exclusive_boundary_matches(
+                after, final_states
             ):
-                result = self._run_flatpak_command(
-                    ["override", "--user", f"--unset-env={variable}", app_id],
-                    capture_output=True, text=True
+                document["apps"][app_id] = after
+                try:
+                    self._write_flatpak_ownership(coordinator, document)
+                except Exception as error:
+                    return self._override_execution_unavailable(
+                        app_id, operation, error
+                    )
+                response = (
+                    self._ownership_complete_remove(app_id, final)
+                    if operation == "remove"
+                    else self._classify_override_result(
+                        app_id, operation, final, command_error
+                    )
                 )
-                if result.returncode != 0:
-                    error_msg = f"Failed to clear legacy environment override {variable}: {result.stderr}"
-                    return self._error_response(FlatpakOverrideResponse, error_msg,
-                                              app_id=app_id, operation="set")
+                if command_error and response["success"]:
+                    response["warning"] = self._sanitize_flatpak_detail(
+                        "The requested state was verified, although Flatpak reported: "
+                        f"{command_error}"
+                    )
+                    response["failed_steps"] = [FLATPAK_OVERRIDE_STEP]
+                return response
 
-            self.log.info(f"Prepared per-game lsfg-vk wrapper access for {app_id}")
-            return self._success_response(FlatpakOverrideResponse,
-                                        f"lsfg-vk per-game wrapper access prepared for {app_id}",
-                                        app_id=app_id, operation="set")
+            if after is None and not final_states:
+                try:
+                    self._remove_flatpak_ownership(coordinator, document, app_id)
+                except Exception as error:
+                    return self._override_execution_unavailable(app_id, operation, error)
+                response = self._ownership_complete_remove(app_id, final)
+                if command_error:
+                    response["warning"] = self._sanitize_flatpak_detail(
+                        "The requested state was verified, although Flatpak reported: "
+                        f"{command_error}"
+                    )
+                    response["failed_steps"] = [FLATPAK_OVERRIDE_STEP]
+                return response
 
-        except Exception as e:
-            error_msg = f"Error setting overrides for {app_id}: {str(e)}"
-            self.log.error(error_msg)
-            return self._error_response(FlatpakOverrideResponse, error_msg,
-                                      app_id=app_id, operation="set")
+            result = self._classify_override_result(
+                app_id, operation, final, command_error
+            )
+            result["ownership_status"] = "pending"
+            return result
+        if stable is None:
+            try:
+                self._remove_flatpak_ownership(coordinator, document, app_id)
+            except Exception as error:
+                return self._override_execution_unavailable(app_id, operation, error)
+        else:
+            document["apps"][app_id] = stable
+            try:
+                self._write_flatpak_ownership(coordinator, document)
+            except Exception as error:
+                return self._override_execution_unavailable(app_id, operation, error)
+        return None
 
-    def remove_app_override(self, app_id: str) -> FlatpakOverrideResponse:
-        """Remove lsfg-vk overrides for a Flatpak app"""
+    def _override_precondition_unavailable(
+        self,
+        app_id: str,
+        operation: FlatpakOverrideOperation,
+        error: Exception,
+    ) -> FlatpakOverrideOperationResponse:
+        """Return a truthful RPC response when a prerequisite probe raises."""
+        detail = self._sanitize_flatpak_detail(error)
+        self.log.warning(
+            "Flatpak override prerequisite failed app=%s operation=%s: %s",
+            app_id,
+            operation,
+            detail,
+        )
+        return self._override_unverified(
+            app_id,
+            operation,
+            self._sanitize_flatpak_detail(
+                "No settings were changed because a prerequisite check failed: "
+                f"{detail}"
+            ),
+        )
+
+    def _override_execution_unavailable(
+        self,
+        app_id: str,
+        operation: FlatpakOverrideOperation,
+        error: Exception,
+    ) -> FlatpakOverrideOperationResponse:
+        """Fail closed when an unexpected error occurs after mutation starts."""
+        detail = self._sanitize_flatpak_detail(error)
+        self.log.error(
+            "Flatpak override result handling failed app=%s operation=%s: %s",
+            app_id,
+            operation,
+            detail,
+        )
+        return self._override_unverified(
+            app_id,
+            operation,
+            self._sanitize_flatpak_detail(
+                "The operation may have changed settings, but its final state "
+                f"could not be verified: {detail}"
+            ),
+            error_code="ownership_pending",
+            failed=True,
+            ownership_status="pending",
+        )
+
+    def _classify_override_result(
+        self,
+        app_id: str,
+        operation: FlatpakOverrideOperation,
+        observed_state: FlatpakObservedState,
+        command_error: Optional[str],
+    ) -> FlatpakOverrideOperationResponse:
+        filesystems_present = (
+            observed_state["config_filesystem"],
+            observed_state["dll_filesystem"],
+            observed_state["wrapper_filesystem"],
+        )
+        filesystems_ready = tuple(
+            present and ready
+            for present, ready in zip(
+                filesystems_present,
+                (
+                    observed_state["config_filesystem_ready"],
+                    observed_state["dll_filesystem_ready"],
+                    observed_state["wrapper_filesystem_ready"],
+                ),
+            )
+        )
+        legacy_environment = tuple(
+            observed_state[field] for field in LEGACY_ENVIRONMENT_FIELDS.values()
+        )
+
+        if operation == "set":
+            target_matches = filesystems_ready + tuple(
+                not present for present in legacy_environment
+            )
+        else:
+            all_values = filesystems_present + legacy_environment
+            target_matches = tuple(not present for present in all_values)
+
+        complete = all(target_matches)
+        partial = not complete and any(target_matches)
+
+        failed_steps = [FLATPAK_OVERRIDE_STEP] if command_error else []
+        if complete:
+            message = (
+                f"lsfg-vk per-game wrapper access prepared for {app_id}"
+                if operation == "set"
+                else f"lsfg-vk overrides removed for {app_id}"
+            )
+            warning = None
+            if command_error:
+                warning = self._sanitize_flatpak_detail(
+                    "The requested state was verified, although Flatpak reported: "
+                    f"{command_error}"
+                )
+            response: FlatpakOverrideOperationResponse = {
+                "success": True,
+                "outcome": "complete",
+                "status_available": True,
+                "retryable": False,
+                "app_id": app_id,
+                "operation": operation,
+                "message": message,
+                "error": None,
+                "warning": warning,
+                "failed_steps": failed_steps,
+                "observed_state": observed_state,
+                "ownership_status": "managed" if operation == "set" else "unmanaged",
+            }
+        else:
+            outcome = "partial" if partial else "failed"
+            error_code = "partial_failure" if partial else "operation_failed"
+            summary = (
+                "The current Flatpak override state matches only part of the request."
+                if partial
+                else "Flatpak did not reach the requested override state."
+            )
+            error = self._sanitize_flatpak_detail(
+                f"{summary} {command_error}" if command_error else summary
+            )
+            response = {
+                "success": False,
+                "outcome": outcome,
+                "status_available": True,
+                "error_code": error_code,
+                "retryable": True,
+                "app_id": app_id,
+                "operation": operation,
+                "message": "",
+                "error": error,
+                "warning": None,
+                "failed_steps": failed_steps,
+                "observed_state": observed_state,
+                "ownership_status": "managed" if operation == "set" else "unknown",
+            }
+
+        self.log.info(
+            "Flatpak override result app=%s operation=%s outcome=%s failed_steps=%s",
+            app_id,
+            operation,
+            response["outcome"],
+            failed_steps,
+        )
+        return response
+
+    def _ownership_complete_remove(
+        self, app_id: str, observed: FlatpakObservedState
+    ) -> FlatpakOverrideOperationResponse:
+        return {
+            "success": True,
+            "outcome": "complete",
+            "status_available": True,
+            "retryable": False,
+            "app_id": app_id,
+            "operation": "remove",
+            "message": f"lsfg-vk overrides removed for {app_id}",
+            "error": None,
+            "warning": None,
+            "failed_steps": [],
+            "observed_state": observed,
+            "ownership_status": "unmanaged",
+        }
+
+    def set_app_override(self, app_id: str) -> FlatpakOverrideOperationResponse:
+        """Prepare one app while durably tracking only grants created by this plugin."""
+        if not self._valid_app_id(app_id):
+            return self._override_rejected(
+                app_id, "set", "Invalid Flatpak application identifier."
+            )
+        mutation_started = False
+        coordinator = self._flatpak_mutation_coordinator()
         try:
-            if not self.check_flatpak_available():
-                return self._error_response(FlatpakOverrideResponse,
-                                          "Flatpak is not available on this system",
-                                          app_id=app_id, operation="remove")
+            with coordinator.external_operation("flatpak", [self._flatpak_ownership_path]):
+                document = self._load_flatpak_ownership()
+                previous = document["apps"].get(app_id)
+                if previous is not None and previous["status"] == "pending":
+                    reconciliation = self._reconcile_pending_ownership(
+                        coordinator, document, app_id, "set"
+                    )
+                    if reconciliation is not None:
+                        return reconciliation
+                    document = self._load_flatpak_ownership()
+                    previous = document["apps"].get(app_id)
+                if not self.check_flatpak_available():
+                    return self._override_rejected(
+                        app_id, "set", "Flatpak is not available on this system"
+                    )
+                runtime_version = self._get_app_runtime_version(app_id)
+                if runtime_version is None:
+                    return self._override_rejected(
+                        app_id,
+                        "set",
+                        "Could not determine a supported Flatpak runtime for this application. "
+                        "Install the matching experimental runtime extension first.",
+                    )
+                if not self._is_extension_installed(runtime_version):
+                    return self._override_rejected(
+                        app_id,
+                        "set",
+                        f"Install the experimental {runtime_version} runtime extension before enabling this application.",
+                    )
+                if not self.lsfg_launch_script_path.is_file():
+                    return self._override_rejected(
+                        app_id,
+                        "set",
+                        "Install Experimental LSFG-VK before preparing a Flatpak application.",
+                    )
 
-            config_path, dll_directory = self._get_lsfg_paths()
-            wrapper_path = str(self.lsfg_launch_script_path)
-            
-            filesystem_overrides = [
-                f"--nofilesystem={dll_directory}",
-                f"--nofilesystem={config_path}",
-                f"--nofilesystem={wrapper_path}",
-            ]
-            
-            removal_errors = []
-            
-            # Remove filesystem overrides
-            for override in filesystem_overrides:
-                result = self._run_flatpak_command(
-                    ["override", "--user", override, app_id],
-                    capture_output=True, text=True
+                observed, exact_states, read_error = self._observe_before_owned_mutation(
+                    app_id, "set"
                 )
-                if result.returncode != 0:
-                    removal_errors.append(f"{override}: {result.stderr}")
+                if observed is None:
+                    assert read_error is not None
+                    return read_error
+                if any(key.startswith("@env:") for key in exact_states):
+                    return self._ownership_failure(
+                        app_id,
+                        "set",
+                        "unknown",
+                        "a legacy LSFG environment override or unset is already present",
+                    )
+                if previous is None and exact_states:
+                    return self._ownership_failure(
+                        app_id,
+                        "set",
+                        "unknown",
+                        "the application already has user or Flatseal overrides; automatic setup would not be safely reversible",
+                    )
+                if previous is not None and self._flatpak_ownership_status(
+                    app_id, observed, document, exact_states
+                ) == "blocked":
+                    return self._ownership_failure(
+                        app_id, "set", "blocked", "tracked filesystem state was changed externally"
+                    )
 
-            for variable in (
-                "LSFGVK_CONFIG",
-                "VK_IMPLICIT_LAYER_PATH",
-                "VK_ADD_IMPLICIT_LAYER_PATH",
-            ):
-                result = self._run_flatpak_command(
-                    ["override", "--user", f"--unset-env={variable}", app_id],
-                    capture_output=True, text=True
+                config_path, dll_directory = self._get_lsfg_paths()
+                paths = {
+                    "config": config_path,
+                    "dll": dll_directory,
+                    "wrapper": str(self.lsfg_launch_script_path),
+                }
+                if len(set(paths.values())) != len(paths):
+                    return self._ownership_failure(
+                        app_id, "set", "blocked", "managed filesystem paths overlap"
+                    )
+                if previous is not None:
+                    previous_paths = {
+                        role: entry["path"] for role, entry in previous["paths"].items()
+                    }
+                    if previous["status"] != "active" or not all(
+                        entry["owned"] for entry in previous["paths"].values()
+                    ):
+                        return self._ownership_failure(
+                            app_id,
+                            "set",
+                            "blocked",
+                            "the existing ownership record is not exclusive",
+                        )
+                    if previous_paths != paths:
+                        return self._ownership_failure(
+                            app_id,
+                            "set",
+                            "blocked",
+                            "the managed paths changed; remove the existing override before enabling it again",
+                        )
+                for role, path in paths.items():
+                    state = exact_states.get(path, "absent")
+                    if state not in {"absent", f"grant_{FLATPAK_MANAGED_MODES[role]}"}:
+                        return self._ownership_failure(
+                            app_id,
+                            "set",
+                            "unknown",
+                            f"{role} path already has an incompatible app-layer state",
+                        )
+
+                active = {
+                    "status": "active",
+                    "paths": {
+                        role: {"path": path, "owned": True, "present": True}
+                        for role, path in paths.items()
+                    },
+                    "retired_paths": [],
+                }
+                options: list[str] = []
+                for role, entry in active["paths"].items():
+                    if entry["owned"] and exact_states.get(entry["path"], "absent") == "absent":
+                        options.append(
+                            f"--filesystem={entry['path']}:{FLATPAK_MANAGED_MODES[role]}"
+                        )
+
+                if not options:
+                    document["apps"][app_id] = active
+                    self._write_flatpak_ownership(coordinator, document)
+                    result = self._classify_override_result(
+                        app_id, "set", observed, command_error=None
+                    )
+                    result["ownership_status"] = self._flatpak_ownership_status(
+                        app_id, observed, document, exact_states
+                    )
+                    return result
+
+                document["apps"][app_id] = {
+                    "status": "pending",
+                    "operation": "set",
+                    "before": previous,
+                    "after": active,
+                }
+                self._write_flatpak_ownership(coordinator, document)
+                mutation_started = True
+                command_error = None
+                try:
+                    command = self._run_flatpak_command(
+                        ["override", "--user", *options, app_id],
+                        capture_output=True,
+                        text=True,
+                    )
+                    if command.returncode != 0:
+                        command_error = self._sanitize_flatpak_detail(
+                            command.stderr or command.stdout or f"Flatpak exited with {command.returncode}."
+                        )
+                except Exception as error:
+                    command_error = self._sanitize_flatpak_detail(error)
+
+                final, final_error, final_states = self._observe_app_override_snapshot(app_id)
+                if final is None:
+                    return self._override_unverified(
+                        app_id,
+                        "set",
+                        self._sanitize_flatpak_detail(
+                            "The operation may have changed settings, but the current state "
+                            f"could not be verified: {final_error or 'status unavailable'}"
+                        ),
+                        failed=command_error is not None,
+                        ownership_status="pending",
+                    )
+                target_matches = all(
+                    final_states.get(entry["path"], "absent")
+                    == f"grant_{FLATPAK_MANAGED_MODES[role]}"
+                    for role, entry in active["paths"].items()
+                ) and final_states == self._boundary_states(active)
+                result = self._classify_override_result(
+                    app_id, "set", final, command_error
                 )
+                if target_matches and result["outcome"] == "complete":
+                    document["apps"][app_id] = active
+                    self._write_flatpak_ownership(coordinator, document)
+                    result["ownership_status"] = self._flatpak_ownership_status(
+                        app_id, final, document, final_states
+                    )
+                else:
+                    result["ownership_status"] = "pending"
+                return result
+        except MutationBusyError:
+            return self._override_unverified(
+                app_id,
+                "set",
+                "Another plugin state change is still in progress. Refresh shortly.",
+                error_code="operation_busy",
+            )
+        except MutationBlockedError as error:
+            return self._ownership_failure(app_id, "set", "blocked", str(error))
+        except Exception as error:
+            if mutation_started:
+                return self._override_execution_unavailable(app_id, "set", error)
+            return self._override_precondition_unavailable(app_id, "set", error)
 
-                if result.returncode != 0:
-                    removal_errors.append(f"unset-env {variable}: {result.stderr}")
+    def remove_app_override(self, app_id: str) -> FlatpakOverrideOperationResponse:
+        """Remove only exact filesystem grants durably recorded as plugin-owned."""
+        if not self._valid_app_id(app_id):
+            return self._override_rejected(
+                app_id, "remove", "Invalid Flatpak application identifier."
+            )
+        mutation_started = False
+        coordinator = self._flatpak_mutation_coordinator()
+        try:
+            with coordinator.external_operation("flatpak", [self._flatpak_ownership_path]):
+                document = self._load_flatpak_ownership()
+                record = document["apps"].get(app_id)
+                if record is not None and record["status"] == "pending":
+                    reconciliation = self._reconcile_pending_ownership(
+                        coordinator, document, app_id, "remove"
+                    )
+                    if reconciliation is not None:
+                        return reconciliation
+                    document = self._load_flatpak_ownership()
+                    record = document["apps"].get(app_id)
+                if not self.check_flatpak_available():
+                    return self._override_rejected(
+                        app_id, "remove", "Flatpak is not available on this system"
+                    )
+                observed, exact_states, read_error = self._observe_before_owned_mutation(
+                    app_id, "remove"
+                )
+                if observed is None:
+                    assert read_error is not None
+                    return read_error
+                if record is None:
+                    if any(observed.values()) or any(
+                        key.startswith("@env:") for key in exact_states
+                    ):
+                        return self._ownership_failure(
+                            app_id,
+                            "remove",
+                            "unknown",
+                            "matching app-layer overrides exist without an ownership record",
+                        )
+                    return self._ownership_complete_remove(app_id, observed)
+                if any(key.startswith("@env:") for key in exact_states):
+                    return self._ownership_failure(
+                        app_id,
+                        "remove",
+                        "unknown",
+                        "legacy environment state is not owned by the filesystem ledger",
+                    )
+                if self._flatpak_ownership_status(
+                    app_id, observed, document, exact_states
+                ) == "blocked":
+                    return self._ownership_failure(
+                        app_id, "remove", "blocked", "tracked filesystem state was changed externally"
+                    )
 
-            if removal_errors:
-                self.log.warning(f"Some override removals had issues for {app_id}: {'; '.join(removal_errors)}")
-            
-            self.log.info(f"Completed override removal for {app_id}")
-            return self._success_response(FlatpakOverrideResponse,
-                                        f"lsfg-vk overrides removed for {app_id}",
-                                        app_id=app_id, operation="remove")
+                if (
+                    record["status"] != "active"
+                    or record["retired_paths"]
+                    or not all(entry["owned"] for entry in record["paths"].values())
+                    or not self._exclusive_boundary_matches(record, exact_states)
+                ):
+                    return self._ownership_failure(
+                        app_id,
+                        "remove",
+                        "blocked",
+                        "the app override is not exclusively owned by this plugin",
+                    )
 
-        except Exception as e:
-            error_msg = f"Error removing overrides for {app_id}: {str(e)}"
-            self.log.error(error_msg)
-            return self._error_response(FlatpakOverrideResponse, error_msg,
-                                      app_id=app_id, operation="remove")
+                document["apps"][app_id] = {
+                    "status": "pending",
+                    "operation": "remove",
+                    "before": record,
+                    "after": None,
+                }
+                self._write_flatpak_ownership(coordinator, document)
+                mutation_started = True
+                command_error = None
+                try:
+                    command = self._run_flatpak_command(
+                        ["override", "--user", "--reset", app_id],
+                        capture_output=True,
+                        text=True,
+                    )
+                    if command.returncode != 0:
+                        command_error = self._sanitize_flatpak_detail(
+                            command.stderr or command.stdout or f"Flatpak exited with {command.returncode}."
+                        )
+                except Exception as error:
+                    command_error = self._sanitize_flatpak_detail(error)
+
+                final, final_error, final_states = self._observe_app_override_snapshot(app_id)
+                if final is None:
+                    return self._override_unverified(
+                        app_id,
+                        "remove",
+                        self._sanitize_flatpak_detail(
+                            "The operation may have changed settings, but the current state "
+                            f"could not be verified: {final_error or 'status unavailable'}"
+                        ),
+                        failed=command_error is not None,
+                        ownership_status="pending",
+                    )
+                if not final_states:
+                    self._remove_flatpak_ownership(coordinator, document, app_id)
+                    response = self._ownership_complete_remove(app_id, final)
+                    if command_error:
+                        response["warning"] = self._sanitize_flatpak_detail(
+                            "The requested state was verified, although Flatpak reported: "
+                            f"{command_error}"
+                        )
+                        response["failed_steps"] = [FLATPAK_OVERRIDE_STEP]
+                    return response
+                result = self._classify_override_result(
+                    app_id, "remove", final, command_error
+                )
+                if result["success"]:
+                    result = {
+                        **result,
+                        "success": False,
+                        "outcome": "partial",
+                        "error_code": "partial_failure",
+                        "retryable": True,
+                        "message": "",
+                        "error": (
+                            "Flatpak did not remove every exact plugin-owned app-layer grant."
+                        ),
+                        "warning": None,
+                    }
+                result["ownership_status"] = "pending"
+                return result
+        except MutationBusyError:
+            return self._override_unverified(
+                app_id,
+                "remove",
+                "Another plugin state change is still in progress. Refresh shortly.",
+                error_code="operation_busy",
+            )
+        except MutationBlockedError as error:
+            return self._ownership_failure(app_id, "remove", "blocked", str(error))
+        except Exception as error:
+            if mutation_started:
+                return self._override_execution_unavailable(app_id, "remove", error)
+            return self._override_precondition_unavailable(app_id, "remove", error)

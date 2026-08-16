@@ -1,4 +1,4 @@
-import { useEffect, useState, type FocusEvent } from "react";
+import { useEffect, useRef, useState, type FocusEvent } from "react";
 import { AppOverview, ButtonItem, PanelSection, PanelSectionRow, Router, showModal } from "@decky/ui";
 import { useInstallationStatus, useDllDetection, useLsfgConfig } from "../hooks/useLsfgHooks";
 import { useProfileManagement } from "../hooks/useProfileManagement";
@@ -6,7 +6,7 @@ import { useInstallationActions } from "../hooks/useInstallationActions";
 import { StatusDisplay } from "./StatusDisplay";
 import { InstallationButton } from "./InstallationButton";
 import { ConfigurationSection } from "./ConfigurationSection";
-import { ProfileManagement } from "./ProfileManagement";
+import { ProfileManagement, type ProfileManagementHandle } from "./ProfileManagement";
 import { UsageInstructions } from "./UsageInstructions";
 import { SmartClipboardButton } from "./SmartClipboardButton";
 import { FgmodClipboardButton } from "./FgmodClipboardButton";
@@ -14,16 +14,31 @@ import { FpsMultiplierControl } from "./FpsMultiplierControl";
 import { NerdStuffModal } from "./NerdStuffModal";
 import { FlatpaksModal } from "./FlatpaksModal";
 import { ConfigurationData } from "../config/configSchema";
+import { recoverState } from "../api/lsfgApi";
+import {
+  mapRecoveryState,
+  refreshRecoveryStates,
+  summarizeContentRecoveryStates,
+  type RecoveryState,
+} from "../utils/recoveryState.js";
 import t from "../i18n/i18n";
 
 export function Content() {
   const [mainRunningApp, setMainRunningApp] = useState<AppOverview | undefined>(undefined);
+  const [isRefreshingMutation, setIsRefreshingMutation] = useState(false);
+  const [isRefreshingStatus, setIsRefreshingStatus] = useState(false);
+  const [isRecovering, setIsRecovering] = useState(false);
+  const profileManagementRef = useRef<ProfileManagementHandle>(null);
+  const [profileComponentRecovery, setProfileComponentRecovery] = useState<RecoveryState>(() =>
+    mapRecoveryState({ status_available: false, error_code: "refresh_required" })
+  );
   const {
     isInstalled,
     installationStatus,
     engineUpdateRequired,
     installedEngineVersion,
     expectedEngineVersion,
+    recoveryState: installationRecovery,
     setIsInstalled,
     setInstallationStatus,
     checkInstallation
@@ -33,6 +48,7 @@ export function Content() {
 
   const {
     config,
+    recoveryState: configRecovery,
     loadLsfgConfig,
     updateField
   } = useLsfgConfig();
@@ -40,10 +56,33 @@ export function Content() {
   const {
     currentProfile,
     updateProfileConfig,
-    loadProfiles
+    loadProfiles,
+    recoveryState: profileRecovery,
   } = useProfileManagement();
 
   const { isInstalling, isUninstalling, handleInstall, handleUninstall } = useInstallationActions();
+  const installedStateAvailable = installationRecovery.available && isInstalled;
+  const configStateAvailable = installedStateAvailable
+    && !configRecovery.mutationsDisabled;
+  const profileHookAvailable = configStateAvailable
+    && !profileRecovery.mutationsDisabled;
+  const recoverySummary = summarizeContentRecoveryStates(
+    installationRecovery,
+    configRecovery,
+    profileRecovery,
+    profileComponentRecovery,
+    profileHookAvailable,
+  );
+  const mutationsDisabled = recoverySummary.mutationsDisabled
+    || isRefreshingMutation
+    || isRefreshingStatus
+    || isRecovering
+    || isInstalling
+    || isUninstalling;
+  const stateWarningVisible = recoverySummary.warningVisible;
+  const stateWarning = recoverySummary.warning;
+  const profileStateAvailable = profileHookAvailable
+    && !profileComponentRecovery.mutationsDisabled;
 
   useEffect(() => {
     if (isInstalled) {
@@ -62,24 +101,72 @@ export function Content() {
   }, []);
 
   const handleConfigChange = async (fieldName: keyof ConfigurationData, value: boolean | number | string) => {
-    if (currentProfile) {
-      const newConfig = { ...config, [fieldName]: value };
-      const result = await updateProfileConfig(currentProfile, newConfig);
-      if (result.success) {
+    if (mutationsDisabled) return;
+    setIsRefreshingMutation(true);
+    try {
+      if (currentProfile) {
+        const newConfig = { ...config, [fieldName]: value };
+        await updateProfileConfig(currentProfile, newConfig);
+        await Promise.all([loadProfiles(), loadLsfgConfig()]);
+      } else {
+        await updateField(fieldName, value);
         await loadLsfgConfig();
       }
-    } else {
-      await updateField(fieldName, value);
+    } finally {
+      setIsRefreshingMutation(false);
     }
   };
 
   const onInstall = async () => {
-    await handleInstall(setIsInstalled, setInstallationStatus, loadLsfgConfig);
-    await checkInstallation();
+    if (mutationsDisabled) return;
+    setIsRefreshingMutation(true);
+    try {
+      await handleInstall(setIsInstalled, setInstallationStatus, loadLsfgConfig);
+      await Promise.all([checkInstallation(), loadProfiles(), loadLsfgConfig()]);
+    } finally {
+      setIsRefreshingMutation(false);
+    }
   };
 
-  const onUninstall = () => {
-    handleUninstall(setIsInstalled, setInstallationStatus);
+  const onUninstall = async () => {
+    if (mutationsDisabled) return;
+    setIsRefreshingMutation(true);
+    try {
+      await handleUninstall(setIsInstalled, setInstallationStatus);
+      await Promise.all([checkInstallation(), loadProfiles(), loadLsfgConfig()]);
+    } finally {
+      setIsRefreshingMutation(false);
+    }
+  };
+
+  const handleRecovery = async () => {
+    if (!recoverySummary.recoveryPending || isRecovering) return;
+    setIsRecovering(true);
+    try {
+      await recoverState();
+    } catch (error) {
+      console.error("State recovery failed:", error);
+    } finally {
+      await Promise.all([checkInstallation(), loadProfiles(), loadLsfgConfig()]);
+      setIsRecovering(false);
+    }
+  };
+
+  const handleRefreshStatus = async () => {
+    if (!recoverySummary.refreshable || isRefreshingStatus) return;
+    setIsRefreshingStatus(true);
+    try {
+      await refreshRecoveryStates(
+        checkInstallation,
+        loadProfiles,
+        loadLsfgConfig,
+        profileHookAvailable
+          ? profileManagementRef.current?.refreshStatus
+          : undefined,
+      );
+    } finally {
+      setIsRefreshingStatus(false);
+    }
   };
 
   const handleShowNerdStuff = () => {
@@ -109,7 +196,36 @@ export function Content() {
   return (
     <div onFocusCapture={keepFocusedControlVisible}>
       <PanelSection>
-      {isInstalled && mainRunningApp && (
+      {stateWarningVisible && (
+        <PanelSectionRow>
+          <div style={{ padding: "10px 12px", borderRadius: "6px", background: "rgba(255, 152, 0, 0.18)", border: "1px solid rgba(255, 152, 0, 0.75)", color: "#ffd08a" }}>
+            {stateWarning || t("STATUS_RECOVERY_UNAVAILABLE", "State recovery is pending or unavailable. Changes are disabled until status refreshes.")}
+            {recoverySummary.recoveryPending && (
+              <ButtonItem
+                layout="below"
+                onClick={handleRecovery}
+                disabled={isRecovering}
+              >
+                {isRecovering
+                  ? t("RECOVERY_RETRYING", "Retrying state recovery...")
+                  : t("RECOVERY_RETRY", "Retry state recovery")}
+              </ButtonItem>
+            )}
+            {recoverySummary.refreshable && (
+              <ButtonItem
+                layout="below"
+                onClick={handleRefreshStatus}
+                disabled={isRefreshingStatus}
+              >
+                {isRefreshingStatus
+                  ? t("RECOVERY_REFRESHING_STATUS", "Refreshing status...")
+                  : t("RECOVERY_REFRESH_STATUS", "Refresh status")}
+              </ButtonItem>
+            )}
+          </div>
+        </PanelSectionRow>
+      )}
+      {installedStateAvailable && mainRunningApp && (
         <PanelSectionRow>
           <div
             style={{
@@ -124,7 +240,7 @@ export function Content() {
           </div>
         </PanelSectionRow>
       )}
-      {isInstalled && engineUpdateRequired && (
+      {installedStateAvailable && engineUpdateRequired && (
         <PanelSectionRow>
           <div
             style={{
@@ -153,7 +269,7 @@ export function Content() {
           </div>
         </PanelSectionRow>
       )}
-      {!isInstalled && (
+      {installationRecovery.available && !isInstalled && (
         <>
           <InstallationButton
             isInstalled={isInstalled}
@@ -173,7 +289,7 @@ export function Content() {
         </>
       )}
 
-      {isInstalled && (
+      {profileStateAvailable && (
         <>
           <PanelSectionRow>
             <div
@@ -196,10 +312,13 @@ export function Content() {
         </>
       )}
 
-      {isInstalled && (
+      {profileHookAvailable && (
         <ProfileManagement
+          ref={profileManagementRef}
           currentProfile={currentProfile}
           mainRunningApp={mainRunningApp}
+          disabled={mutationsDisabled}
+          onRecoveryStateChange={setProfileComponentRecovery}
           onProfileChange={async () => {
             await loadProfiles();
             await loadLsfgConfig();
@@ -207,14 +326,14 @@ export function Content() {
         />
       )}
 
-      {isInstalled && (
+      {configStateAvailable && (
         <ConfigurationSection
           config={config}
           onConfigChange={handleConfigChange}
         />
       )}
 
-      {isInstalled && (
+      {configStateAvailable && (
         <>
           <SmartClipboardButton />
           <FgmodClipboardButton />
@@ -245,7 +364,7 @@ export function Content() {
         </div>
       </PanelSectionRow>
 
-      {isInstalled && (
+      {installedStateAvailable && (
         <>
           <StatusDisplay
             dllDetected={dllDetected}

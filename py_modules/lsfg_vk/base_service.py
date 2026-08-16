@@ -2,9 +2,9 @@
 Base service class with common functionality.
 """
 
-import logging
 import os
-import shutil
+import stat
+import tempfile
 from pathlib import Path
 from typing import Any, Optional, TypeVar, Dict
 
@@ -104,7 +104,7 @@ class BaseService:
             return False
     
     def _write_file(self, path: Path, content: str, mode: int = 0o644) -> None:
-        """Write content to a file
+        """Atomically replace a text file with durable same-directory staging.
         
         Args:
             path: Target file path
@@ -114,18 +114,98 @@ class BaseService:
         Raises:
             OSError: If write fails
         """
+        temporary_path = None
+        replaced = False
+        previous_content: bytes | None = None
+        previous_mode = 0
         try:
-            with open(path, 'w', encoding='utf-8') as f:
-                f.write(content)
-                f.flush()
-                os.fsync(f.fileno())
-            
-            path.chmod(mode)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                metadata = path.lstat()
+            except FileNotFoundError:
+                pass
+            else:
+                if not stat.S_ISREG(metadata.st_mode):
+                    raise OSError(f"refusing to replace non-regular file: {path}")
+                flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+                descriptor = os.open(path, flags)
+                try:
+                    opened = os.fstat(descriptor)
+                    if (metadata.st_dev, metadata.st_ino) != (opened.st_dev, opened.st_ino):
+                        raise OSError(f"file changed while preparing replacement: {path}")
+                    chunks = []
+                    while chunk := os.read(descriptor, 1024 * 1024):
+                        chunks.append(chunk)
+                    previous_content = b"".join(chunks)
+                    previous_mode = stat.S_IMODE(opened.st_mode)
+                finally:
+                    os.close(descriptor)
+            descriptor, temporary_name = tempfile.mkstemp(
+                prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+            )
+            temporary_path = Path(temporary_name)
+            with os.fdopen(descriptor, "w", encoding="utf-8") as file:
+                file.write(content)
+                file.flush()
+                os.fchmod(file.fileno(), mode)
+                os.fsync(file.fileno())
+            os.replace(temporary_path, path)
+            temporary_path = None
+            replaced = True
+            directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
             self.log.info(f"Wrote to {path}")
             
         except (OSError, IOError, PermissionError) as e:
+            if replaced:
+                rollback_path: Path | None = None
+                try:
+                    if previous_content is None:
+                        path.unlink(missing_ok=True)
+                    else:
+                        rollback_fd, rollback_name = tempfile.mkstemp(
+                            prefix=f".{path.name}.", suffix=".rollback", dir=path.parent
+                        )
+                        rollback_path = Path(rollback_name)
+                        try:
+                            view = memoryview(previous_content)
+                            while view:
+                                written = os.write(rollback_fd, view)
+                                view = view[written:]
+                            os.fchmod(rollback_fd, previous_mode)
+                            try:
+                                os.fsync(rollback_fd)
+                            except OSError:
+                                pass
+                        finally:
+                            os.close(rollback_fd)
+                        os.replace(rollback_path, path)
+                        rollback_path = None
+                    try:
+                        directory_fd = os.open(
+                            path.parent,
+                            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0),
+                        )
+                        try:
+                            os.fsync(directory_fd)
+                        finally:
+                            os.close(directory_fd)
+                    except OSError:
+                        pass
+                finally:
+                    if rollback_path is not None:
+                        rollback_path.unlink(missing_ok=True)
             self.log.error(f"Failed to write to {path}: {e}")
             raise
+        finally:
+            if temporary_path is not None:
+                try:
+                    temporary_path.unlink()
+                except FileNotFoundError:
+                    pass
 
     def _success_response(self, response_type: type, message: str = "", **kwargs) -> Any:
         """Create a standardized success response
@@ -165,3 +245,12 @@ class BaseService:
         }
         response.update(kwargs)
         return response
+
+    @staticmethod
+    def _recovery_action_for_error(error_code: str) -> str:
+        """Return the stable frontend recovery action for an error code."""
+        return {
+            "mutation_busy": "retry",
+            "refresh_required": "refresh",
+            "recovery_blocked": "repair_required",
+        }.get(error_code, "none")

@@ -3,6 +3,7 @@
 set -euo pipefail
 
 project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+script_dir="$project_dir/scripts"
 output_path=""
 output_path_set=false
 engine_archive_path=""
@@ -180,28 +181,8 @@ worktree_fingerprint() {
 }
 
 read -r archive_name archive_version archive_url archive_checksum flatpak_archive_name flatpak_archive_url flatpak_archive_checksum < <(
-  node -e '
-    const manifest = require(process.argv[1]);
-    const [binary] = manifest.remote_binary ?? [];
-    if (!binary?.name || !binary?.version || !binary?.url || !binary?.sha256hash) {
-      process.exitCode = 1;
-      throw new Error("package.json must define one versioned, verified remote_binary entry");
-    }
-    const flatpak = binary.flatpak_bundle;
-    if (flatpak && (!flatpak.name || !flatpak.url || !flatpak.sha256hash)) {
-      process.exitCode = 1;
-      throw new Error("flatpak_bundle must define name, url, and sha256hash when present");
-    }
-    process.stdout.write([
-      binary.name,
-      binary.version,
-      binary.url,
-      binary.sha256hash,
-      flatpak?.name ?? "",
-      flatpak?.url ?? "",
-      flatpak?.sha256hash ?? "",
-    ].join("\t") + "\n");
-  ' "$project_dir/package.json"
+  node "$script_dir/validate-package-manifest.mjs" \
+    package-local "$project_dir/package.json"
 )
 
 if [[ -n "$local_engine_repo" ]]; then

@@ -1,0 +1,9 @@
+{"record":"header","schema":1,"trace_id":"real-only","producer":"hand-authored-fixture","measurement_scope":"synthetic_conformance","clock":{"domain":"synthetic_monotonic","unit":"ns"},"subject":{"plugin_git_sha":"bab6056a6f7164bedadebe3be2880b27fdad109c","engine_source_commit":"5a293c428409a866bbe91be9eb54b49e71521e14","engine_sha256":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","config_sha256":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},"capabilities":{"presentation_feedback":false,"feedback_clock_domain":"unavailable","gpu_duration":false,"deadline_source":"none"},"workload_id":"real-only-v1"}
+{"record":"event","sequence":1,"timestamp_ns":0,"context_id":"ctx","epoch":0,"event":"context_created","data":{"present_mode":"fifo","refresh_interval_ns":16666667}}
+{"record":"event","sequence":2,"timestamp_ns":100,"context_id":"ctx","epoch":0,"event":"input_observed","data":{"input_id":"input-0"}}
+{"record":"event","sequence":3,"timestamp_ns":200,"context_id":"ctx","epoch":0,"event":"simulation_started","data":{"input_id":"input-0","real_frame_id":"real-0"}}
+{"record":"event","sequence":4,"timestamp_ns":500,"context_id":"ctx","epoch":0,"event":"real_frame_ready","data":{"real_frame_id":"real-0","real_index":0}}
+{"record":"event","sequence":5,"timestamp_ns":700,"context_id":"ctx","epoch":0,"event":"present_call_started","data":{"output_kind":"real","output_frame_id":"real-0","queue_depth":0,"content_order":{"right_real_index":0,"numerator":1,"denominator":1}}}
+{"record":"event","sequence":6,"timestamp_ns":750,"context_id":"ctx","epoch":0,"event":"present_call_returned","data":{"output_frame_id":"real-0","result":"success"}}
+{"record":"event","sequence":7,"timestamp_ns":800,"context_id":"ctx","epoch":0,"event":"context_destroyed","data":{"closure_policy":"strict"}}
+{"record":"end","sequence":8,"timestamp_ns":800,"status":"complete","lost_event_count":0}
