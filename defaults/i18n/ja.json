@@ -182,5 +182,12 @@
   "TOAST_CLIPBOARD_SUCCESS": "クリップボードにコピーしました！",
   "TOAST_CLIPBOARD_SUCCESS_DESC": "起動オプションを貼り付けられます",
   "TOAST_CLIPBOARD_FAILED": "コピーに失敗しました",
-  "TOAST_CLIPBOARD_FAILED_DESC": "クリップボードにコピーできませんでした"
+  "TOAST_CLIPBOARD_FAILED_DESC": "クリップボードにコピーできませんでした",
+  "STATUS_RECOVERY_UNAVAILABLE": "状態の復旧が保留中、または状態を確認できません。状態が更新されるまで変更は無効です。",
+  "RECOVERY_BUSY": "別の変更を処理中です。しばらくしてから更新してください。",
+  "RECOVERY_REFRESH": "復旧によって状態が変更されました。再試行する前に更新してください。",
+  "RECOVERY_BLOCKED": "復旧が停止しており、修復が必要です。",
+  "RECOVERY_PENDING": "変更は完了しましたが、永続的なクリーンアップが保留中です。",
+  "RECOVERY_INVALID_CONFIG": "保存された設定が無効です。修復してください。",
+  "RECOVERY_WARNING_TITLE": "状態復旧の警告"
 }

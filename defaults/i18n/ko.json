@@ -182,5 +182,12 @@
   "TOAST_CLIPBOARD_SUCCESS": "클립보드에 복사했습니다!",
   "TOAST_CLIPBOARD_SUCCESS_DESC": "실행 옵션을 붙여넣을 수 있습니다",
   "TOAST_CLIPBOARD_FAILED": "복사 실패",
-  "TOAST_CLIPBOARD_FAILED_DESC": "클립보드에 복사할 수 없습니다"
+  "TOAST_CLIPBOARD_FAILED_DESC": "클립보드에 복사할 수 없습니다",
+  "STATUS_RECOVERY_UNAVAILABLE": "상태 복구가 진행 중이거나 상태를 확인할 수 없습니다. 상태를 새로 고칠 때까지 변경할 수 없습니다.",
+  "RECOVERY_BUSY": "다른 변경 작업이 진행 중입니다. 잠시 후 새로 고치세요.",
+  "RECOVERY_REFRESH": "복구 과정에서 상태가 변경되었습니다. 다시 시도하기 전에 새로 고치세요.",
+  "RECOVERY_BLOCKED": "복구가 중단되어 수리가 필요합니다.",
+  "RECOVERY_PENDING": "변경은 완료되었지만 영구 정리 작업이 남아 있습니다.",
+  "RECOVERY_INVALID_CONFIG": "저장된 설정이 올바르지 않아 수리가 필요합니다.",
+  "RECOVERY_WARNING_TITLE": "상태 복구 경고"
 }

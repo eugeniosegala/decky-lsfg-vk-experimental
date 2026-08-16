@@ -14,16 +14,22 @@ import { FpsMultiplierControl } from "./FpsMultiplierControl";
 import { NerdStuffModal } from "./NerdStuffModal";
 import { FlatpaksModal } from "./FlatpaksModal";
 import { ConfigurationData } from "../config/configSchema";
+import { mapRecoveryState, type RecoveryState } from "../utils/recoveryState.js";
 import t from "../i18n/i18n";
 
 export function Content() {
   const [mainRunningApp, setMainRunningApp] = useState<AppOverview | undefined>(undefined);
+  const [isRefreshingMutation, setIsRefreshingMutation] = useState(false);
+  const [profileComponentRecovery, setProfileComponentRecovery] = useState<RecoveryState>(() =>
+    mapRecoveryState({ status_available: false, error_code: "refresh_required" })
+  );
   const {
     isInstalled,
     installationStatus,
     engineUpdateRequired,
     installedEngineVersion,
     expectedEngineVersion,
+    recoveryState: installationRecovery,
     setIsInstalled,
     setInstallationStatus,
     checkInstallation
@@ -33,6 +39,7 @@ export function Content() {
 
   const {
     config,
+    recoveryState: configRecovery,
     loadLsfgConfig,
     updateField
   } = useLsfgConfig();
@@ -40,10 +47,33 @@ export function Content() {
   const {
     currentProfile,
     updateProfileConfig,
-    loadProfiles
+    loadProfiles,
+    recoveryState: profileRecovery,
   } = useProfileManagement();
 
   const { isInstalling, isUninstalling, handleInstall, handleUninstall } = useInstallationActions();
+  const mutationsDisabled = installationRecovery.mutationsDisabled
+    || configRecovery.mutationsDisabled
+    || profileRecovery.mutationsDisabled
+    || profileComponentRecovery.mutationsDisabled
+    || isRefreshingMutation
+    || isInstalling
+    || isUninstalling;
+  const stateWarningVisible = installationRecovery.warningVisible
+    || configRecovery.warningVisible
+    || profileRecovery.warningVisible
+    || profileComponentRecovery.warningVisible;
+  const stateWarning = installationRecovery.warning
+    || configRecovery.warning
+    || profileRecovery.warning
+    || profileComponentRecovery.warning;
+  const installedStateAvailable = installationRecovery.available && isInstalled;
+  const configStateAvailable = installedStateAvailable
+    && !configRecovery.mutationsDisabled;
+  const profileHookAvailable = configStateAvailable
+    && !profileRecovery.mutationsDisabled;
+  const profileStateAvailable = profileHookAvailable
+    && !profileComponentRecovery.mutationsDisabled;
 
   useEffect(() => {
     if (isInstalled) {
@@ -62,24 +92,42 @@ export function Content() {
   }, []);
 
   const handleConfigChange = async (fieldName: keyof ConfigurationData, value: boolean | number | string) => {
-    if (currentProfile) {
-      const newConfig = { ...config, [fieldName]: value };
-      const result = await updateProfileConfig(currentProfile, newConfig);
-      if (result.success) {
+    if (mutationsDisabled) return;
+    setIsRefreshingMutation(true);
+    try {
+      if (currentProfile) {
+        const newConfig = { ...config, [fieldName]: value };
+        await updateProfileConfig(currentProfile, newConfig);
+        await Promise.all([loadProfiles(), loadLsfgConfig()]);
+      } else {
+        await updateField(fieldName, value);
         await loadLsfgConfig();
       }
-    } else {
-      await updateField(fieldName, value);
+    } finally {
+      setIsRefreshingMutation(false);
     }
   };
 
   const onInstall = async () => {
-    await handleInstall(setIsInstalled, setInstallationStatus, loadLsfgConfig);
-    await checkInstallation();
+    if (mutationsDisabled) return;
+    setIsRefreshingMutation(true);
+    try {
+      await handleInstall(setIsInstalled, setInstallationStatus, loadLsfgConfig);
+      await Promise.all([checkInstallation(), loadProfiles(), loadLsfgConfig()]);
+    } finally {
+      setIsRefreshingMutation(false);
+    }
   };
 
-  const onUninstall = () => {
-    handleUninstall(setIsInstalled, setInstallationStatus);
+  const onUninstall = async () => {
+    if (mutationsDisabled) return;
+    setIsRefreshingMutation(true);
+    try {
+      await handleUninstall(setIsInstalled, setInstallationStatus);
+      await Promise.all([checkInstallation(), loadProfiles(), loadLsfgConfig()]);
+    } finally {
+      setIsRefreshingMutation(false);
+    }
   };
 
   const handleShowNerdStuff = () => {
@@ -109,7 +157,14 @@ export function Content() {
   return (
     <div onFocusCapture={keepFocusedControlVisible}>
       <PanelSection>
-      {isInstalled && mainRunningApp && (
+      {stateWarningVisible && (
+        <PanelSectionRow>
+          <div style={{ padding: "10px 12px", borderRadius: "6px", background: "rgba(255, 152, 0, 0.18)", border: "1px solid rgba(255, 152, 0, 0.75)", color: "#ffd08a" }}>
+            {stateWarning || t("STATUS_RECOVERY_UNAVAILABLE", "State recovery is pending or unavailable. Changes are disabled until status refreshes.")}
+          </div>
+        </PanelSectionRow>
+      )}
+      {installedStateAvailable && mainRunningApp && (
         <PanelSectionRow>
           <div
             style={{
@@ -124,7 +179,7 @@ export function Content() {
           </div>
         </PanelSectionRow>
       )}
-      {isInstalled && engineUpdateRequired && (
+      {installedStateAvailable && engineUpdateRequired && (
         <PanelSectionRow>
           <div
             style={{
@@ -153,7 +208,7 @@ export function Content() {
           </div>
         </PanelSectionRow>
       )}
-      {!isInstalled && (
+      {installationRecovery.available && !isInstalled && (
         <>
           <InstallationButton
             isInstalled={isInstalled}
@@ -173,7 +228,7 @@ export function Content() {
         </>
       )}
 
-      {isInstalled && (
+      {profileStateAvailable && (
         <>
           <PanelSectionRow>
             <div
@@ -196,10 +251,12 @@ export function Content() {
         </>
       )}
 
-      {isInstalled && (
+      {profileHookAvailable && (
         <ProfileManagement
           currentProfile={currentProfile}
           mainRunningApp={mainRunningApp}
+          disabled={mutationsDisabled}
+          onRecoveryStateChange={setProfileComponentRecovery}
           onProfileChange={async () => {
             await loadProfiles();
             await loadLsfgConfig();
@@ -207,14 +264,14 @@ export function Content() {
         />
       )}
 
-      {isInstalled && (
+      {configStateAvailable && (
         <ConfigurationSection
           config={config}
           onConfigChange={handleConfigChange}
         />
       )}
 
-      {isInstalled && (
+      {configStateAvailable && (
         <>
           <SmartClipboardButton />
           <FgmodClipboardButton />
@@ -245,7 +302,7 @@ export function Content() {
         </div>
       </PanelSectionRow>
 
-      {isInstalled && (
+      {installedStateAvailable && (
         <>
           <StatusDisplay
             dllDetected={dllDetected}

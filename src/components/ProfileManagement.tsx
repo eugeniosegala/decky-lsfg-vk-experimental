@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   PanelSectionRow,
   Dropdown,
@@ -25,6 +25,7 @@ import {
 } from "../api/lsfgApi";
 import { showSuccessToast, showErrorToast } from "../utils/toastUtils";
 import t from '../i18n/i18n';
+import { mapRecoveryState, type RecoveryState } from "../utils/recoveryState.js";
 
 const PROFILES_COLLAPSED_KEY = 'lsfg-experimental-profiles-collapsed';
 
@@ -103,14 +104,33 @@ function TextInputModal({
 interface ProfileManagementProps {
   currentProfile?: string;
   onProfileChange?: (profileName: string) => void;
+  onRecoveryStateChange?: (state: RecoveryState) => void;
+  disabled?: boolean;
   mainRunningApp?: AppOverview;
 }
 
-export function ProfileManagement({ currentProfile, onProfileChange, mainRunningApp }: ProfileManagementProps) {
+export function ProfileManagement({ currentProfile, onProfileChange, onRecoveryStateChange, disabled = false, mainRunningApp }: ProfileManagementProps) {
   const [profiles, setProfiles] = useState<string[]>([]);
   const [selectedProfile, setSelectedProfile] = useState<string>(currentProfile || "decky-lsfg-vk");
   const [isLoading, setIsLoading] = useState(false);
+  const [profilesAvailable, setProfilesAvailable] = useState(false);
+  const profilesAvailableRef = useRef(false);
   const [focusedAction, setFocusedAction] = useState<"edit" | "delete" | null>(null);
+
+  const applyRecoveryState = (recovery: RecoveryState) => {
+    const available = !recovery.mutationsDisabled;
+    profilesAvailableRef.current = available;
+    setProfilesAvailable(available);
+    onRecoveryStateChange?.(recovery);
+  };
+
+  const beginProfileOperation = () => {
+    applyRecoveryState(mapRecoveryState({
+      status_available: false,
+      error_code: "mutation_busy",
+      recovery_action: "refresh",
+    }));
+  };
   
   // Initialize with localStorage value, fallback to false (expanded) if not found
   const [profilesCollapsed, setProfilesCollapsed] = useState(() => {
@@ -144,8 +164,10 @@ export function ProfileManagement({ currentProfile, onProfileChange, mainRunning
   }, [currentProfile]);
 
   const loadProfiles = async () => {
+    beginProfileOperation();
     try {
       const result: ProfilesResult = await getProfiles();
+      applyRecoveryState(mapRecoveryState(result));
       if (result.success && result.profiles) {
         setProfiles(result.profiles);
         if (result.current_profile) {
@@ -156,19 +178,25 @@ export function ProfileManagement({ currentProfile, onProfileChange, mainRunning
         showErrorToast(t('PROFILE_LOAD_FAILED', 'Failed to load profiles'), result.error || t('PROFILE_UNKNOWN_ERROR', 'Unknown error'));
       }
     } catch (error) {
+      applyRecoveryState(mapRecoveryState({ status_available: false, error_code: "mutation_busy" }));
       console.error("Error loading profiles:", error);
       showErrorToast(t('PROFILE_LOAD_ERROR', 'Error loading profiles'), String(error));
     }
   };
 
   const handleProfileChange = async (profileName: string) => {
+    if (disabled || !profilesAvailableRef.current) return;
+    beginProfileOperation();
     setIsLoading(true);
     try {
       const result: ProfileResult = await setCurrentProfile(profileName);
+      await loadProfiles();
       if (result.success) {
-        setSelectedProfile(profileName);
+        if (profilesAvailableRef.current) {
+          setSelectedProfile(profileName);
+          onProfileChange?.(profileName);
+        }
         showSuccessToast(t('PROFILE_SWITCHED', 'Profile switched'), `${t('PROFILE_SWITCHED_DESC', 'Switched to profile:')} ${profileName}`);
-        onProfileChange?.(profileName);
       } else {
         console.error("Failed to switch profile:", result.error);
         showErrorToast(t('PROFILE_SWITCH_FAILED', 'Failed to switch profile'), result.error || t('PROFILE_UNKNOWN_ERROR', 'Unknown error'));
@@ -198,16 +226,20 @@ export function ProfileManagement({ currentProfile, onProfileChange, mainRunning
   };
 
   const createNewProfile = async (profileName: string) => {
+    if (disabled || !profilesAvailableRef.current) return;
+    beginProfileOperation();
     setIsLoading(true);
     try {
       const result: ProfileResult = await createProfile(profileName, selectedProfile);
+      await loadProfiles();
       if (result.success) {
         // Use the normalized name returned from backend (spaces converted to dashes)
         const actualProfileName = result.profile_name || profileName;
         showSuccessToast(t('PROFILE_CREATED', 'Profile created'), `${t('PROFILE_CREATED_DESC', 'Created profile:')} ${actualProfileName}`);
-        await loadProfiles();
         // Automatically switch to the newly created profile using the normalized name
-        await handleProfileChange(actualProfileName);
+        if (profilesAvailableRef.current) {
+          await handleProfileChange(actualProfileName);
+        }
       } else {
         console.error("Failed to create profile:", result.error);
         showErrorToast(t('PROFILE_CREATE_FAILED', 'Failed to create profile'), result.error || t('PROFILE_UNKNOWN_ERROR', 'Unknown error'));
@@ -238,15 +270,19 @@ export function ProfileManagement({ currentProfile, onProfileChange, mainRunning
   };
 
   const deleteSelectedProfile = async () => {
+    if (disabled || !profilesAvailableRef.current) return;
+    beginProfileOperation();
     setIsLoading(true);
     try {
       const result: ProfileResult = await deleteProfile(selectedProfile);
+      await loadProfiles();
       if (result.success) {
         showSuccessToast(t('PROFILE_DELETED', 'Profile deleted'), `${t('PROFILE_DELETED_DESC', 'Deleted profile:')} ${selectedProfile}`);
-        await loadProfiles();
         // If we deleted the current profile, it should have switched to default
-        setSelectedProfile("decky-lsfg-vk");
-        onProfileChange?.("decky-lsfg-vk");
+        if (profilesAvailableRef.current) {
+          setSelectedProfile("decky-lsfg-vk");
+          onProfileChange?.("decky-lsfg-vk");
+        }
       } else {
         console.error("Failed to delete profile:", result.error);
         showErrorToast(t('PROFILE_DELETE_FAILED', 'Failed to delete profile'), result.error || t('PROFILE_UNKNOWN_ERROR', 'Unknown error'));
@@ -290,16 +326,20 @@ export function ProfileManagement({ currentProfile, onProfileChange, mainRunning
   };
 
   const renameSelectedProfile = async (newName: string) => {
+    if (disabled || !profilesAvailableRef.current) return;
+    beginProfileOperation();
     setIsLoading(true);
     try {
       const result: ProfileResult = await renameProfile(selectedProfile, newName);
+      await loadProfiles();
       if (result.success) {
         // Use the normalized name returned from backend (spaces converted to dashes)
         const actualNewName = result.profile_name || newName;
         showSuccessToast(t('PROFILE_RENAMED', 'Profile renamed'), `${t('PROFILE_RENAMED_DESC', 'Renamed profile to:')} ${actualNewName}`);
-        await loadProfiles();
-        setSelectedProfile(actualNewName);
-        onProfileChange?.(actualNewName);
+        if (profilesAvailableRef.current) {
+          setSelectedProfile(actualNewName);
+          onProfileChange?.(actualNewName);
+        }
       } else {
         console.error("Failed to rename profile:", result.error);
         showErrorToast(t('PROFILE_RENAME_FAILED', 'Failed to rename profile'), result.error || t('PROFILE_UNKNOWN_ERROR', 'Unknown error'));
@@ -402,7 +442,7 @@ export function ProfileManagement({ currentProfile, onProfileChange, mainRunning
                 rgOptions={profileOptions}
                 selectedOption={selectedProfile}
                 onChange={handleDropdownChange}
-                disabled={isLoading || !!mainRunningApp}
+                disabled={disabled || !profilesAvailable || isLoading || !!mainRunningApp}
               />
             </Field>
           </PanelSectionRow>
@@ -442,7 +482,7 @@ export function ProfileManagement({ currentProfile, onProfileChange, mainRunning
                 onClick={handleRenameProfile}
                 onGamepadFocus={() => setFocusedAction("edit")}
                 onGamepadBlur={() => setFocusedAction((current) => current === "edit" ? null : current)}
-                disabled={isLoading || selectedProfile === "decky-lsfg-vk" || !!mainRunningApp}
+                disabled={disabled || !profilesAvailable || isLoading || selectedProfile === "decky-lsfg-vk" || !!mainRunningApp}
               >
                 <RiEditLine size={20} style={{ color: "#fff8ed" }} />
               </DialogButton>
@@ -468,7 +508,7 @@ export function ProfileManagement({ currentProfile, onProfileChange, mainRunning
                 onClick={handleDeleteProfile}
                 onGamepadFocus={() => setFocusedAction("delete")}
                 onGamepadBlur={() => setFocusedAction((current) => current === "delete" ? null : current)}
-                disabled={isLoading || selectedProfile === "decky-lsfg-vk" || !!mainRunningApp}
+                disabled={disabled || !profilesAvailable || isLoading || selectedProfile === "decky-lsfg-vk" || !!mainRunningApp}
               >
                 <RiDeleteBinLine size={20} style={{ color: "#fff5f5" }} />
               </DialogButton>
