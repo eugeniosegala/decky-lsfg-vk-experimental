@@ -87,6 +87,8 @@ class HardwareQualityGateTests(unittest.TestCase):
         self.assertIn("LSFG_HARDWARE_ENV_READY", workflow)
         self.assertIn("runs-on: [self-hosted, linux, x64, lsfg-hardware]", workflow)
         self.assertIn("/opt/lsfg-hardware/bin/capture-comparison", workflow)
+        self.assertIn('--baseline-sha "$BASELINE_SHA"', workflow)
+        self.assertIn('--candidate-sha "$CANDIDATE_SHA"', workflow)
         self.assertNotIn("${{ secrets.", workflow)
 
     def test_repository_policy_accepts_a_stable_complete_report(self):

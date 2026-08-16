@@ -109,6 +109,8 @@ jobs:
       - name: Enforce hardware quality policy
         shell: bash
         env:
+          BASELINE_SHA: ${{ inputs.baseline_sha }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
           REPORT_DIR: ${{ runner.temp }}/lsfg-hardware-reports
         run: |
           set -euo pipefail
@@ -116,8 +118,8 @@ jobs:
             --baseline "$REPORT_DIR/baseline.json" \
             --candidate "$REPORT_DIR/candidate.json" \
             --policy gate/.github/hardware-quality-policy.json \
-            --baseline-sha "${{ inputs.baseline_sha }}" \
-            --candidate-sha "${{ inputs.candidate_sha }}" \
+            --baseline-sha "$BASELINE_SHA" \
+            --candidate-sha "$CANDIDATE_SHA" \
             --json-output "$REPORT_DIR/gate-result.json"
 
       - name: Upload bounded evidence
