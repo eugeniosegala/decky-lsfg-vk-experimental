@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 import shlex
-from typing import Dict, Any
+from typing import Any, Callable, Dict, Tuple
 
 from .base_service import BaseService
 from .config_schema import (
@@ -15,7 +15,6 @@ from .config_schema import (
 )
 from .config_schema_generated import (
     ConfigurationData,
-    DISABLE_LSFGVK,
     DISABLE_HDR_EXPOSURE,
     get_script_generation_logic,
 )
@@ -78,13 +77,13 @@ class ConfigurationService(BaseService):
 
     def _read_wrapper_profile_settings(self) -> Dict[str, Dict[str, Any]]:
         """Read persisted per-profile launcher settings, falling back safely."""
-        if not self.wrapper_profile_settings_path.exists():
+        try:
+            content = self._read_managed_text(self.wrapper_profile_settings_path)
+        except FileNotFoundError:
             return {}
 
         try:
-            raw_data = json.loads(
-                self.wrapper_profile_settings_path.read_text(encoding="utf-8")
-            )
+            raw_data = json.loads(content)
             if not isinstance(raw_data, dict):
                 raise ValueError("wrapper settings must be a JSON object")
             raw_profiles = raw_data.get("profiles", {})
@@ -103,6 +102,45 @@ class ConfigurationService(BaseService):
             )
             return {}
 
+    def _read_wrapper_profile_settings_strict(self) -> Dict[str, Dict[str, Any]]:
+        """Read mutation input without repairing or defaulting invalid state."""
+        try:
+            content = self._read_managed_text(self.wrapper_profile_settings_path)
+        except FileNotFoundError:
+            return {}
+
+        raw_data = json.loads(content)
+        if not isinstance(raw_data, dict):
+            raise ValueError("wrapper settings must be a JSON object")
+        unknown_document_keys = set(raw_data) - {"version", "profiles"}
+        if unknown_document_keys:
+            raise ValueError("wrapper settings contain unknown document fields")
+        version = raw_data.get("version")
+        if (
+            type(version) is not int
+            or version != self._WRAPPER_PROFILE_SETTINGS_VERSION
+        ):
+            raise ValueError("unsupported wrapper settings version")
+        raw_profiles = raw_data.get("profiles")
+        if not isinstance(raw_profiles, dict):
+            raise ValueError("wrapper settings profiles must be an object")
+
+        settings: Dict[str, Dict[str, Any]] = {}
+        for profile_name, raw_settings in raw_profiles.items():
+            if not isinstance(profile_name, str) or not isinstance(raw_settings, dict):
+                raise ValueError("wrapper settings contain an invalid profile entry")
+            unknown_fields = set(raw_settings) - SCRIPT_ONLY_FIELDS
+            if unknown_fields:
+                raise ValueError("wrapper settings contain unknown profile fields")
+            for field_name, value in raw_settings.items():
+                expected_type = type(CONFIG_SCHEMA[field_name].default)
+                if type(value) is not expected_type:
+                    raise ValueError(
+                        f"wrapper setting '{field_name}' has the wrong primitive type"
+                    )
+            settings[profile_name] = self._normalize_wrapper_settings(raw_settings)
+        return settings
+
     def _write_wrapper_profile_settings(
             self, profile_settings: Dict[str, Dict[str, Any]]) -> None:
         normalized_profiles = {
@@ -113,12 +151,42 @@ class ConfigurationService(BaseService):
             "version": self._WRAPPER_PROFILE_SETTINGS_VERSION,
             "profiles": normalized_profiles,
         }
-        self.config_dir.mkdir(parents=True, exist_ok=True)
-        self._write_file(
-            self.wrapper_profile_settings_path,
-            json.dumps(payload, indent=2, sort_keys=True) + "\n",
-            0o644,
+        self._commit_managed_replacements(
+            "migration",
+            {
+                self.wrapper_profile_settings_path: (
+                    (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode(),
+                    0o644,
+                )
+            },
         )
+
+    @staticmethod
+    def _read_managed_text(path: Path) -> str:
+        from .state_transaction import read_bytes_nofollow
+
+        return read_bytes_nofollow(path).decode("utf-8")
+
+    def _commit_managed_replacements(
+            self,
+            operation: str,
+            replacements: Dict[Path, Tuple[bytes, int]],
+    ) -> Any:
+        """Apply a partial legacy/migration writer through the coordinator."""
+        from .state_transaction import MutationCoordinator, PathLayout
+
+        coordinator = MutationCoordinator(PathLayout.from_home(self.user_home))
+        recovery = coordinator.recover()
+        if recovery.refresh_required:
+            raise OSError("recovered interrupted state; refresh before retrying")
+        result = coordinator.commit(operation, replacements=replacements, removals=())
+        if result.refresh_required:
+            raise OSError("recovered interrupted state; refresh before retrying")
+        if not result.committed:
+            raise OSError("managed state replacement did not commit")
+        if result.warning:
+            self.log.warning(result.warning)
+        return result
 
     def _wrapper_settings_for_profile(
             self,
@@ -126,7 +194,12 @@ class ConfigurationService(BaseService):
             profile_settings: Dict[str, Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         settings = self._wrapper_settings_defaults()
-        stored_settings = (profile_settings or self._read_wrapper_profile_settings()).get(profile_name)
+        settings_by_profile = (
+            profile_settings
+            if profile_settings is not None
+            else self._read_wrapper_profile_settings()
+        )
+        stored_settings = settings_by_profile.get(profile_name)
         if stored_settings:
             settings.update(stored_settings)
         return self._normalize_wrapper_settings(settings)
@@ -147,6 +220,163 @@ class ConfigurationService(BaseService):
         config.update(self._wrapper_settings_for_profile(profile_name, profile_settings))
         return ConfigurationManager.validate_config(config)
 
+    def _load_effective_state_strict(
+            self) -> Tuple[ProfileData, Dict[str, Dict[str, Any]]]:
+        """Load every persisted mutation input strictly, without side effects."""
+        return self._get_profile_data(), self._read_wrapper_profile_settings_strict()
+
+    def _render_effective_state(
+            self,
+            profile_data: ProfileData,
+            profile_settings: Dict[str, Dict[str, Any]],
+    ) -> Dict[Path, Tuple[bytes, int]]:
+        """Render the complete logical configuration snapshot before applying it."""
+        normalized_settings = {
+            profile_name: self._wrapper_settings_for_profile(
+                profile_name, profile_settings
+            )
+            for profile_name in profile_data["profiles"]
+        }
+        wrapper_payload = {
+            "version": self._WRAPPER_PROFILE_SETTINGS_VERSION,
+            "profiles": normalized_settings,
+        }
+        toml_content = ConfigurationManager.generate_toml_content_multi_profile(
+            profile_data
+        )
+        wrapper_content = json.dumps(
+            wrapper_payload, indent=2, sort_keys=True
+        ) + "\n"
+        launcher_content = self._generate_script_content_for_profile(
+            profile_data, normalized_settings
+        )
+        return {
+            self.config_file_path: (toml_content.encode("utf-8"), 0o644),
+            self.wrapper_profile_settings_path: (
+                wrapper_content.encode("utf-8"), 0o644
+            ),
+            self.lsfg_script_path: (launcher_content.encode("utf-8"), 0o755),
+        }
+
+    def _configuration_error(
+            self,
+            response_type: type,
+            error: Exception | str,
+            error_code: str,
+            **kwargs: Any,
+    ) -> Any:
+        return self._error_response(
+            response_type,
+            str(error),
+            error_code=error_code,
+            retryable=error_code == "mutation_busy",
+            recovery_pending=error_code == "recovery_blocked",
+            recovery_action=self._recovery_action_for_error(error_code),
+            warning=None,
+            **kwargs,
+        )
+
+    def _commit_effective_state(
+            self,
+            response_type: type,
+            transform: Callable[
+                [ProfileData, Dict[str, Dict[str, Any]]], Dict[str, Any]
+            ],
+            success_message: Callable[[Dict[str, Any]], str],
+            failure_kwargs: Dict[str, Any],
+    ) -> Any:
+        """Serialize one strict full-snapshot profile mutation."""
+        from .state_transaction import (
+            MutationBlockedError,
+            MutationBusyError,
+            MutationCoordinator,
+            PathLayout,
+        )
+
+        coordinator = MutationCoordinator(PathLayout.from_home(self.user_home))
+        try:
+            with coordinator.locked("configuration"):
+                recovery = coordinator.recover()
+                if recovery.refresh_required:
+                    return self._configuration_error(
+                        response_type,
+                        "Recovered interrupted state; refresh before retrying",
+                        "refresh_required",
+                        **failure_kwargs,
+                    )
+
+                try:
+                    profile_data, profile_settings = (
+                        self._load_effective_state_strict()
+                    )
+                except (OSError, ValueError, TypeError, json.JSONDecodeError) as error:
+                    return self._configuration_error(
+                        response_type,
+                        error,
+                        "invalid_persisted_state",
+                        **failure_kwargs,
+                    )
+
+                try:
+                    response_values = transform(profile_data, profile_settings)
+                except ValueError as error:
+                    return self._error_response(
+                        response_type, str(error), **failure_kwargs
+                    )
+
+                try:
+                    replacements = self._render_effective_state(
+                        profile_data, profile_settings
+                    )
+                except Exception as error:
+                    return self._configuration_error(
+                        response_type,
+                        error,
+                        "durability_failure",
+                        **failure_kwargs,
+                    )
+
+                result = coordinator.commit(
+                    "configuration", replacements=replacements, removals=()
+                )
+                if result.refresh_required or not result.committed:
+                    return self._configuration_error(
+                        response_type,
+                        "Recovered interrupted state; refresh before retrying",
+                        "refresh_required",
+                        **failure_kwargs,
+                    )
+                recovery_metadata = {
+                    "retryable": False,
+                    "recovery_pending": result.recovery_pending,
+                    "warning": result.warning,
+                    "recovery_action": (
+                        "wait_for_recovery"
+                        if result.recovery_pending
+                        else "none"
+                    ),
+                }
+                if result.recovery_pending:
+                    recovery_metadata["error_code"] = "recovery_pending"
+                return self._success_response(
+                    response_type,
+                    success_message(response_values),
+                    **response_values,
+                    **recovery_metadata,
+                )
+        except MutationBusyError as error:
+            return self._configuration_error(
+                response_type, error, "mutation_busy", **failure_kwargs
+            )
+        except MutationBlockedError as error:
+            return self._configuration_error(
+                response_type, error, "recovery_blocked", **failure_kwargs
+            )
+        except Exception as error:
+            return self._configuration_error(
+                response_type, error, "durability_failure", **failure_kwargs
+            )
+
     def migrate_wrapper_profile_settings_if_needed(self) -> bool:
         """Preserve old current-wrapper compatibility settings on first upgrade.
 
@@ -154,12 +384,20 @@ class ConfigurationService(BaseService):
         launcher represented the selected profile, so it can be imported without
         guessing settings for any other profile.
         """
-        if self.wrapper_profile_settings_path.exists() or not self.lsfg_script_path.exists():
+        try:
+            self._read_managed_text(self.wrapper_profile_settings_path)
+            return False
+        except FileNotFoundError:
+            pass
+
+        try:
+            current_script = self._read_managed_text(self.lsfg_script_path)
+        except FileNotFoundError:
             return False
 
         try:
             script_values = ConfigurationManager.parse_script_content(
-                self.lsfg_script_path.read_text(encoding="utf-8")
+                current_script
             )
             profile_data = self._get_profile_data()
             self._write_wrapper_profile_settings({
@@ -210,15 +448,38 @@ class ConfigurationService(BaseService):
         Returns:
             ConfigurationResponse with current configuration or error
         """
+        from . import state_transaction
+
+        layout = state_transaction.PathLayout.from_home(self.user_home)
         try:
-            self.migrate_wrapper_profile_settings_if_needed()
-            profile_data = self._get_profile_data()
-            config = self._config_for_profile(
-                profile_data, profile_data["current_profile"]
+            with state_transaction.read_only_guard(layout):
+                profile_data = self._get_profile_data()
+                profile_settings = self._read_wrapper_profile_settings_strict()
+                config = self._config_for_profile(
+                    profile_data,
+                    profile_data["current_profile"],
+                    profile_settings,
+                )
+            
+            return self._success_response(
+                ConfigurationResponse, config=config, status_available=True
             )
             
-            return self._success_response(ConfigurationResponse, config=config)
-            
+        except state_transaction.MutationBusyError as e:
+            return self._unavailable_read(
+                ConfigurationResponse, "mutation_busy", str(e),
+                retryable=True, pending=False, action="refresh", config=None,
+            )
+        except state_transaction.RecoveryPendingError as e:
+            return self._unavailable_read(
+                ConfigurationResponse, "recovery_pending", str(e),
+                retryable=False, pending=True, action="wait_for_recovery", config=None,
+            )
+        except state_transaction.MutationBlockedError as e:
+            return self._unavailable_read(
+                ConfigurationResponse, "recovery_blocked", str(e),
+                retryable=False, pending=True, action="repair_required", config=None,
+            )
         except (OSError, IOError) as e:
             error_msg = f"Error reading lsfg config: {str(e)}"
             self.log.error(error_msg)
@@ -231,7 +492,28 @@ class ConfigurationService(BaseService):
             config = ConfigurationManager.get_defaults_with_dll_detection(dll_service)
             return self._success_response(ConfigurationResponse, 
                                         f"Using default configuration due to parse error: {str(e)}", 
-                                        config=config)
+                                        config=config,
+                                        error_code="invalid_persisted_state",
+                                        retryable=False,
+                                        recovery_pending=False,
+                                        recovery_action="repair_required",
+                                        warning=error_msg,
+                                        status_available=True)
+
+    def _unavailable_read(
+        self, response_type: type, error_code: str, warning: str, *,
+        retryable: bool, pending: bool, action: str, **payload: Any,
+    ) -> Any:
+        return self._error_response(
+            response_type,
+            warning,
+            error_code=error_code,
+            retryable=retryable,
+            recovery_pending=pending,
+            recovery_action=action,
+            warning=warning,
+            **payload,
+        )
     
     def update_config_from_dict(self, config: ConfigurationData) -> ConfigurationResponse:
         """Update TOML configuration from configuration dictionary (eliminates parameter duplication)
@@ -242,20 +524,7 @@ class ConfigurationService(BaseService):
         Returns:
             ConfigurationResponse with success status
         """
-        try:
-            profile_data = self._get_profile_data()
-            current_profile = profile_data["current_profile"]
-            
-            return self.update_profile_config(current_profile, config)
-            
-        except (OSError, IOError) as e:
-            error_msg = f"Error updating lsfg config: {str(e)}"
-            self.log.error(error_msg)
-            return self._error_response(ConfigurationResponse, str(e), config=None)
-        except ValueError as e:
-            error_msg = f"Invalid configuration arguments: {str(e)}"
-            self.log.error(error_msg)
-            return self._error_response(ConfigurationResponse, str(e), config=None)
+        return self.update_profile_config(None, config)
     
     def update_lsfg_script(self, config: ConfigurationData) -> ConfigurationResponse:
         """Update the isolated per-game launch script with current configuration
@@ -268,8 +537,10 @@ class ConfigurationService(BaseService):
         """
         try:
             script_content = self._generate_script_content(config)
-            
-            self._write_file(self.lsfg_script_path, script_content, 0o755)
+            self._commit_managed_replacements(
+                "configuration",
+                {self.lsfg_script_path: (script_content.encode(), 0o755)},
+            )
             
             self.log.info(f"Updated lsfg launch script at {self.lsfg_script_path}")
             
@@ -289,11 +560,13 @@ class ConfigurationService(BaseService):
         installation can work normally. Older plugin versions managed these
         variables directly; remove those stale exports during migration.
         """
-        if not self.lsfg_script_path.exists():
+        try:
+            existing_content = self._read_managed_text(self.lsfg_script_path)
+        except FileNotFoundError:
             return False
 
         legacy_exports = {"DISABLE_VKBASALT", "ENABLE_VKBASALT"}
-        existing_lines = self.lsfg_script_path.read_text(encoding="utf-8").splitlines()
+        existing_lines = existing_content.splitlines()
         cleaned_lines = []
         removed = False
 
@@ -307,7 +580,14 @@ class ConfigurationService(BaseService):
             cleaned_lines.append(line)
 
         if removed:
-            self._write_file(self.lsfg_script_path, "\n".join(cleaned_lines) + "\n", 0o755)
+            self._commit_managed_replacements(
+                "migration",
+                {
+                    self.lsfg_script_path: (
+                        ("\n".join(cleaned_lines) + "\n").encode(), 0o755
+                    )
+                },
+            )
         return removed
     
     def _generate_script_content(self, config: ConfigurationData) -> str:
@@ -335,7 +615,11 @@ class ConfigurationService(BaseService):
         
         return "\n".join(lines) + "\n"
     
-    def _generate_script_content_for_profile(self, profile_data: ProfileData) -> str:
+    def _generate_script_content_for_profile(
+            self,
+            profile_data: ProfileData,
+            profile_settings: Dict[str, Dict[str, Any]] = None,
+    ) -> str:
         """Generate the isolated per-game launch script with profile support
         
         Args:
@@ -345,7 +629,9 @@ class ConfigurationService(BaseService):
             The complete script content as a string
         """
         current_profile = profile_data["current_profile"]
-        merged_config = self._config_for_profile(profile_data, current_profile)
+        merged_config = self._config_for_profile(
+            profile_data, current_profile, profile_settings
+        )
         automatic_matching_enabled = any(
             self._has_active_in(profile_config)
             for profile_config in profile_data["profiles"].values()
@@ -482,11 +768,12 @@ class ConfigurationService(BaseService):
         intermediate locally generated wrapper cannot be mistaken for the
         completed format.
         """
-        if not self.lsfg_script_path.exists():
+        try:
+            current_content = self._read_managed_text(self.lsfg_script_path)
+        except FileNotFoundError:
             return False
 
         try:
-            current_content = self.lsfg_script_path.read_text(encoding="utf-8")
             wrapper_is_current = (
                 self._WRAPPER_FORMAT_MARKER in current_content
                 and all(
@@ -538,7 +825,9 @@ class ConfigurationService(BaseService):
     
     def _get_profile_data(self) -> ProfileData:
         """Get current profile data from config file"""
-        if not self.config_file_path.exists():
+        try:
+            content = self._read_managed_text(self.config_file_path)
+        except FileNotFoundError:
             from .dll_detection import DllDetectionService
             dll_service = DllDetectionService(self.log)
             default_config = ConfigurationManager.get_defaults_with_dll_detection(dll_service)
@@ -551,16 +840,16 @@ class ConfigurationService(BaseService):
                 }
             )
         
-        content = self.config_file_path.read_text(encoding='utf-8')
         return ConfigurationManager.parse_toml_content_multi_profile(content)
     
     def _save_profile_data(self, profile_data: ProfileData) -> None:
         """Save profile data to config file"""
         toml_content = ConfigurationManager.generate_toml_content_multi_profile(profile_data)
         
-        self.config_dir.mkdir(parents=True, exist_ok=True)
-        
-        self._write_file(self.config_file_path, toml_content, 0o644)
+        self._commit_managed_replacements(
+            "configuration",
+            {self.config_file_path: (toml_content.encode(), 0o644)},
+        )
     
     def get_profiles(self) -> ProfilesResponse:
         """Get list of all profiles and current profile
@@ -568,14 +857,36 @@ class ConfigurationService(BaseService):
         Returns:
             ProfilesResponse with profile list and current profile
         """
+        from . import state_transaction
+
+        layout = state_transaction.PathLayout.from_home(self.user_home)
         try:
-            profile_data = self._get_profile_data()
+            with state_transaction.read_only_guard(layout):
+                profile_data = self._get_profile_data()
             
             return self._success_response(ProfilesResponse,
                                         "Profiles retrieved successfully",
                                         profiles=list(profile_data["profiles"].keys()),
-                                        current_profile=profile_data["current_profile"])
+                                        current_profile=profile_data["current_profile"],
+                                        status_available=True)
             
+        except state_transaction.MutationBusyError as e:
+            return self._unavailable_read(
+                ProfilesResponse, "mutation_busy", str(e), retryable=True,
+                pending=False, action="refresh", profiles=None, current_profile=None,
+            )
+        except state_transaction.RecoveryPendingError as e:
+            return self._unavailable_read(
+                ProfilesResponse, "recovery_pending", str(e), retryable=False,
+                pending=True, action="wait_for_recovery", profiles=None,
+                current_profile=None,
+            )
+        except state_transaction.MutationBlockedError as e:
+            return self._unavailable_read(
+                ProfilesResponse, "recovery_blocked", str(e), retryable=False,
+                pending=True, action="repair_required", profiles=None,
+                current_profile=None,
+            )
         except Exception as e:
             error_msg = f"Error getting profiles: {str(e)}"
             self.log.error(error_msg)
@@ -592,39 +903,29 @@ class ConfigurationService(BaseService):
         Returns:
             ProfileResponse with success status and the normalized profile name
         """
-        try:
-            self.migrate_wrapper_profile_settings_if_needed()
-            profile_data = self._get_profile_data()
-            
-            if not source_profile:
-                source_profile = profile_data["current_profile"]
-            
-            # Get the normalized name that will be used for storage
+        def transform(profile_data, profile_settings):
+            selected_source = source_profile or profile_data["current_profile"]
             normalized_name = ConfigurationManager.normalize_profile_name(profile_name)
-            
-            new_profile_data = ConfigurationManager.create_profile(profile_data, profile_name, source_profile)
-            profile_settings = self._read_wrapper_profile_settings()
-            profile_settings[normalized_name] = dict(
-                self._wrapper_settings_for_profile(source_profile, profile_settings)
+            updated = ConfigurationManager.create_profile(
+                profile_data, profile_name, selected_source
             )
-            self._save_profile_data(new_profile_data)
-            self._write_wrapper_profile_settings(profile_settings)
-            
-            self.log.info(f"Created profile '{normalized_name}' from '{source_profile}'")
-            
-            # Return the normalized name so frontend can use the actual stored name
-            return self._success_response(ProfileResponse,
-                                        f"Profile '{normalized_name}' created successfully",
-                                        profile_name=normalized_name)
-            
-        except ValueError as e:
-            error_msg = f"Invalid profile operation: {str(e)}"
-            self.log.error(error_msg)
-            return self._error_response(ProfileResponse, str(e), profile_name=None)
-        except Exception as e:
-            error_msg = f"Error creating profile: {str(e)}"
-            self.log.error(error_msg)
-            return self._error_response(ProfileResponse, str(e), profile_name=None)
+            profile_data.clear()
+            profile_data.update(updated)
+            profile_settings[normalized_name] = dict(
+                self._wrapper_settings_for_profile(
+                    selected_source, profile_settings
+                )
+            )
+            return {"profile_name": normalized_name}
+
+        return self._commit_effective_state(
+            ProfileResponse,
+            transform,
+            lambda values: (
+                f"Profile '{values['profile_name']}' created successfully"
+            ),
+            {"profile_name": None},
+        )
     
     def delete_profile(self, profile_name: str) -> ProfileResponse:
         """Delete a profile
@@ -635,34 +936,21 @@ class ConfigurationService(BaseService):
         Returns:
             ProfileResponse with success status
         """
-        try:
-            self.migrate_wrapper_profile_settings_if_needed()
-            profile_data = self._get_profile_data()
-            profile_settings = self._read_wrapper_profile_settings()
-            new_profile_data = ConfigurationManager.delete_profile(profile_data, profile_name)
+        def transform(profile_data, profile_settings):
+            updated = ConfigurationManager.delete_profile(profile_data, profile_name)
+            profile_data.clear()
+            profile_data.update(updated)
             profile_settings.pop(profile_name, None)
-            self._save_profile_data(new_profile_data)
-            if self.wrapper_profile_settings_path.exists() or profile_settings:
-                self._write_wrapper_profile_settings(profile_settings)
-            
-            script_result = self.update_lsfg_script_from_profile_data(new_profile_data)
-            if not script_result["success"]:
-                self.log.warning(f"Failed to update launch script: {script_result['error']}")
-            
-            self.log.info(f"Deleted profile '{profile_name}'")
-            
-            return self._success_response(ProfileResponse,
-                                        f"Profile '{profile_name}' deleted successfully",
-                                        profile_name=profile_name)
-            
-        except ValueError as e:
-            error_msg = f"Invalid profile operation: {str(e)}"
-            self.log.error(error_msg)
-            return self._error_response(ProfileResponse, str(e), profile_name=None)
-        except Exception as e:
-            error_msg = f"Error deleting profile: {str(e)}"
-            self.log.error(error_msg)
-            return self._error_response(ProfileResponse, str(e), profile_name=None)
+            return {"profile_name": profile_name}
+
+        return self._commit_effective_state(
+            ProfileResponse,
+            transform,
+            lambda values: (
+                f"Profile '{values['profile_name']}' deleted successfully"
+            ),
+            {"profile_name": None},
+        )
     
     def rename_profile(self, old_name: str, new_name: str) -> ProfileResponse:
         """Rename a profile
@@ -674,40 +962,26 @@ class ConfigurationService(BaseService):
         Returns:
             ProfileResponse with success status and the normalized profile name
         """
-        try:
-            self.migrate_wrapper_profile_settings_if_needed()
-            profile_data = self._get_profile_data()
-            
-            # Get the normalized name that will be used for storage
+        def transform(profile_data, profile_settings):
             normalized_name = ConfigurationManager.normalize_profile_name(new_name)
-            
-            new_profile_data = ConfigurationManager.rename_profile(profile_data, old_name, new_name)
-            profile_settings = self._read_wrapper_profile_settings()
+            updated = ConfigurationManager.rename_profile(
+                profile_data, old_name, new_name
+            )
+            profile_data.clear()
+            profile_data.update(updated)
             if old_name in profile_settings:
                 profile_settings[normalized_name] = profile_settings.pop(old_name)
-            self._save_profile_data(new_profile_data)
-            if self.wrapper_profile_settings_path.exists() or profile_settings:
-                self._write_wrapper_profile_settings(profile_settings)
-            
-            script_result = self.update_lsfg_script_from_profile_data(new_profile_data)
-            if not script_result["success"]:
-                self.log.warning(f"Failed to update launch script: {script_result['error']}")
-            
-            self.log.info(f"Renamed profile '{old_name}' to '{normalized_name}'")
-            
-            # Return the normalized name so frontend can use the actual stored name
-            return self._success_response(ProfileResponse,
-                                        f"Profile renamed from '{old_name}' to '{normalized_name}' successfully",
-                                        profile_name=normalized_name)
-            
-        except ValueError as e:
-            error_msg = f"Invalid profile operation: {str(e)}"
-            self.log.error(error_msg)
-            return self._error_response(ProfileResponse, str(e), profile_name=None)
-        except Exception as e:
-            error_msg = f"Error renaming profile: {str(e)}"
-            self.log.error(error_msg)
-            return self._error_response(ProfileResponse, str(e), profile_name=None)
+            return {"profile_name": normalized_name}
+
+        return self._commit_effective_state(
+            ProfileResponse,
+            transform,
+            lambda values: (
+                f"Profile renamed from '{old_name}' to "
+                f"'{values['profile_name']}' successfully"
+            ),
+            {"profile_name": None},
+        )
     
     def set_current_profile(self, profile_name: str) -> ProfileResponse:
         """Set the current active profile
@@ -718,34 +992,28 @@ class ConfigurationService(BaseService):
         Returns:
             ProfileResponse with success status
         """
-        try:
-            self.migrate_wrapper_profile_settings_if_needed()
-            profile_data = self._get_profile_data()
-            
-            new_profile_data = ConfigurationManager.set_current_profile(profile_data, profile_name)
-            
-            self._save_profile_data(new_profile_data)
-            
-            script_result = self.update_lsfg_script_from_profile_data(new_profile_data)
-            if not script_result["success"]:
-                self.log.warning(f"Failed to update launch script: {script_result['error']}")
-            
-            self.log.info(f"Set current profile to '{profile_name}'")
-            
-            return self._success_response(ProfileResponse,
-                                        f"Current profile set to '{profile_name}' successfully",
-                                        profile_name=profile_name)
-            
-        except ValueError as e:
-            error_msg = f"Invalid profile operation: {str(e)}"
-            self.log.error(error_msg)
-            return self._error_response(ProfileResponse, str(e), profile_name=None)
-        except Exception as e:
-            error_msg = f"Error setting current profile: {str(e)}"
-            self.log.error(error_msg)
-            return self._error_response(ProfileResponse, str(e), profile_name=None)
+        def transform(profile_data, _profile_settings):
+            updated = ConfigurationManager.set_current_profile(
+                profile_data, profile_name
+            )
+            profile_data.clear()
+            profile_data.update(updated)
+            return {"profile_name": profile_name}
+
+        return self._commit_effective_state(
+            ProfileResponse,
+            transform,
+            lambda values: (
+                f"Current profile set to '{values['profile_name']}' successfully"
+            ),
+            {"profile_name": None},
+        )
     
-    def update_profile_config(self, profile_name: str, config: ConfigurationData) -> ConfigurationResponse:
+    def update_profile_config(
+            self,
+            profile_name: str | None,
+            config: ConfigurationData,
+    ) -> ConfigurationResponse:
         """Update configuration for a specific profile
         
         Args:
@@ -755,43 +1023,31 @@ class ConfigurationService(BaseService):
         Returns:
             ConfigurationResponse with success status
         """
-        try:
-            self.migrate_wrapper_profile_settings_if_needed()
-            profile_data = self._get_profile_data()
-            
-            if profile_name not in profile_data["profiles"]:
-                return self._error_response(ConfigurationResponse, 
-                                          f"Profile '{profile_name}' does not exist", 
-                                          config=None)
-            
-            # Update the profile's config
-            profile_data["profiles"][profile_name] = config
-            
-            # Update global config fields if they're in the config
-            for field_name in ["dll", "allow_fp16"]:
-                if field_name in config:
-                    profile_data["global_config"][field_name] = config[field_name]
-            profile_settings = self._read_wrapper_profile_settings()
-            profile_settings[profile_name] = self._normalize_wrapper_settings(config)
-            self._save_profile_data(profile_data)
-            self._write_wrapper_profile_settings(profile_settings)
-            
-            if profile_name == profile_data["current_profile"]:
-                script_result = self.update_lsfg_script_from_profile_data(profile_data)
-                if not script_result["success"]:
-                    self.log.warning(f"Failed to update launch script: {script_result['error']}")
-            
-            field_values = ", ".join(f"{k}={repr(v)}" for k, v in config.items())
-            self.log.info(f"Updated profile '{profile_name}' configuration: {field_values}")
-            
-            return self._success_response(ConfigurationResponse,
-                                        f"Profile '{profile_name}' configuration updated successfully",
-                                        config=config)
-            
-        except Exception as e:
-            error_msg = f"Error updating profile configuration: {str(e)}"
-            self.log.error(error_msg)
-            return self._error_response(ConfigurationResponse, str(e), config=None)
+        selected_profile = {"name": profile_name}
+
+        def transform(profile_data, profile_settings):
+            name = profile_name or profile_data["current_profile"]
+            selected_profile["name"] = name
+            if name not in profile_data["profiles"]:
+                raise ValueError(f"Profile '{name}' does not exist")
+            validated_config = ConfigurationManager.validate_config(config)
+            profile_data["profiles"][name] = validated_config
+            for field_name in ("dll", "allow_fp16"):
+                if field_name in validated_config:
+                    profile_data["global_config"][field_name] = validated_config[field_name]
+            profile_settings[name] = self._normalize_wrapper_settings(
+                validated_config
+            )
+            return {"config": validated_config}
+
+        return self._commit_effective_state(
+            ConfigurationResponse,
+            transform,
+            lambda _values: (
+                f"Profile '{selected_profile['name']}' configuration updated successfully"
+            ),
+            {"config": None},
+        )
     
     def update_lsfg_script_from_profile_data(self, profile_data: ProfileData) -> ConfigurationResponse:
         """Update the isolated per-game launch script from profile data
@@ -805,8 +1061,10 @@ class ConfigurationService(BaseService):
         try:
             script_content = self._generate_script_content_for_profile(profile_data)
             
-            # Write the script file
-            self._write_file(self.lsfg_script_path, script_content, 0o755)
+            self._commit_managed_replacements(
+                "configuration",
+                {self.lsfg_script_path: (script_content.encode(), 0o755)},
+            )
             
             self.log.info(f"Updated lsfg launch script at {self.lsfg_script_path} for profile '{profile_data['current_profile']}'")
             

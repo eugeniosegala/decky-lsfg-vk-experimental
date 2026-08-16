@@ -6,7 +6,6 @@ Vulkan layer for frame generation on Steam OS.
 """
 
 import os
-import subprocess
 import hashlib
 from typing import Dict, Any
 from pathlib import Path
@@ -417,35 +416,37 @@ class Plugin:
         This method is called by Decky Loader when the plugin is loaded.
         Any initialization code should go here.
         """
+        from . import state_transaction
+
         decky.logger.info("decky-lsfg-vk-experimental plugin loaded")
+        coordinator = state_transaction.MutationCoordinator(
+            state_transaction.PathLayout.from_home(Path.home())
+        )
         try:
-            if self.configuration_service.migrate_wrapper_profile_settings_if_needed():
-                decky.logger.info("Migrated wrapper-only settings into the active profile")
-        except OSError as error:
-            decky.logger.warning("Could not migrate wrapper-only profile settings: %s", error)
-        try:
-            if self.configuration_service.remove_legacy_vkbasalt_exports():
-                decky.logger.info("Removed obsolete vkBasalt exports from isolated launcher")
-        except OSError as error:
-            decky.logger.warning("Could not remove obsolete vkBasalt exports: %s", error)
-
-        try:
-            if self.installation_service.remove_obsolete_hdr_meta_layer_if_needed():
-                decky.logger.info("Removed the retired experimental HDR meta-layer")
-        except OSError as error:
-            decky.logger.warning("Could not remove the retired experimental HDR meta-layer: %s", error)
-
-        try:
-            if self.configuration_service.migrate_launch_script_if_needed():
-                decky.logger.info("Upgraded installed experimental launch wrapper to the current format")
-        except OSError as error:
-            decky.logger.warning("Could not upgrade experimental launch wrapper: %s", error)
-
-        try:
-            if self.installation_service.migrate_diagnostics_helper_if_needed():
-                decky.logger.info("Installed the experimental diagnostics helper")
-        except OSError as error:
-            decky.logger.warning("Could not install the diagnostics helper: %s", error)
+            with coordinator.locked("migration"):
+                coordinator.recover()
+                writers = (
+                    (self.configuration_service.migrate_wrapper_profile_settings_if_needed,
+                     "Migrated wrapper-only settings into the active profile"),
+                    (self.configuration_service.remove_legacy_vkbasalt_exports,
+                     "Removed obsolete vkBasalt exports from isolated launcher"),
+                    (self.installation_service.remove_obsolete_hdr_meta_layer_if_needed,
+                     "Removed the retired experimental HDR meta-layer"),
+                    (self.configuration_service.migrate_launch_script_if_needed,
+                     "Upgraded installed experimental launch wrapper to the current format"),
+                    (self.installation_service.migrate_diagnostics_helper_if_needed,
+                     "Installed the experimental diagnostics helper"),
+                )
+                for writer, success_message in writers:
+                    try:
+                        if writer():
+                            decky.logger.info(success_message)
+                    except OSError as error:
+                        decky.logger.warning("Startup migration step failed: %s", error)
+        except state_transaction.MutationBusyError as error:
+            decky.logger.warning("Startup recovery is busy; deferring migrations: %s", error)
+        except state_transaction.MutationBlockedError as error:
+            decky.logger.error("Startup recovery is blocked; migrations were aborted: %s", error)
 
     async def _unload(self):
         """
@@ -481,17 +482,32 @@ class Plugin:
         This method is called by Decky Loader for plugin migrations.
         Currently migrates logs, settings, and runtime data from old locations.
         """
+        from . import state_transaction
+
         decky.logger.info("Running decky-lsfg-vk-experimental plugin migrations")
-        
-        decky.migrate_logs(os.path.join(decky.DECKY_USER_HOME,
-                                       ".config", "decky-lossless-scaling-vk", "lossless-scaling-vk.log"))
-        
-        decky.migrate_settings(
-            os.path.join(decky.DECKY_HOME, "settings", "lossless-scaling-vk.json"),
-            os.path.join(decky.DECKY_USER_HOME, ".config", "decky-lossless-scaling-vk"))
-        
-        decky.migrate_runtime(
-            os.path.join(decky.DECKY_HOME, "lossless-scaling-vk"),
-            os.path.join(decky.DECKY_USER_HOME, ".local", "share", "decky-lossless-scaling-vk"))
-        
+        coordinator = state_transaction.MutationCoordinator(
+            state_transaction.PathLayout.from_home(Path.home())
+        )
+        try:
+            with coordinator.locked("migration"):
+                coordinator.recover()
+                decky.migrate_logs(os.path.join(
+                    decky.DECKY_USER_HOME, ".config", "decky-lossless-scaling-vk",
+                    "lossless-scaling-vk.log",
+                ))
+                decky.migrate_settings(
+                    os.path.join(decky.DECKY_HOME, "settings", "lossless-scaling-vk.json"),
+                    os.path.join(decky.DECKY_USER_HOME, ".config", "decky-lossless-scaling-vk"),
+                )
+                decky.migrate_runtime(
+                    os.path.join(decky.DECKY_HOME, "lossless-scaling-vk"),
+                    os.path.join(decky.DECKY_USER_HOME, ".local", "share", "decky-lossless-scaling-vk"),
+                )
+        except state_transaction.MutationBusyError as error:
+            decky.logger.warning("Migration recovery is busy; deferring migrations: %s", error)
+            return
+        except state_transaction.MutationBlockedError as error:
+            decky.logger.error("Migration recovery is blocked; migrations were aborted: %s", error)
+            return
+
         decky.logger.info("decky-lsfg-vk-experimental plugin migrations completed")
