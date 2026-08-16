@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from contextlib import redirect_stderr, redirect_stdout
+import hashlib
 import io
 import json
 import os
@@ -91,8 +92,77 @@ class LatencyTraceContractTests(unittest.TestCase):
             },
         )
         self.assertEqual(
-            first["summary"]["input_observed_to_present_call_entry_proxy_ns"]["p95"],
+            first["summary"]["input_age_at_present_call_entry_proxy_ns"]["p95"],
             600,
+        )
+
+    def test_input_age_proxy_samples_each_successful_mapped_real_frame(self):
+        records = _records()
+        destroy_index = records.index(_event(records, "context_destroyed"))
+        records[destroy_index:destroy_index] = [
+            {
+                "record": "event",
+                "sequence": 0,
+                "timestamp_ns": 760,
+                "context_id": "ctx",
+                "epoch": 0,
+                "event": "simulation_started",
+                "data": {"input_id": "input-0", "real_frame_id": "real-1"},
+            },
+            {
+                "record": "event",
+                "sequence": 0,
+                "timestamp_ns": 800,
+                "context_id": "ctx",
+                "epoch": 0,
+                "event": "real_frame_ready",
+                "data": {"real_frame_id": "real-1", "real_index": 1},
+            },
+            {
+                "record": "event",
+                "sequence": 0,
+                "timestamp_ns": 900,
+                "context_id": "ctx",
+                "epoch": 0,
+                "event": "present_call_started",
+                "data": {
+                    "output_kind": "real",
+                    "output_frame_id": "real-1",
+                    "queue_depth": 0,
+                    "content_order": {
+                        "right_real_index": 1,
+                        "numerator": 1,
+                        "denominator": 1,
+                    },
+                },
+            },
+            {
+                "record": "event",
+                "sequence": 0,
+                "timestamp_ns": 950,
+                "context_id": "ctx",
+                "epoch": 0,
+                "event": "present_call_returned",
+                "data": {"output_frame_id": "real-1", "result": "success"},
+            },
+        ]
+        _event(records, "context_destroyed")["timestamp_ns"] = 1000
+        records[-1]["timestamp_ns"] = 1000
+        _renumber(records)
+
+        metric = evaluate_trace(records)["summary"][
+            "input_age_at_present_call_entry_proxy_ns"
+        ]
+
+        self.assertEqual(
+            metric,
+            {
+                "sample_count": 2,
+                "p50": 600,
+                "p95": 800,
+                "p99": 800,
+                "unavailable_reason": None,
+            },
         )
 
     def test_partial_prefix_counts_frames_not_batches(self):
@@ -136,9 +206,7 @@ class LatencyTraceContractTests(unittest.TestCase):
                     0,
                 )
                 self.assertEqual(
-                    summary["input_observed_to_present_call_entry_proxy_ns"][
-                        "sample_count"
-                    ],
+                    summary["input_age_at_present_call_entry_proxy_ns"]["sample_count"],
                     0,
                 )
 
@@ -158,16 +226,14 @@ class LatencyTraceContractTests(unittest.TestCase):
 
         summary = evaluate_trace(records)["summary"]
 
-        self.assertIn("input_observed_to_present_call_entry_proxy_ns", summary)
-        self.assertIn("input_observed_to_real_feedback_proxy_ns", summary)
+        self.assertIn("input_age_at_present_call_entry_proxy_ns", summary)
+        self.assertIn("input_age_at_real_feedback_proxy_ns", summary)
         self.assertEqual(
-            summary["input_observed_to_present_call_entry_proxy_ns"][
-                "unavailable_reason"
-            ],
+            summary["input_age_at_present_call_entry_proxy_ns"]["unavailable_reason"],
             "no_successful_real_present_for_input_boundary",
         )
         self.assertEqual(
-            summary["input_observed_to_real_feedback_proxy_ns"]["unavailable_reason"],
+            summary["input_age_at_real_feedback_proxy_ns"]["unavailable_reason"],
             "presentation_feedback_unavailable",
         )
 
@@ -240,7 +306,7 @@ class LatencyTraceContractTests(unittest.TestCase):
         without_feedback = _records()
         summary = evaluate_trace(without_feedback)["summary"]
         self.assertEqual(
-            summary["input_observed_to_real_feedback_proxy_ns"]["unavailable_reason"],
+            summary["input_age_at_real_feedback_proxy_ns"]["unavailable_reason"],
             "presentation_feedback_unavailable",
         )
 
@@ -265,23 +331,21 @@ class LatencyTraceContractTests(unittest.TestCase):
 
         summary = evaluate_trace(with_feedback)["summary"]
         self.assertEqual(
-            summary["input_observed_to_real_feedback_proxy_ns"]["unavailable_reason"],
+            summary["input_age_at_real_feedback_proxy_ns"]["unavailable_reason"],
             "no_presented_feedback_for_input_boundary",
         )
 
     def test_absent_input_mapping_reserves_input_boundary_unavailable_reason(self):
         summary = evaluate_trace(_records("valid-runtime-failure.jsonl"))["summary"]
 
-        self.assertIn("input_observed_to_present_call_entry_proxy_ns", summary)
-        self.assertIn("input_observed_to_real_feedback_proxy_ns", summary)
+        self.assertIn("input_age_at_present_call_entry_proxy_ns", summary)
+        self.assertIn("input_age_at_real_feedback_proxy_ns", summary)
         self.assertEqual(
-            summary["input_observed_to_present_call_entry_proxy_ns"][
-                "unavailable_reason"
-            ],
+            summary["input_age_at_present_call_entry_proxy_ns"]["unavailable_reason"],
             "input_boundary_unavailable",
         )
         self.assertEqual(
-            summary["input_observed_to_real_feedback_proxy_ns"]["unavailable_reason"],
+            summary["input_age_at_real_feedback_proxy_ns"]["unavailable_reason"],
             "input_boundary_unavailable",
         )
 
@@ -540,12 +604,12 @@ class LatencyTraceContractTests(unittest.TestCase):
 
         summary = evaluate_trace(records)["summary"]
         self.assertIn("real_ready_to_presentation_feedback_proxy_ns", summary)
-        self.assertIn("input_observed_to_real_feedback_proxy_ns", summary)
+        self.assertIn("input_age_at_real_feedback_proxy_ns", summary)
         self.assertEqual(
             summary["real_ready_to_presentation_feedback_proxy_ns"]["p50"], 270
         )
         self.assertEqual(
-            summary["input_observed_to_real_feedback_proxy_ns"]["p50"],
+            summary["input_age_at_real_feedback_proxy_ns"]["p50"],
             670,
         )
 
@@ -642,7 +706,7 @@ class LatencyTraceContractTests(unittest.TestCase):
                     "no_presented_generated_feedback",
                 )
                 self.assertEqual(
-                    summary["input_observed_to_real_feedback_proxy_ns"][
+                    summary["input_age_at_real_feedback_proxy_ns"][
                         "unavailable_reason"
                     ],
                     "no_presented_feedback_for_input_boundary",
@@ -937,7 +1001,7 @@ class LatencyTraceContractTests(unittest.TestCase):
         records[6]["sequence"] = 6
         records[6]["timestamp_ns"] = 700
         result = evaluate_trace(records)
-        self.assertEqual(result["summary"]["abandoned_frame_count"], 1)
+        self.assertEqual(result["summary"]["abandoned_real_frame_count"], 1)
 
     def test_context_epochs_allow_id_reuse_after_destruction(self):
         records = _records()
@@ -977,7 +1041,7 @@ class LatencyTraceContractTests(unittest.TestCase):
         records.append(end)
         result = evaluate_trace(records)
         self.assertEqual(result["summary"]["context_epoch_count"], 2)
-        self.assertEqual(result["summary"]["abandoned_frame_count"], 1)
+        self.assertEqual(result["summary"]["abandoned_real_frame_count"], 1)
 
     def test_distinct_contexts_can_interleave(self):
         records = _records()
@@ -1019,7 +1083,7 @@ class LatencyTraceContractTests(unittest.TestCase):
 
         result = evaluate_trace(records)
         self.assertEqual(result["summary"]["context_epoch_count"], 2)
-        self.assertEqual(result["summary"]["abandoned_frame_count"], 1)
+        self.assertEqual(result["summary"]["abandoned_real_frame_count"], 1)
 
     def test_same_context_next_epoch_requires_previous_epoch_destroyed(self):
         records = _records()
@@ -1458,8 +1522,31 @@ class LatencyTraceV1CorrectionContractTests(unittest.TestCase):
         _renumber(records)
 
         summary = evaluate_trace(records)["summary"]
-        self.assertEqual(summary["abandoned_frame_count"], 1)
+        self.assertEqual(summary["abandoned_real_frame_count"], 1)
+        self.assertEqual(summary["abandoned_generated_frame_count"], 0)
         self.assertEqual(summary["abandoned_batch_count"], 0)
+
+    def test_allow_idle_abandonment_reconciles_every_planned_generated_slot(self):
+        records = _records("valid-partial-prefix.jsonl")
+        admission_index = records.index(_event(records, "generated_batch_admitted"))
+        destroy = _event(records, "context_destroyed")
+        end = records[-1]
+        del records[admission_index + 1 : -2]
+        destroy["data"]["closure_policy"] = "allow_idle_abandonment"
+        destroy["timestamp_ns"] = 1200
+        end["timestamp_ns"] = 1200
+        _renumber(records)
+
+        summary = evaluate_trace(records)["summary"]
+
+        self.assertEqual(
+            summary["planned_generated_frame_count"],
+            summary["admitted_generated_frame_count"]
+            + summary["skipped_generated_frame_count"]
+            + summary["abandoned_generated_slot_count"],
+        )
+        self.assertEqual(summary["admitted_generated_frame_count"], 1)
+        self.assertEqual(summary["abandoned_generated_slot_count"], 2)
 
     def test_strict_closure_rejects_an_idle_open_frame(self):
         records = _records()
@@ -1710,7 +1797,7 @@ class LatencyTraceV1CorrectionContractTests(unittest.TestCase):
 
                 summary = evaluate_trace(records)["summary"]
                 self.assertEqual(summary["acquire_results"][result], 1)
-                self.assertEqual(summary["abandoned_frame_count"], 0)
+                self.assertEqual(summary["abandoned_generated_frame_count"], 0)
                 self.assertEqual(summary["late_generated_present_call_count"], 0)
 
     def test_idle_acquired_frame_abandonment_is_not_a_late_present(self):
@@ -1728,7 +1815,7 @@ class LatencyTraceV1CorrectionContractTests(unittest.TestCase):
 
         summary = evaluate_trace(records)["summary"]
         self.assertEqual(summary["late_generated_present_call_count"], 0)
-        self.assertEqual(summary["abandoned_frame_count"], 1)
+        self.assertEqual(summary["abandoned_generated_frame_count"], 1)
 
     def test_context_profile_is_homogeneous_and_retained(self):
         records = _records()
@@ -1786,13 +1873,27 @@ class LatencyTraceV1CorrectionContractTests(unittest.TestCase):
         self.assertNotIn("missing_feedback_count", summary)
 
     def test_canonical_result_has_exact_top_level_keys(self):
-        result = evaluate_trace(_records())
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "result.json"
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                code = main(
+                    [
+                        str(FIXTURES / "valid-real-only.jsonl"),
+                        "--json-output",
+                        str(output),
+                    ]
+                )
+            self.assertEqual(code, 0)
+            result = json.loads(output.read_text(encoding="utf-8"))
 
         self.assertEqual(
             set(result),
             {
                 "valid",
                 "schema",
+                "result_schema",
+                "evaluator",
+                "input_trace_sha256",
                 "trace_id",
                 "producer",
                 "measurement_scope",
@@ -1803,6 +1904,44 @@ class LatencyTraceV1CorrectionContractTests(unittest.TestCase):
                 "context_profile",
                 "summary",
             },
+        )
+
+    def test_canonical_result_identifies_evaluator_schema_and_exact_input_bytes(self):
+        trace = FIXTURES / "valid-real-only.jsonl"
+        expected_digest = "sha256:" + hashlib.sha256(trace.read_bytes()).hexdigest()
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "result.json"
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                code = main([str(trace), "--json-output", str(output)])
+            self.assertEqual(code, 0)
+            result = json.loads(output.read_text(encoding="utf-8"))
+
+        self.assertEqual(result["result_schema"], 1)
+        self.assertEqual(
+            result["evaluator"], {"name": "latency_trace_gate", "version": 1}
+        )
+        self.assertEqual(result["input_trace_sha256"], expected_digest)
+
+    def test_direct_evaluation_does_not_fabricate_an_input_byte_digest(self):
+        result = evaluate_trace(_records())
+
+        self.assertIsNone(result["input_trace_sha256"])
+
+    def test_direct_evaluation_does_not_accept_a_digest_assertion(self):
+        with self.assertRaises(TypeError):
+            evaluate_trace(
+                _records(),
+                input_trace_sha256="sha256:" + "0" * 64,
+            )
+
+    def test_evaluator_identity_is_not_shared_between_results(self):
+        first = evaluate_trace(_records())
+        first["evaluator"]["version"] = 999
+
+        second = evaluate_trace(_records())
+
+        self.assertEqual(
+            second["evaluator"], {"name": "latency_trace_gate", "version": 1}
         )
 
     def test_canonical_summary_has_exact_keys(self):
@@ -1826,19 +1965,22 @@ class LatencyTraceV1CorrectionContractTests(unittest.TestCase):
                 "unknown_feedback_count",
                 "recovery_attempt_count",
                 "recovery_failed_count",
-                "abandoned_frame_count",
+                "abandoned_real_frame_count",
+                "abandoned_generated_frame_count",
+                "abandoned_generated_slot_count",
                 "abandoned_batch_count",
                 "context_epoch_count",
                 "context_id_count",
                 "real_ready_to_present_call_proxy_ns",
-                "input_observed_to_present_call_entry_proxy_ns",
+                "input_age_at_present_call_entry_proxy_ns",
                 "host_generation_duration_ns",
+                "gpu_generation_duration_ns",
                 "host_acquire_duration_ns",
                 "present_call_to_feedback_proxy_ns",
                 "real_present_call_to_feedback_proxy_ns",
                 "generated_present_call_to_feedback_proxy_ns",
                 "real_ready_to_presentation_feedback_proxy_ns",
-                "input_observed_to_real_feedback_proxy_ns",
+                "input_age_at_real_feedback_proxy_ns",
             },
         )
 
@@ -1846,14 +1988,15 @@ class LatencyTraceV1CorrectionContractTests(unittest.TestCase):
         summary = evaluate_trace(_records())["summary"]
         distribution_names = (
             "real_ready_to_present_call_proxy_ns",
-            "input_observed_to_present_call_entry_proxy_ns",
+            "input_age_at_present_call_entry_proxy_ns",
             "host_generation_duration_ns",
+            "gpu_generation_duration_ns",
             "host_acquire_duration_ns",
             "present_call_to_feedback_proxy_ns",
             "real_present_call_to_feedback_proxy_ns",
             "generated_present_call_to_feedback_proxy_ns",
             "real_ready_to_presentation_feedback_proxy_ns",
-            "input_observed_to_real_feedback_proxy_ns",
+            "input_age_at_real_feedback_proxy_ns",
         )
 
         for name in distribution_names:
@@ -1862,6 +2005,55 @@ class LatencyTraceV1CorrectionContractTests(unittest.TestCase):
                     set(summary[name]),
                     {"sample_count", "p50", "p95", "p99", "unavailable_reason"},
                 )
+
+    def test_gpu_generation_duration_is_measured_when_capability_is_true(self):
+        available = _records("valid-partial-prefix.jsonl")
+        available[0]["capabilities"]["gpu_duration"] = True
+        _event(available, "generation_finished")["data"]["gpu_duration_ns"] = 80
+
+        measured = evaluate_trace(available)["summary"]["gpu_generation_duration_ns"]
+
+        self.assertEqual(
+            measured,
+            {
+                "sample_count": 1,
+                "p50": 80,
+                "p95": 80,
+                "p99": 80,
+                "unavailable_reason": None,
+            },
+        )
+
+    def test_gpu_generation_duration_is_unavailable_without_capability(self):
+        unavailable = evaluate_trace(_records())["summary"][
+            "gpu_generation_duration_ns"
+        ]
+
+        self.assertEqual(unavailable["sample_count"], 0)
+        self.assertEqual(unavailable["unavailable_reason"], "gpu_duration_unavailable")
+
+    def test_gpu_generation_duration_must_match_capability(self):
+        records = _records("valid-partial-prefix.jsonl")
+        _event(records, "generation_finished")["data"]["gpu_duration_ns"] = 0
+
+        with self.assertRaisesRegex(
+            LatencyTraceError, "availability must match capability"
+        ):
+            evaluate_trace(records)
+
+    def test_gpu_generation_duration_must_fit_host_interval(self):
+        records = _records("valid-partial-prefix.jsonl")
+        records[0]["capabilities"]["gpu_duration"] = True
+        generation_start = _event(records, "generation_started")["timestamp_ns"]
+        generation_finish = _event(records, "generation_finished")
+        generation_finish["data"]["gpu_duration_ns"] = (
+            generation_finish["timestamp_ns"] - generation_start + 1
+        )
+
+        with self.assertRaisesRegex(
+            LatencyTraceError, "exceeds its enclosing generation interval"
+        ):
+            evaluate_trace(records)
 
     def test_canonical_summary_result_buckets_have_exact_keys(self):
         summary = evaluate_trace(_records())["summary"]
@@ -1929,9 +2121,9 @@ class LatencyTraceV1CorrectionContractTests(unittest.TestCase):
                 operations.append("fsync")
                 return real_fsync(fd)
 
-            def observed_replace(source, destination):
+            def observed_replace(source, destination, **kwargs):
                 operations.append("replace")
-                return real_replace(source, destination)
+                return real_replace(source, destination, **kwargs)
 
             with (
                 mock.patch(
@@ -1945,11 +2137,19 @@ class LatencyTraceV1CorrectionContractTests(unittest.TestCase):
             ):
                 latency_trace_gate._write_json({"valid": True}, output)
 
-            self.assertEqual(operations, ["fsync", "replace"])
+            self.assertEqual(operations, ["fsync", "replace", "fsync"])
             replace.assert_called_once()
-            temporary, destination = map(Path, replace.call_args.args)
-            self.assertEqual(temporary.parent, output.parent)
-            self.assertEqual(destination, output)
+            temporary, destination = replace.call_args.args
+            if replace.call_args.kwargs:
+                self.assertRegex(temporary, r"^\.result\.json\..+\.tmp$")
+                self.assertEqual(destination, output.name)
+                self.assertEqual(
+                    replace.call_args.kwargs["src_dir_fd"],
+                    replace.call_args.kwargs["dst_dir_fd"],
+                )
+            else:
+                self.assertEqual(Path(temporary).parent, output.parent)
+                self.assertEqual(Path(destination), output)
             self.assertEqual(
                 json.loads(output.read_text(encoding="utf-8")), {"valid": True}
             )
@@ -2003,22 +2203,60 @@ class LatencyTraceV1CorrectionContractTests(unittest.TestCase):
             self.assertEqual(trace.read_bytes(), before)
             self.assertEqual(output.read_bytes(), before)
 
-    def test_alias_inspection_error_does_not_mask_unreadable_input(self):
+    def test_cli_rejects_symlinked_parent_alias_without_relying_on_samefile(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            real_parent = root / "real"
+            real_parent.mkdir()
+            alias_parent = root / "alias"
+            alias_parent.symlink_to(real_parent, target_is_directory=True)
+            trace = real_parent / "trace.jsonl"
+            output = alias_parent / "trace.jsonl"
+            trace.write_bytes((FIXTURES / "valid-real-only.jsonl").read_bytes())
+            before = trace.read_bytes()
+
+            with (
+                mock.patch(
+                    "scripts.latency_trace_gate.os.path.samefile",
+                    side_effect=PermissionError("alias inspection denied"),
+                ) as samefile,
+                redirect_stdout(io.StringIO()),
+                redirect_stderr(io.StringIO()),
+            ):
+                code = main([str(trace), "--json-output", str(output)])
+
+            self.assertEqual(code, EXIT_USAGE)
+            self.assertEqual(trace.read_bytes(), before)
+            samefile.assert_not_called()
+
+    def test_unopenable_input_symlink_cannot_overwrite_its_real_target(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "trace.jsonl"
+            input_symlink = root / "trace-link.jsonl"
+            target.write_bytes((FIXTURES / "valid-real-only.jsonl").read_bytes())
+            input_symlink.symlink_to(target)
+            before = target.read_bytes()
+
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                code = main([str(input_symlink), "--json-output", str(target)])
+
+            self.assertIn(code, {EXIT_INVALID_TRACE, EXIT_USAGE})
+            self.assertEqual(target.read_bytes(), before)
+
+    def test_unopenable_input_with_unknown_identity_preserves_requested_output(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             trace = root / "trace.jsonl"
             output = root / "result.json"
             trace.write_bytes((FIXTURES / "valid-real-only.jsonl").read_bytes())
+            stale = b'{"valid":true,"stale":true}\n'
+            output.write_bytes(stale)
+
             with (
                 mock.patch(
-                    "scripts.latency_trace_gate.os.path.samefile",
-                    side_effect=PermissionError("alias inspection denied"),
-                ),
-                mock.patch(
-                    "scripts.latency_trace_gate.load_trace",
-                    side_effect=LatencyTraceError(
-                        "cannot read trace: permission denied"
-                    ),
+                    "scripts.latency_trace_gate._read_trace",
+                    side_effect=PermissionError("input identity unavailable"),
                 ),
                 redirect_stdout(io.StringIO()),
                 redirect_stderr(io.StringIO()),
@@ -2026,8 +2264,65 @@ class LatencyTraceV1CorrectionContractTests(unittest.TestCase):
                 code = main([str(trace), "--json-output", str(output)])
 
             self.assertEqual(code, EXIT_INVALID_TRACE)
-            rejected = json.loads(output.read_text(encoding="utf-8"))
-            self.assertEqual(rejected["error"], "cannot read trace: permission denied")
+            self.assertEqual(output.read_bytes(), stale)
+
+    def test_unopenable_input_with_unknown_identity_creates_no_requested_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            trace = root / "trace.jsonl"
+            output = root / "result.json"
+
+            with (
+                mock.patch(
+                    "scripts.latency_trace_gate._read_trace",
+                    side_effect=PermissionError("input identity unavailable"),
+                ),
+                redirect_stdout(io.StringIO()),
+                redirect_stderr(io.StringIO()),
+            ):
+                code = main([str(trace), "--json-output", str(output)])
+
+            self.assertEqual(code, EXIT_INVALID_TRACE)
+            self.assertFalse(output.exists())
+
+    def test_cli_treats_enoent_as_absent_output_not_an_alias(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            trace = root / "trace.jsonl"
+            output = root / "result.json"
+            trace.write_bytes((FIXTURES / "valid-real-only.jsonl").read_bytes())
+
+            with (
+                mock.patch(
+                    "scripts.latency_trace_gate.os.stat",
+                    side_effect=FileNotFoundError("output is absent"),
+                ),
+                redirect_stdout(io.StringIO()),
+                redirect_stderr(io.StringIO()),
+            ):
+                code = main([str(trace), "--json-output", str(output)])
+
+            self.assertEqual(code, 0)
+            self.assertTrue(json.loads(output.read_text(encoding="utf-8"))["valid"])
+
+    def test_non_enoent_output_inspection_error_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            trace = root / "trace.jsonl"
+            output = root / "result.json"
+            trace.write_bytes((FIXTURES / "valid-real-only.jsonl").read_bytes())
+            with (
+                mock.patch(
+                    "scripts.latency_trace_gate.os.stat",
+                    side_effect=PermissionError("alias inspection denied"),
+                ),
+                redirect_stdout(io.StringIO()),
+                redirect_stderr(io.StringIO()),
+            ):
+                code = main([str(trace), "--json-output", str(output)])
+
+            self.assertEqual(code, EXIT_INVALID_TRACE)
+            self.assertFalse(output.exists())
 
     def test_cli_sanitizes_untrusted_terminal_control_characters(self):
         records = _records()

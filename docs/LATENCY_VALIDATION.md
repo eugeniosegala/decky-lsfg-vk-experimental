@@ -71,6 +71,22 @@ code `0`. If validation or replacement fails, an older result file may still
 exist at the requested path; its contents are stale and untrusted. The input
 trace and JSON output must not be the same file or filesystem alias; that
 invalid argument combination exits with code `64` before either file is changed.
+Alias checks compare the output against the device/inode identity of the input
+descriptor that supplied the evaluated bytes, not against a later lookup of the
+input pathname. The output parent is held open while the destination is checked,
+the temporary result is created, and its directory entry is replaced. Only a
+lexically distinct destination that returns `ENOENT` is treated as absent;
+other inspection errors fail closed. The replacement operation replaces a
+symlink or hard-link directory entry rather than opening its target for writing,
+so the opened input inode remains unchanged.
+Successful publication assumes the caller controls a stable output directory.
+The gate holds that directory by descriptor, but it cannot make a pathname keep
+referring to the same directory if another process is allowed to rename and
+replace parent-directory entries concurrently.
+If the gate cannot establish the input descriptor identity at all (for example,
+because a no-follow open rejects a symlink), it does not write any requested
+JSON result, including rejection JSON; a pre-existing output is preserved and
+only stderr plus exit code `2` report the failure.
 
 Exit codes are stable:
 
@@ -110,10 +126,12 @@ most 1 MiB plus one detection byte, rejects more than 10,002 physical records
 before JSON expansion, and verifies descriptor identity and size before and
 after the read. This makes special-file blocking, growth, and record-amplification
 attempts invalid evidence. Replacing the pathname cannot
-change the already-opened evidence; mutation of that opened inode is rejected.
+change the already-opened evidence; mutation of that opened inode during the
+descriptor-read window is rejected.
 Producers must finish and close an immutable trace file before invoking the
-validator; changes to its identity, size, modification time, or metadata-change
-time during validation are rejected.
+validator. A later pathname or inode change cannot alter the already-read
+snapshot or its digest, but the gate does not claim that the producer kept the
+source pathname immutable after the descriptor-read window.
 
 Header fields retain the producer's self-declared identity for:
 
@@ -133,6 +151,16 @@ feedback event; `dropped` and `unknown` feedback have a null timestamp. Missing
 required feedback invalidates a complete trace. Missing capabilities produce
 `null` metrics with a reason rather than misleading zeros. Canonical valid
 results retain producer, subject, clock, capabilities, and workload identity.
+CLI-produced results also identify result schema `1`, evaluator
+`{"name":"latency_trace_gate","version":1}`, and the SHA-256 of the exact input
+bytes read from the stable descriptor. The input digest binds the summary to its
+JSONL byte representation; it is not a signature or an attestation of the
+producer's self-declared subject fields.
+The internal `evaluate_trace()` helper accepts parsed records rather than an
+original byte representation and therefore always returns
+`input_trace_sha256: null`; it never accepts a caller assertion or fabricates a
+digest by reserializing records. Only the raw-byte CLI path can attach the exact
+input digest.
 Schema v1 validates the format of subject hashes but does not resolve or compare
 them against a trusted repository, artifact store, or configuration source;
 they are self-declared provenance, not verified attestation.
@@ -229,25 +257,58 @@ reserved for that real frame and cannot be reused as a generated frame ID.
 ## Summary definitions
 
 Only a complete valid trace receives a summary. Distributions use deterministic
-nearest-rank p50/p95/p99. The summary includes:
+nearest-rank p50/p95/p99. Each latency distribution samples **one value per
+qualifying output frame**, not one value per unique input ID, batch, context, or
+trace. The summary includes:
 
 - successful/suboptimal real-ready to host present-call-entry proxy;
-- optional `input_observed_to_present_call_entry_proxy_ns` from producer-observed
-  input to the matching successful/suboptimal real host present-call entry;
-- host generation and acquire durations;
+- optional `input_age_at_present_call_entry_proxy_ns`, the age of the mapped
+  producer-observed input when each successful/suboptimal real frame enters its
+  host present call;
+- host generation and acquire durations, plus `gpu_generation_duration_ns` when
+  the header declares GPU-duration capability;
 - separate real and generated host present-call-entry to normalized presented
   feedback proxies, plus their aggregate;
 - direct real-ready to presented-feedback and optional
-  `input_observed_to_real_feedback_proxy_ns` from observed input to matching real
-  presented feedback;
+  `input_age_at_real_feedback_proxy_ns`, the age of the mapped input at matching
+  real presented feedback;
 - maximum declared queue depth, or `null` when no present call declared one;
 - planned, admitted, and skipped generated **frame** counts, plus derived late
   generated present-call entries;
 - separate batch and context/epoch counts;
 - acquire/present outcomes; expected, received, presented, dropped, and unknown
-  feedback counts; recovery attempts/failures; and explicitly abandoned
-  frames/batches. Missing required feedback invalidates the trace, so no
+  feedback counts; recovery attempts/failures; and explicitly abandoned real
+  frames, admitted generated frames, unresolved unadmitted generated slots, and
+  batches. Missing required feedback invalidates the trace, so no
   `missing_feedback_count` appears in a valid summary.
+
+An `input_id` identifies one observed input boundary and may intentionally map
+to multiple real frames. Such reuse produces one input-age sample for every
+qualifying mapped real frame; these are per-frame age proxies, not independent
+physical input events and not input-to-photon measurements.
+
+Generated-slot accounting is exhaustive at context closure:
+
+```text
+planned_generated_frame_count
+  = admitted_generated_frame_count
+  + skipped_generated_frame_count
+  + abandoned_generated_slot_count
+```
+
+`abandoned_generated_slot_count` covers planned slots for which neither
+admission nor an explicit skipped suffix resolved ownership. Separately,
+`abandoned_generated_frame_count` counts admitted frames left idle after
+admission, while `abandoned_real_frame_count` counts idle real frames. Thus an
+admitted-but-idle frame remains admitted in the invariant and is also visible as
+an abandoned generated-frame lifecycle; it is not double-counted as an
+unadmitted slot.
+
+`gpu_duration_ns` is a non-negative duration associated with one completed
+generation and must not exceed its enclosing host generation interval. When the
+capability is true, the gate retains its nearest-rank distribution. When false,
+the event field must be `null` and the distribution reports
+`gpu_duration_unavailable`; this is distinct from a measured zero.
 
 Failed present attempts contribute only to outcome counters; they do not create
 latency samples. Dropped and unknown terminal feedback contribute to feedback

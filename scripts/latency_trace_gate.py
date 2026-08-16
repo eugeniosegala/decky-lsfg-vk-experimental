@@ -8,6 +8,7 @@ does not make performance, visual-quality, or input-to-photon claims.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -15,9 +16,9 @@ from pathlib import Path
 import re
 import stat
 import sys
-import tempfile
 from typing import Any
 import unicodedata
+import uuid
 
 
 EXIT_OK = 0
@@ -34,6 +35,7 @@ _ID_RE = re.compile(r"^[\x20-\x7e]{1,128}$")
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 _RESULTS = ("success", "suboptimal", "timeout", "out_of_date", "error")
+_EVALUATOR_IDENTITY = {"name": "latency_trace_gate", "version": 1}
 
 
 class LatencyTraceError(ValueError):
@@ -104,7 +106,7 @@ def _split_bounded_lines(raw: bytes) -> list[bytes]:
     return lines
 
 
-def load_trace(path: Path) -> list[dict[str, Any]]:
+def _read_trace(path: Path) -> tuple[bytes, tuple[int, int]]:
     flags = os.O_RDONLY
     for optional_flag in ("O_CLOEXEC", "O_NOFOLLOW", "O_NONBLOCK"):
         flags |= getattr(os, optional_flag, 0)
@@ -157,6 +159,10 @@ def load_trace(path: Path) -> list[dict[str, Any]]:
     finally:
         os.close(fd)
 
+    return raw, (after.st_dev, after.st_ino)
+
+
+def _parse_trace(raw: bytes) -> list[dict[str, Any]]:
     raw_lines = _split_bounded_lines(raw)
     if not raw_lines:
         raise LatencyTraceError("trace is empty")
@@ -189,6 +195,11 @@ def load_trace(path: Path) -> list[dict[str, Any]]:
     return records
 
 
+def load_trace(path: Path) -> list[dict[str, Any]]:
+    raw, _ = _read_trace(path)
+    return _parse_trace(raw)
+
+
 def _exact(obj: dict[str, Any], fields: set[str], where: str) -> None:
     if set(obj) != fields:
         raise LatencyTraceError(
@@ -214,17 +225,33 @@ def _identifier(value: Any, name: str) -> str:
     return value
 
 
-def _paths_refer_to_same_file(left: Path, right: Path) -> bool:
-    """Conservatively reject output aliases that could overwrite the input."""
-    if os.path.normcase(os.path.abspath(left)) == os.path.normcase(
+def _lexically_same_path(left: Path, right: Path) -> bool:
+    return os.path.normcase(os.path.abspath(left)) == os.path.normcase(
         os.path.abspath(right)
-    ):
+    )
+
+
+def _open_output_parent(output: Path) -> int:
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_DIRECTORY", 0)
+    return os.open(output.parent, flags)
+
+
+def _output_aliases_identity(
+    output: Path,
+    input_path: Path,
+    input_identity: tuple[int, int],
+    *,
+    parent_fd: int,
+) -> bool:
+    """Inspect an output relative to a stable parent; uncertainty is an error."""
+    if _lexically_same_path(input_path, output):
         return True
     try:
-        return os.path.samefile(left, right)
-    except OSError:
-        # The real load/write operation owns the actionable filesystem error.
+        output_stat = os.stat(output.name, dir_fd=parent_fd, follow_symlinks=True)
+    except FileNotFoundError:
         return False
+    return (output_stat.st_dev, output_stat.st_ino) == input_identity
 
 
 def _sanitize_diagnostic(value: Any) -> str:
@@ -800,7 +827,14 @@ class _EventProcessor:
             raise LatencyTraceError(
                 "generation finish timestamp precedes start timestamp"
             )
-        self.samples["generation"].append(timestamp - op[0])
+        host_duration = timestamp - op[0]
+        if gpu is not None and gpu > host_duration:
+            raise LatencyTraceError(
+                "gpu_duration_ns exceeds its enclosing generation interval"
+            )
+        self.samples["generation"].append(host_duration)
+        if gpu is not None:
+            self.samples["gpu_generation"].append(gpu)
         frame["generation_done"] = True
 
     def _process_acquire_started(
@@ -1230,18 +1264,25 @@ class _TraceRecordProcessor:
                 raise LatencyTraceError(
                     "missing terminal presentation feedback before context destruction"
                 )
-        open_frames = sum(not frame["closed"] for frame in ctx.real.values())
+        open_real_frames = sum(not frame["closed"] for frame in ctx.real.values())
         open_batches = sum(not plan["closed"] for plan in ctx.plans.values())
-        open_generated = sum(
+        open_generated_frames = sum(
             not frame["closed"] for frame in ctx.generated.values() if frame["admitted"]
         )
+        unresolved_unadmitted_slots = 0
+        for plan in ctx.plans.values():
+            admitted = plan["admitted"] or 0
+            skipped = plan["planned"] - admitted if plan["skip"] is not None else 0
+            unresolved_unadmitted_slots += plan["planned"] - admitted - skipped
         if closure_policy == "strict":
             _validate_strict_closure(ctx)
-            if open_frames or open_batches:
+            if open_real_frames or open_generated_frames or open_batches:
                 raise LatencyTraceError(
                     "strict context end requires all frame and batch lifecycles closed"
                 )
-        self.summary["abandoned_frame_count"] += open_frames + open_generated
+        self.summary["abandoned_real_frame_count"] += open_real_frames
+        self.summary["abandoned_generated_frame_count"] += open_generated_frames
+        self.summary["abandoned_generated_slot_count"] += unresolved_unadmitted_slots
         self.summary["abandoned_batch_count"] += open_batches
         ctx.destroyed = True
         ctx.closure_policy = closure_policy
@@ -1258,7 +1299,11 @@ class _TraceRecordProcessor:
                 _validate_strict_closure(ctx)
 
 
-def evaluate_trace(records: list[dict[str, Any]]) -> dict[str, Any]:
+def _evaluate_trace(
+    records: list[dict[str, Any]],
+    *,
+    input_trace_sha256: str | None = None,
+) -> dict[str, Any]:
     if not isinstance(records, list) or len(records) < 3:
         raise LatencyTraceError("trace must contain header, events, and end")
     header = _validate_header(records[0])
@@ -1278,6 +1323,7 @@ def evaluate_trace(records: list[dict[str, Any]]) -> dict[str, Any]:
             "real",
             "input",
             "generation",
+            "gpu_generation",
             "acquire",
             "real_feedback",
             "generated_feedback",
@@ -1301,7 +1347,9 @@ def evaluate_trace(records: list[dict[str, Any]]) -> dict[str, Any]:
         "unknown_feedback_count": 0,
         "recovery_attempt_count": 0,
         "recovery_failed_count": 0,
-        "abandoned_frame_count": 0,
+        "abandoned_real_frame_count": 0,
+        "abandoned_generated_frame_count": 0,
+        "abandoned_generated_slot_count": 0,
         "abandoned_batch_count": 0,
     }
     processor = _TraceRecordProcessor(caps, samples, summary, len(records))
@@ -1311,13 +1359,20 @@ def evaluate_trace(records: list[dict[str, Any]]) -> dict[str, Any]:
     processor.finish()
     contexts = processor.contexts
 
+    if summary["planned_generated_frame_count"] != (
+        summary["admitted_generated_frame_count"]
+        + summary["skipped_generated_frame_count"]
+        + summary["abandoned_generated_slot_count"]
+    ):
+        raise LatencyTraceError("generated slot accounting invariant failed")
+
     summary["context_epoch_count"] = len(contexts)
     summary["context_id_count"] = len({key[0] for key in contexts})
     summary["real_ready_to_present_call_proxy_ns"] = _distribution(
         samples["real"], "no_successful_real_presents"
     )
     has_input_boundary = any(ctx.simulations for ctx in contexts.values())
-    summary["input_observed_to_present_call_entry_proxy_ns"] = _distribution(
+    summary["input_age_at_present_call_entry_proxy_ns"] = _distribution(
         samples["input"],
         "no_successful_real_present_for_input_boundary"
         if has_input_boundary
@@ -1325,6 +1380,12 @@ def evaluate_trace(records: list[dict[str, Any]]) -> dict[str, Any]:
     )
     summary["host_generation_duration_ns"] = _distribution(
         samples["generation"], "no_generated_frames"
+    )
+    summary["gpu_generation_duration_ns"] = _distribution(
+        samples["gpu_generation"],
+        "gpu_duration_unavailable"
+        if not caps["gpu_duration"]
+        else "no_generated_frames",
     )
     summary["host_acquire_duration_ns"] = _distribution(
         samples["acquire"], "no_acquire_calls"
@@ -1357,7 +1418,7 @@ def evaluate_trace(records: list[dict[str, Any]]) -> dict[str, Any]:
         if not caps["presentation_feedback"]
         else "no_presented_real_feedback",
     )
-    summary["input_observed_to_real_feedback_proxy_ns"] = _distribution(
+    summary["input_age_at_real_feedback_proxy_ns"] = _distribution(
         samples["input_feedback"],
         (
             "input_boundary_unavailable"
@@ -1369,6 +1430,9 @@ def evaluate_trace(records: list[dict[str, Any]]) -> dict[str, Any]:
     )
     return {
         "valid": True,
+        "result_schema": 1,
+        "evaluator": dict(_EVALUATOR_IDENTITY),
+        "input_trace_sha256": input_trace_sha256,
         "schema": 1,
         "trace_id": header["trace_id"],
         "producer": header["producer"],
@@ -1382,46 +1446,92 @@ def evaluate_trace(records: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def evaluate_trace(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Evaluate parsed records without claiming unavailable source-byte provenance."""
+    return _evaluate_trace(records)
+
+
 def _write_json(
     value: dict[str, Any],
     output: Path | None,
     *,
     protected_input: Path | None = None,
+    protected_identity: tuple[int, int] | None = None,
 ) -> None:
-    payload = json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n"
+    payload = (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode(
+        "utf-8"
+    )
     if output is None:
-        sys.stdout.write(payload)
+        sys.stdout.write(payload.decode("utf-8"))
     else:
-        if protected_input is not None and _paths_refer_to_same_file(
-            protected_input, output
-        ):
-            raise OSError("JSON output must not refer to the input trace")
-        temporary: Path | None = None
+        parent_fd = _open_output_parent(output)
+        temporary_name: str | None = None
         try:
-            with tempfile.NamedTemporaryFile(
-                mode="w",
-                encoding="utf-8",
-                dir=output.parent,
-                prefix=f".{output.name}.",
-                suffix=".tmp",
-                delete=False,
-            ) as stream:
-                temporary = Path(stream.name)
-                stream.write(payload)
-                stream.flush()
-                os.fsync(stream.fileno())
-            if protected_input is not None and _paths_refer_to_same_file(
-                protected_input, output
+            if (
+                protected_input is not None
+                and protected_identity is not None
+                and _output_aliases_identity(
+                    output,
+                    protected_input,
+                    protected_identity,
+                    parent_fd=parent_fd,
+                )
             ):
                 raise OSError("JSON output must not refer to the input trace")
-            os.replace(temporary, output)
-            temporary = None
-        finally:
-            if temporary is not None:
+            for _ in range(128):
+                candidate = f".{output.name}.{uuid.uuid4().hex}.tmp"
                 try:
-                    temporary.unlink()
+                    temporary_fd = os.open(
+                        candidate,
+                        os.O_WRONLY
+                        | os.O_CREAT
+                        | os.O_EXCL
+                        | getattr(os, "O_CLOEXEC", 0),
+                        0o600,
+                        dir_fd=parent_fd,
+                    )
+                except FileExistsError:
+                    continue
+                temporary_name = candidate
+                break
+            else:
+                raise OSError("cannot allocate temporary JSON output")
+            try:
+                offset = 0
+                while offset < len(payload):
+                    written = os.write(temporary_fd, payload[offset:])
+                    if written == 0:
+                        raise OSError("short write while creating JSON output")
+                    offset += written
+                os.fsync(temporary_fd)
+            finally:
+                os.close(temporary_fd)
+            if (
+                protected_input is not None
+                and protected_identity is not None
+                and _output_aliases_identity(
+                    output,
+                    protected_input,
+                    protected_identity,
+                    parent_fd=parent_fd,
+                )
+            ):
+                raise OSError("JSON output must not refer to the input trace")
+            os.replace(
+                temporary_name,
+                output.name,
+                src_dir_fd=parent_fd,
+                dst_dir_fd=parent_fd,
+            )
+            temporary_name = None
+            os.fsync(parent_fd)
+        finally:
+            if temporary_name is not None:
+                try:
+                    os.unlink(temporary_name, dir_fd=parent_fd)
                 except FileNotFoundError:
                     pass
+            os.close(parent_fd)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1432,7 +1542,7 @@ def main(argv: list[str] | None = None) -> int:
         args = parser.parse_args(argv)
     except SystemExit as exc:
         return EXIT_OK if exc.code == 0 else EXIT_USAGE
-    if args.json_output is not None and _paths_refer_to_same_file(
+    if args.json_output is not None and _lexically_same_path(
         args.trace, args.json_output
     ):
         print(
@@ -1440,26 +1550,59 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return EXIT_USAGE
+    input_identity: tuple[int, int] | None = None
     try:
-        result = evaluate_trace(load_trace(args.trace))
+        raw, input_identity = _read_trace(args.trace)
+        if args.json_output is not None:
+            output_parent_fd = _open_output_parent(args.json_output)
+            try:
+                if _output_aliases_identity(
+                    args.json_output,
+                    args.trace,
+                    input_identity,
+                    parent_fd=output_parent_fd,
+                ):
+                    print(
+                        "latency trace gate usage error: JSON output must not refer "
+                        "to the input trace",
+                        file=sys.stderr,
+                    )
+                    return EXIT_USAGE
+            finally:
+                os.close(output_parent_fd)
+        input_trace_sha256 = "sha256:" + hashlib.sha256(raw).hexdigest()
+        result = _evaluate_trace(
+            _parse_trace(raw),
+            input_trace_sha256=input_trace_sha256,
+        )
     except (LatencyTraceError, OSError) as exc:
         diagnostic = _sanitize_diagnostic(exc)
         rejected = {"valid": False, "error": diagnostic}
-        try:
-            _write_json(
-                rejected,
-                args.json_output,
-                protected_input=args.trace,
-            )
-        except OSError as write_exc:
-            print(
-                f"latency trace gate output error: {_sanitize_diagnostic(write_exc)}",
-                file=sys.stderr,
-            )
+        if args.json_output is None:
+            _write_json(rejected, None)
+        elif input_identity is not None:
+            try:
+                _write_json(
+                    rejected,
+                    args.json_output,
+                    protected_input=args.trace,
+                    protected_identity=input_identity,
+                )
+            except OSError as write_exc:
+                print(
+                    "latency trace gate output error: "
+                    f"{_sanitize_diagnostic(write_exc)}",
+                    file=sys.stderr,
+                )
         print(f"latency trace rejected: {diagnostic}", file=sys.stderr)
         return EXIT_INVALID_TRACE
     try:
-        _write_json(result, args.json_output, protected_input=args.trace)
+        _write_json(
+            result,
+            args.json_output,
+            protected_input=args.trace,
+            protected_identity=input_identity,
+        )
     except OSError as exc:
         print(
             f"latency trace gate output error: {_sanitize_diagnostic(exc)}",
