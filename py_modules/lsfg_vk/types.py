@@ -19,6 +19,9 @@ class BaseResponse(TypedDict):
 
 FlatpakOverrideStep = Literal["apply_override"]
 FlatpakOverrideOperation = Literal["set", "remove"]
+FlatpakOwnershipStatus = Literal[
+    "managed", "unmanaged", "unknown", "pending", "blocked"
+]
 
 
 class FlatpakObservedState(TypedDict):
@@ -45,6 +48,7 @@ class FlatpakOverrideResponseBase(TypedDict):
     warning: Optional[str]
     retryable: bool
     failed_steps: List[FlatpakOverrideStep]
+    ownership_status: FlatpakOwnershipStatus
 
 
 class FlatpakOverrideCompleteResponse(FlatpakOverrideResponseBase):
@@ -81,7 +85,13 @@ class FlatpakOverrideUnverifiedResponse(FlatpakOverrideResponseBase):
     success: Literal[False]
     outcome: Literal["unverified"]
     status_available: Literal[False]
-    error_code: Literal["status_unavailable", "operation_busy"]
+    error_code: Literal[
+        "status_unavailable",
+        "operation_busy",
+        "ownership_unknown",
+        "ownership_pending",
+        "ownership_blocked",
+    ]
 
 
 FlatpakOverrideOperationResponse = Union[

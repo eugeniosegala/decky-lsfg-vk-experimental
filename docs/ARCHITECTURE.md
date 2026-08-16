@@ -74,20 +74,26 @@ strict read-back and reports `complete`, `partial`, `failed`, `rejected`, or
 refreshes after every mutation attempt, and offers explicit repair/removal
 actions for partial state. The observed contract distinguishes exact-path
 presence from access-mode readiness: preparing requires config `rw` and
-payload/wrapper `ro`, while removal targets any positive exact-path grant.
-Before removing access, the service reads the
-current app-level override and only targets LSFG paths or exact historical
-plugin-owned environment values that are actually present. Unrelated custom
-environment values are preserved. It never uses Flatpak's broad `--reset`,
-which would also erase user-owned overrides. Real Flatpak and
-Gamescope behavior requires a
-SteamOS/Bazzite integration target; macOS and generic CI can only validate pure
-logic and command construction.
+payload/wrapper `ro`.
 
-Flatpak has no documented per-variable command that restores an arbitrary prior
-environment override. Neutralizing a legacy non-empty LSFG value can therefore
-leave an explicit `unset-environment` entry. The UI describes the resulting
-state as "No LSFG access", not as an absence of every Flatpak override.
+Flatpak does not provide a stable per-key reset API. The plugin therefore keeps
+a mode-`0600` ownership ledger in its configuration directory and writes a
+durable pending intent before invoking an external override mutation. Only
+paths proven absent at the app override layer are recorded as plugin-owned.
+Correct pre-existing grants are retained but never claimed; wrong modes,
+explicit denials, legacy environment values/unsets, corrupt ownership state,
+or external drift fail closed without an automatic cleanup command. Removal
+targets only exact grants recorded as plugin-owned and succeeds only after
+read-back proves those app-layer entries absent. A denial or mixed state leaves
+the durable intent pending/blocked for repair rather than reporting success.
+
+The UI distinguishes prepared, partial, retained pre-existing, unknown,
+pending, and blocked state. It never offers ordinary removal for unowned or
+unknown access. Neither `--unset-env` nor Flatpak's broad `--reset` is used for
+automatic cleanup because either could alter unrelated user or lower-layer
+configuration. Real Flatpak and Gamescope behavior still requires a
+SteamOS/Bazzite integration target; macOS and generic CI validate pure logic,
+durable local state, command construction, and read-back classification only.
 
 ## Build and packaging
 

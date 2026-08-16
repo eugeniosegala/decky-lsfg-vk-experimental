@@ -37,6 +37,7 @@ from .constants import (
     USER_VULKAN_LAYER_DIR,
     VULKAN_LAYER_DIR,
     WRAPPER_PROFILE_SETTINGS_FILENAME,
+    FLATPAK_OVERRIDE_OWNERSHIP_FILENAME,
 )
 
 
@@ -83,6 +84,7 @@ class PathLayout:
     legacy_private_manifests: tuple[Path, ...]
     lock_file: Path
     journal_file: Path
+    flatpak_override_ownership: Path
 
     @classmethod
     def from_home(cls, home: Path) -> "PathLayout":
@@ -113,6 +115,9 @@ class PathLayout:
             ),
             lock_file=config_dir / ".state-mutation.lock",
             journal_file=config_dir / ".state-transaction.json",
+            flatpak_override_ownership=(
+                config_dir / FLATPAK_OVERRIDE_OWNERSHIP_FILENAME
+            ),
         )
 
     # Compatibility names used by the existing services.
@@ -196,6 +201,7 @@ class _LockState:
     fd: int | None = None
     pid: int = field(default_factory=os.getpid)
     active_transaction: str | None = None
+    active_external_operation: str | None = None
 
 
 _REGISTRY_GUARD = threading.Lock()
@@ -496,7 +502,9 @@ def _fsync_directory(path: Path) -> None:
 class MutationCoordinator:
     """Serialize and durably recover plugin-owned filesystem mutations."""
 
-    _OPERATIONS = frozenset(("configuration", "migration", "install", "update", "uninstall"))
+    _OPERATIONS = frozenset(
+        ("configuration", "migration", "install", "update", "uninstall", "flatpak")
+    )
 
     def __init__(self, layout: PathLayout, fault_injector: FaultInjector | None = None):
         self.layout = layout
@@ -530,6 +538,8 @@ class MutationCoordinator:
             targets = configuration | lifecycle
         elif operation == "uninstall":
             targets = lifecycle
+        elif operation == "flatpak":
+            targets = {self.layout.flatpak_override_ownership}
         else:
             raise MutationBlockedError(f"unknown transaction operation: {operation}")
         return frozenset(_canonical(path) for path in targets)
@@ -684,6 +694,21 @@ class MutationCoordinator:
 
     def _hit(self, name: str, index: int | None = None) -> None:
         self.faults.hit(name, index)
+
+    @contextmanager
+    def external_operation(
+        self, operation: str, allowed_targets: Sequence[Path] | None = None
+    ) -> Iterator[None]:
+        """Hold the shared lock and reject nested external side effects."""
+        with self.locked(operation, allowed_targets):
+            state = self._lock_state()
+            if state.active_external_operation is not None:
+                raise MutationBusyError("another external mutation is in progress")
+            state.active_external_operation = operation
+            try:
+                yield
+            finally:
+                state.active_external_operation = None
 
     def _journal_payload(
         self, tx_id: str, operation: str, phase: str, next_index: int,
