@@ -304,7 +304,9 @@ os.execvpe(real, [real, *args], os.environ.copy())
 
         self.assertFalse(interrupted["success"], interrupted)
         self.assertEqual(interrupted["outcome"], "unverified")
-        self.assertEqual(interrupted["ownership_status"], "pending")
+        self.assertEqual(
+            interrupted["ownership_status"], "pending", interrupted
+        )
 
         restarted = self._service()
         with self._ready_service(restarted, self.dll_a):
@@ -329,7 +331,7 @@ os.execvpe(real, [real, *args], os.environ.copy())
                 partial = service.set_app_override(app_id)
 
         self.assertFalse(partial["success"], partial)
-        self.assertEqual(partial["outcome"], "partial")
+        self.assertEqual(partial["outcome"], "partial", partial)
         self.assertEqual(partial["ownership_status"], "pending")
         pending = json.loads(
             service._flatpak_ownership_path.read_text(encoding="utf-8")
