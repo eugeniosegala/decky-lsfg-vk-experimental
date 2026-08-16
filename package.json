@@ -20,7 +20,9 @@
     "package:local-engine": "./scripts/package-local.sh --local-engine-repo ../lsfg-vk",
     "package:local-engine-fast": "./scripts/package-local.sh --local-engine-repo ../lsfg-vk --native-only --64-bit-only",
     "package:publish": "./scripts/publish-package.sh",
-    "test": "python3 -m unittest discover -s tests -p 'test_*.py'"
+    "test:python": "python3 -m unittest discover -s tests -p 'test_*.py'",
+    "test:frontend": "node --test tests/frontend-*.test.mjs",
+    "test": "pnpm run test:python && pnpm run test:frontend"
   },
   "repository": {
     "type": "git",

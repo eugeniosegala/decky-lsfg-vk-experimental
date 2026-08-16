@@ -67,9 +67,27 @@ runtime extensions.
 Flatpak operations use argv-based subprocess execution rather than shell
 interpolation. Runtime extensions are supported for the pinned Freedesktop
 branches, and per-app overrides grant access to the wrapper, configuration, and
-the configured DLL directory. Real Flatpak and Gamescope behavior requires a
+the configured DLL directory. A per-app change is issued as one multi-option
+Flatpak command, but is not treated as atomic: the backend always performs a
+strict read-back and reports `complete`, `partial`, `failed`, `rejected`, or
+`unverified`. The UI never turns an unavailable read into a false/off state,
+refreshes after every mutation attempt, and offers explicit repair/removal
+actions for partial state. The observed contract distinguishes exact-path
+presence from access-mode readiness: preparing requires config `rw` and
+payload/wrapper `ro`, while removal targets any positive exact-path grant.
+Before removing access, the service reads the
+current app-level override and only targets LSFG paths or exact historical
+plugin-owned environment values that are actually present. Unrelated custom
+environment values are preserved. It never uses Flatpak's broad `--reset`,
+which would also erase user-owned overrides. Real Flatpak and
+Gamescope behavior requires a
 SteamOS/Bazzite integration target; macOS and generic CI can only validate pure
 logic and command construction.
+
+Flatpak has no documented per-variable command that restores an arbitrary prior
+environment override. Neutralizing a legacy non-empty LSFG value can therefore
+leave an explicit `unset-environment` entry. The UI describes the resulting
+state as "No LSFG access", not as an absence of every Flatpak override.
 
 ## Build and packaging
 
@@ -90,12 +108,12 @@ tag, and publishes a GitHub prerelease. It is intentionally excluded from CI.
 
 - `pnpm check` — full non-publishing local/PR gate; regenerates configuration
   bindings and fails if either they or the generated translation bundle drift.
-- `pnpm test` — current Python unit suite.
+- `pnpm test` — Python unit tests plus dependency-free frontend contract tests.
 - `pnpm typecheck` — strict TypeScript check.
 - `pnpm run build` — i18n validation and production frontend bundle.
 - `pnpm run package:local` — networked package verification.
 
-The current unit suite focuses on the launch-wrapper environment,
-dual-architecture installation, and diagnostics. Flatpak operations, DLL
-detection, profile CRUD, RPC behavior, and frontend components remain the main
+The current unit suite covers transactional configuration/installation,
+launch-wrapper behavior, diagnostics, and Flatpak command/result contracts.
+DLL detection and rendered frontend component behavior remain important
 coverage gaps.
