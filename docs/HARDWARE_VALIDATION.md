@@ -8,8 +8,9 @@ frame pacing, generated-image quality, input responsiveness, power use, or
 Gamescope presentation behaviour because they do not provide the target APU,
 display stack, game workload, or physical display path.
 
-The `Target hardware validation` workflow is therefore manual and runs only on
-a dedicated SteamOS/Bazzite machine after approval through the
+The `Target hardware validation` workflow is therefore a **manual advisory
+calibration framework**, not a current pull-request or branch-protection gate.
+It runs only on a dedicated SteamOS/Bazzite machine after approval through the
 `steam-deck-hardware` environment. It accepts full baseline and candidate commit
 SHAs, captures at least five independent runs, and compares the resulting JSON
 reports with `.github/hardware-quality-policy.json`.
@@ -19,6 +20,10 @@ reports with `.github/hardware-quality-policy.json`.
 Never attach a personal Steam Deck or a persistent machine containing accounts,
 SSH keys, browser data, gamesaves, or repository credentials to a public pull
 request workflow. A pull request can modify executable repository content.
+Keep `LSFG_HARDWARE_ENV_READY` unset until a single-job ephemeral/JIT runner or
+an equivalently reimaged isolated target is available. A protected environment
+controls this workflow's job, but it cannot stop another workflow in the same
+public repository from targeting a persistent runner label.
 
 The hardware runner must be disposable or reimaged after every job, have no
 repository secrets, use a read-only GitHub token, and expose only the
@@ -30,6 +35,7 @@ returning, and copy out only the bounded report contract. The trusted comparison
 gate is checked out from `main` only after capture completes. Create the
 `steam-deck-hardware` environment with required reviewers and the environment
 variable `LSFG_HARDWARE_ENV_READY=true`;
+pin the reviewed harness digest in `LSFG_HARDWARE_HARNESS_SHA256`;
 otherwise the job fails before checkout. Maintainers review the candidate SHA
 before approving the protected environment. Do not add an automatic
 `pull_request` trigger to this workflow.
@@ -57,17 +63,19 @@ writes `baseline.json` and `candidate.json`. Each report contains:
     "gpu_clock_policy": "fixed-1200mhz",
     "workload_id": "lsfg-fixed-motion-v1",
     "workload_build": "sha256:...",
-    "workload_settings_hash": "sha256:..."
+    "workload_settings_hash": "sha256:...",
+    "capture_harness_sha256": "sha256:..."
   },
   "subject": { "git_sha": "...", "engine_sha256": "..." },
   "runs": [
     {
-      "frame_time_p95_ms": 0,
-      "frame_time_p99_ms": 0,
+      "run_id": "baseline-01",
+      "frame_time_p95_ms": 16.7,
+      "frame_time_p99_ms": 20.0,
       "missed_present_ratio": 0,
-      "input_to_present_proxy_p95_ms": 0,
+      "input_to_present_proxy_p95_ms": 25.0,
       "generated_frame_ssim": 1,
-      "average_power_watts": 0,
+      "average_power_watts": 12.0,
       "process_crash_count": 0,
       "black_frame_count": 0,
       "generated_frame_failure_count": 0,
@@ -77,12 +85,22 @@ writes `baseline.json` and `candidate.json`. Each report contains:
 }
 ```
 
-Baseline and candidate environment fields must match exactly. The gate rejects
-reports over 1 MiB, missing/non-finite metrics, fewer than five runs, and a baseline whose median
-absolute deviation is too high. This prevents a noisy or thermally throttled
-capture from blessing a regression. It also requires full Git and engine SHA-256
-identities and verifies that each report's Git SHA matches the immutable commit
-requested by the workflow, preventing stale or swapped evidence from passing.
+Baseline and candidate environment fields must match the policy exactly. The
+gate rejects reports over 1 MiB, duplicate run IDs, missing/non-finite or
+physically impossible metrics, fewer than five runs, unstable baseline or
+candidate samples, and individual candidate runs outside the baseline-derived
+limit. Integer event counters must be non-negative; ratios and SSIM must stay in
+`[0, 1]`. The absolute threshold is explicitly a measurement-noise floor, not a
+second maximum that must independently pass. It also requires full Git, engine,
+workload, settings, and attested harness SHA-256 identities and verifies that
+each report's Git SHA matches the immutable commit requested by the workflow.
+
+The repository gate evaluates **measurements reported by the reviewed external
+capture harness**. It does not itself observe the display, detect black frames,
+or measure power. The workflow verifies the root-owned harness and its parent
+directories, pins its SHA-256 through protected environment configuration, and
+uploads only canonical JSON re-serialized by the trusted gate. Correct capture
+still requires independent harness fixtures and disposable target isolation.
 
 ## What to measure
 
@@ -109,15 +127,23 @@ older baseline.
 
 1. Keep the workflow manual while the capture harness and thresholds are being
    calibrated.
-2. Collect several unchanged baseline-vs-baseline comparisons on each target.
+2. Collect several A/A comparisons between distinct commits with identical
+   runtime payload, workload, settings, and performance-sensitive behavior on
+   each target. Identical commit SHAs are rejected so calibration evidence
+   cannot be confused with a candidate comparison.
 3. Adjust the versioned policy only in a dedicated reviewed change with the raw
    variance evidence attached.
-4. Once the runner is ephemeral and the false-positive rate is known, require
-   this check only for native engine, wrapper, presentation, timing, shader,
-   payload, or performance-policy changes. UI/docs-only pull requests do not need
-   target-hardware evidence.
+4. Add a trusted coordinator that binds the policy, harness and evidence artifact
+   to the pull request's candidate SHA and publishes an always-present PR status.
+5. Only then consider a branch-protection rule for native engine, wrapper,
+   presentation, timing, shader, payload, or performance-policy changes.
+   GitHub required checks are not natively path-conditional, so the coordinator
+   must explicitly report pass or not-applicable. UI/docs-only pull requests do
+   not need target-hardware evidence.
 
-The checked-in thresholds are initial reviewable guardrails, not universal
+The workflow rejects identical commits and requires the candidate to descend
+from the baseline, but a manual dispatch is not automatically attached to the
+candidate pull request. The checked-in thresholds are initial reviewable guardrails, not universal
 performance truths. They must be recalibrated from unchanged A/A captures before
 the workflow becomes a branch-protection requirement; threshold changes need the
 same evidence as code changes and must not be loosened inside a performance PR.

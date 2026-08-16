@@ -97,13 +97,14 @@ or create a GitHub release.
 | --- | --- |
 | Any code or generated file | Green `quality` job |
 | Flatpak service, parser, ownership, or UI contract | Green real `Flatpak integration` job |
-| Native payload, wrapper runtime environment, presentation/timing, shader, or performance policy | Reviewed target-hardware baseline/candidate report |
-| Release metadata or packaged payload | Manual `Package smoke` run before publishing |
+| Native payload, wrapper runtime environment, presentation/timing, shader, or performance policy | Manually reviewed advisory target-hardware baseline/candidate report; not yet a PR status gate |
+| Release metadata or packaged payload | Successful manually dispatched `Package smoke` run before publishing |
 | Documentation only | Generated/link-sensitive checks that apply; no fabricated hardware evidence |
 
 Do not turn a noisy benchmark into a required check. Target-hardware evidence
 becomes blocking only after repeated unchanged baseline runs demonstrate that
-the selected workload and thresholds are stable.
+the selected workload and thresholds are stable, the runner is disposable, and
+a trusted coordinator binds the evidence to the pull-request candidate SHA.
 
 The current suite covers transactional configuration/profile/install/uninstall
 state, launch-wrapper behavior, dual-architecture installation, diagnostics,

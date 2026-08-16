@@ -31,10 +31,15 @@ jobs:
         shell: bash
         env:
           HARDWARE_ENV_READY: ${{ vars.LSFG_HARDWARE_ENV_READY }}
+          EXPECTED_HARNESS_SHA256: ${{ vars.LSFG_HARDWARE_HARNESS_SHA256 }}
         run: |
           set -euo pipefail
           [[ "$HARDWARE_ENV_READY" == "true" ]] || {
             echo 'Configure the protected steam-deck-hardware environment and set LSFG_HARDWARE_ENV_READY=true.' >&2
+            exit 1
+          }
+          [[ "$EXPECTED_HARNESS_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
+            echo 'Set LSFG_HARDWARE_HARNESS_SHA256 to the reviewed harness SHA-256.' >&2
             exit 1
           }
 
@@ -54,6 +59,10 @@ jobs:
             echo 'candidate_sha must be a full lowercase commit SHA' >&2
             exit 1
           }
+          [[ "$BASELINE_SHA" != "$CANDIDATE_SHA" ]] || {
+            echo 'baseline_sha and candidate_sha must differ.' >&2
+            exit 1
+          }
 
       - name: Check out baseline
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -61,6 +70,7 @@ jobs:
           ref: ${{ inputs.baseline_sha }}
           path: baseline
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Check out reviewed candidate
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -68,17 +78,47 @@ jobs:
           ref: ${{ inputs.candidate_sha }}
           path: candidate
           persist-credentials: false
+          fetch-depth: 0
+
+      - name: Require an ancestral baseline
+        shell: bash
+        env:
+          BASELINE_SHA: ${{ inputs.baseline_sha }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          git -C "$GITHUB_WORKSPACE/candidate" cat-file -e "$BASELINE_SHA^{commit}"
+          git -C "$GITHUB_WORKSPACE/candidate" merge-base --is-ancestor "$BASELINE_SHA" "$CANDIDATE_SHA" || {
+            echo 'candidate_sha must descend from baseline_sha.' >&2
+            exit 1
+          }
 
       - name: Capture repeated target-hardware evidence
         shell: bash
         env:
           BASELINE_SHA: ${{ inputs.baseline_sha }}
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
-          REPORT_DIR: ${{ runner.temp }}/lsfg-hardware-reports
+          EXPECTED_HARNESS_SHA256: ${{ vars.LSFG_HARDWARE_HARNESS_SHA256 }}
+          REPORT_DIR: ${{ runner.temp }}/lsfg-hardware-reports-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           set -euo pipefail
           harness=/opt/lsfg-hardware/bin/capture-comparison
-          [[ -x "$harness" ]] || {
+          for directory in /opt /opt/lsfg-hardware /opt/lsfg-hardware/bin; do
+            [[ -d "$directory" && ! -L "$directory" ]] || {
+              echo "Hardware harness parent must be a real directory: $directory" >&2
+              exit 1
+            }
+            [[ "$(stat -c '%u' "$directory")" == "0" ]] || {
+              echo "Hardware harness parent must be root-owned: $directory" >&2
+              exit 1
+            }
+            parent_mode=$(stat -c '%a' "$directory")
+            (( (8#$parent_mode & 8#022) == 0 )) || {
+              echo "Hardware harness parent must not be group/world writable: $directory" >&2
+              exit 1
+            }
+          done
+          [[ -f "$harness" && ! -L "$harness" && -x "$harness" ]] || {
             echo "Missing root-owned hardware harness: $harness" >&2
             exit 1
           }
@@ -91,12 +131,19 @@ jobs:
             echo 'The hardware harness must not be group/world writable.' >&2
             exit 1
           }
-          mkdir -p "$REPORT_DIR"
+          actual_harness_sha256=$(sha256sum "$harness" | awk '{print $1}')
+          [[ "$actual_harness_sha256" == "$EXPECTED_HARNESS_SHA256" ]] || {
+            echo 'The hardware harness does not match the reviewed SHA-256.' >&2
+            exit 1
+          }
+          rm -rf -- "$REPORT_DIR"
+          install -d -m 700 -- "$REPORT_DIR"
           "$harness" \
             --baseline-source "$GITHUB_WORKSPACE/baseline" \
             --baseline-sha "$BASELINE_SHA" \
             --candidate-source "$GITHUB_WORKSPACE/candidate" \
             --candidate-sha "$CANDIDATE_SHA" \
+            --capture-harness-sha256 "sha256:$actual_harness_sha256" \
             --output "$REPORT_DIR"
 
       - name: Check out trusted gate implementation after capture
@@ -111,25 +158,29 @@ jobs:
         env:
           BASELINE_SHA: ${{ inputs.baseline_sha }}
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
-          REPORT_DIR: ${{ runner.temp }}/lsfg-hardware-reports
+          EXPECTED_HARNESS_SHA256: ${{ vars.LSFG_HARDWARE_HARNESS_SHA256 }}
+          REPORT_DIR: ${{ runner.temp }}/lsfg-hardware-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          EVIDENCE_DIR: ${{ runner.temp }}/sanitized-hardware-evidence-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           set -euo pipefail
+          rm -rf -- "$EVIDENCE_DIR"
+          install -d -m 700 -- "$EVIDENCE_DIR"
           python3 gate/scripts/hardware_quality_gate.py \
             --baseline "$REPORT_DIR/baseline.json" \
             --candidate "$REPORT_DIR/candidate.json" \
             --policy gate/.github/hardware-quality-policy.json \
             --baseline-sha "$BASELINE_SHA" \
             --candidate-sha "$CANDIDATE_SHA" \
-            --json-output "$REPORT_DIR/gate-result.json"
+            --capture-harness-sha256 "sha256:$EXPECTED_HARNESS_SHA256" \
+            --gate-sha "$(git -C gate rev-parse HEAD)" \
+            --json-output "$EVIDENCE_DIR/gate-result.json" \
+            --evidence-output-dir "$EVIDENCE_DIR"
 
       - name: Upload bounded evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: hardware-quality-${{ inputs.candidate_sha }}
-          path: |
-            ${{ runner.temp }}/lsfg-hardware-reports/baseline.json
-            ${{ runner.temp }}/lsfg-hardware-reports/candidate.json
-            ${{ runner.temp }}/lsfg-hardware-reports/gate-result.json
+          name: hardware-quality-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/sanitized-hardware-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: warn
           retention-days: 3

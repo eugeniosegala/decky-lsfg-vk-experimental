@@ -101,6 +101,16 @@ import sys
 
 real = os.environ["LSFG_TEST_REAL_FLATPAK"]
 args = sys.argv[1:]
+marker = os.environ.get("LSFG_TEST_FAILURE_MARKER")
+if (
+    os.environ.get("LSFG_TEST_FAILURE_MODE") == "remove-readback"
+    and args[:3] == ["override", "--user", "--show"]
+    and marker
+    and os.path.exists(marker)
+):
+    os.unlink(marker)
+    print("injected failure while verifying a completed remove", file=sys.stderr)
+    raise SystemExit(43)
 if (
     os.environ.get("LSFG_TEST_FAILURE_MODE") == "partial-set"
     and args[:2] == ["override", "--user"]
@@ -122,6 +132,18 @@ if (
     if completed.returncode != 0:
         raise SystemExit(completed.returncode)
     print("injected failure after applying only the config grant", file=sys.stderr)
+    raise SystemExit(42)
+if (
+    os.environ.get("LSFG_TEST_FAILURE_MODE") == "remove-readback"
+    and args[:3] == ["override", "--user", "--reset"]
+):
+    completed = subprocess.run([real, *args], check=False)
+    if completed.returncode != 0:
+        raise SystemExit(completed.returncode)
+    if not marker:
+        raise SystemExit("LSFG_TEST_FAILURE_MARKER is required")
+    with open(marker, "w", encoding="utf-8") as destination:
+        destination.write("fail-next-readback\n")
     raise SystemExit(42)
 
 os.execvpe(real, [real, *args], os.environ.copy())
@@ -169,7 +191,9 @@ os.execvpe(real, [real, *args], os.environ.copy())
         self, service: FlatpakService, app_id: str, dll_path: Path
     ) -> dict[str, str]:
         with self._ready_service(service, dll_path):
-            observed, error, exact_states = service._observe_app_override_snapshot(app_id)
+            observed, error, exact_states = service._observe_app_override_snapshot(
+                app_id
+            )
         self.assertIsNotNone(observed, error)
         return exact_states
 
@@ -242,6 +266,54 @@ os.execvpe(real, [real, *args], os.environ.copy())
         self.assertEqual(states.get(str(self.dll_a), "absent"), "absent")
         self.assertEqual(states.get(str(self.wrapper_path), "absent"), "absent")
 
+    def test_unrelated_socket_override_is_preserved_and_blocks_automation(self):
+        app_id = self._app_id("Socket")
+        self._flatpak("override", "--user", "--socket=wayland", app_id)
+        service = self._service()
+
+        with self._ready_service(service, self.dll_a):
+            result = service.set_app_override(app_id)
+        self.assertFalse(result["success"], result)
+        self.assertEqual(result["ownership_status"], "unknown")
+        self.assertFalse(service._flatpak_ownership_path.exists())
+
+        output = self._flatpak("override", "--user", "--show", app_id).stdout
+        self.assertIn("sockets=wayland;", output)
+        self.assertNotIn(str(self.config_path), output)
+        self.assertNotIn(str(self.dll_a), output)
+
+    def test_interrupted_remove_readback_reconciles_after_service_restart(self):
+        app_id = self._app_id("RemoveRecovery")
+        service = self._service()
+        with self._ready_service(service, self.dll_a):
+            prepared = service.set_app_override(app_id)
+        self.assertTrue(prepared["success"], prepared)
+
+        marker = self.root / "fail-next-remove-readback"
+        service.flatpak_command = str(self.fault_wrapper)
+        with patch.dict(
+            os.environ,
+            {
+                "LSFG_TEST_REAL_FLATPAK": str(REAL_FLATPAK),
+                "LSFG_TEST_FAILURE_MODE": "remove-readback",
+                "LSFG_TEST_FAILURE_MARKER": str(marker),
+            },
+        ):
+            with self._ready_service(service, self.dll_a):
+                interrupted = service.remove_app_override(app_id)
+
+        self.assertFalse(interrupted["success"], interrupted)
+        self.assertEqual(interrupted["outcome"], "unverified")
+        self.assertEqual(interrupted["ownership_status"], "pending")
+
+        restarted = self._service()
+        with self._ready_service(restarted, self.dll_a):
+            reconciled = restarted.remove_app_override(app_id)
+        self.assertTrue(reconciled["success"], reconciled)
+        self.assertEqual(reconciled["outcome"], "complete")
+        self.assertEqual(reconciled["ownership_status"], "unmanaged")
+        self.assertFalse(restarted._flatpak_ownership_path.exists())
+
     def test_partial_real_mutation_is_detected_and_retry_reconciles_it(self):
         app_id = self._app_id("Partial")
         service = self._service(command=self.fault_wrapper)
@@ -259,7 +331,9 @@ os.execvpe(real, [real, *args], os.environ.copy())
         self.assertFalse(partial["success"], partial)
         self.assertEqual(partial["outcome"], "partial")
         self.assertEqual(partial["ownership_status"], "pending")
-        pending = json.loads(service._flatpak_ownership_path.read_text(encoding="utf-8"))
+        pending = json.loads(
+            service._flatpak_ownership_path.read_text(encoding="utf-8")
+        )
         self.assertEqual(pending["apps"][app_id]["status"], "pending")
 
         service.flatpak_command = str(REAL_FLATPAK)
