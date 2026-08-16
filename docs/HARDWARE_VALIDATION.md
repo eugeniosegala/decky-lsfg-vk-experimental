@@ -24,8 +24,12 @@ The hardware runner must be disposable or reimaged after every job, have no
 repository secrets, use a read-only GitHub token, and expose only the
 `lsfg-hardware` label. The capture program at
 `/opt/lsfg-hardware/bin/capture-comparison` must be root-owned and not writable
-by the runner account. Create the `steam-deck-hardware` environment with required
-reviewers and the environment variable `LSFG_HARDWARE_ENV_READY=true`;
+by the runner account. It must execute baseline and candidate in separately reset
+guests/containers, mount source read-only, terminate all workload processes before
+returning, and copy out only the bounded report contract. The trusted comparison
+gate is checked out from `main` only after capture completes. Create the
+`steam-deck-hardware` environment with required reviewers and the environment
+variable `LSFG_HARDWARE_ENV_READY=true`;
 otherwise the job fails before checkout. Maintainers review the candidate SHA
 before approving the protected environment. Do not add an automatic
 `pull_request` trigger to this workflow.

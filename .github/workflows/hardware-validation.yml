@@ -55,13 +55,6 @@ jobs:
             exit 1
           }
 
-      - name: Check out trusted gate implementation
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: main
-          path: gate
-          persist-credentials: false
-
       - name: Check out baseline
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -105,6 +98,13 @@ jobs:
             --candidate-source "$GITHUB_WORKSPACE/candidate" \
             --candidate-sha "$CANDIDATE_SHA" \
             --output "$REPORT_DIR"
+
+      - name: Check out trusted gate implementation after capture
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          path: gate
+          persist-credentials: false
 
       - name: Enforce hardware quality policy
         shell: bash

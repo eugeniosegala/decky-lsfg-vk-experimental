@@ -90,6 +90,10 @@ class HardwareQualityGateTests(unittest.TestCase):
         self.assertIn('--baseline-sha "$BASELINE_SHA"', workflow)
         self.assertIn('--candidate-sha "$CANDIDATE_SHA"', workflow)
         self.assertNotIn("${{ secrets.", workflow)
+        self.assertLess(
+            workflow.index("Capture repeated target-hardware evidence"),
+            workflow.index("Check out trusted gate implementation after capture"),
+        )
 
     def test_repository_policy_accepts_a_stable_complete_report(self):
         root = Path(__file__).resolve().parents[1]
