@@ -152,7 +152,7 @@ class FileIdentity:
             not isinstance(digest, str)
             or len(digest) != 64
             or any(character not in "0123456789abcdef" for character in digest)
-            or not 0 <= mode <= 0o777
+            or not 0 <= mode <= 0o7777
         ):
             raise MutationBlockedError("journal contains an invalid regular identity")
         return cls(kind, digest, mode)
@@ -995,7 +995,7 @@ class MutationCoordinator:
                     if action == "replace" and (
                         not isinstance(content, bytes)
                         or not isinstance(mode, int)
-                        or not 0 <= mode <= 0o777
+                        or not 0 <= mode <= 0o7777
                     ):
                         raise MutationBlockedError("replacement payload or mode is invalid")
                     if action == "remove" and (content is not None or mode != 0):

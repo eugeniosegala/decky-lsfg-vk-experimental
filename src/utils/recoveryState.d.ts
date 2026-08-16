@@ -27,8 +27,28 @@ export interface MutationBarrier {
   release(): void;
 }
 
+export interface RecoveryStateSummary {
+  mutationsDisabled: boolean;
+  warningVisible: boolean;
+  warning?: string;
+  recoveryPending: boolean;
+  refreshable: boolean;
+}
+
 export function createMutationBarrier(initiallyBlocked?: boolean): MutationBarrier;
 
 export function mapRecoveryState(
-  response?: RecoveryMetadata & { installed?: boolean },
+  response?: RecoveryMetadata & { installed?: boolean; success?: boolean; error?: string },
 ): RecoveryState;
+
+export function summarizeContentRecoveryStates(
+  installationState: RecoveryState,
+  configState: RecoveryState,
+  profileState: RecoveryState,
+  profileComponentState: RecoveryState,
+  profileComponentMounted: boolean,
+): RecoveryStateSummary;
+
+export function refreshRecoveryStates(
+  ...refreshers: Array<(() => Promise<unknown>) | null | undefined>
+): Promise<void>;

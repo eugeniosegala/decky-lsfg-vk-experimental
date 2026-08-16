@@ -189,5 +189,9 @@
   "RECOVERY_BLOCKED": "復旧が停止しており、修復が必要です。",
   "RECOVERY_PENDING": "変更は完了しましたが、永続的なクリーンアップが保留中です。",
   "RECOVERY_INVALID_CONFIG": "保存された設定が無効です。修復してください。",
-  "RECOVERY_WARNING_TITLE": "状態復旧の警告"
+  "RECOVERY_WARNING_TITLE": "状態復旧の警告",
+  "RECOVERY_RETRY": "状態の復旧を再試行",
+  "RECOVERY_RETRYING": "状態の復旧を再試行しています...",
+  "RECOVERY_REFRESH_STATUS": "状態を更新",
+  "RECOVERY_REFRESHING_STATUS": "状態を更新しています..."
 }

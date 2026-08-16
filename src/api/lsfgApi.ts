@@ -20,6 +20,12 @@ export interface InstallationResult extends RecoveryMetadata {
   removed_files?: string[];
 }
 
+export interface RecoveryResult extends RecoveryMetadata {
+  success: boolean;
+  message?: string;
+  error?: string;
+}
+
 export interface InstallationStatus extends RecoveryMetadata {
   installed: boolean;
   lib_exists: boolean;
@@ -149,6 +155,7 @@ export interface ProfileResult extends RecoveryMetadata {
 export const installLsfgVk = callable<[], InstallationResult>("install_lsfg_vk");
 export const uninstallLsfgVk = callable<[], InstallationResult>("uninstall_lsfg_vk");
 export const checkLsfgVkInstalled = callable<[], InstallationStatus>("check_lsfg_vk_installed");
+export const recoverState = callable<[], RecoveryResult>("recover_state");
 export const checkLosslessScalingDll = callable<[], DllDetectionResult>("check_lossless_scaling_dll");
 export const getDllStats = callable<[], DllStatsResult>("get_dll_stats");
 export const getLsfgConfig = callable<[], ConfigResult>("get_lsfg_config");

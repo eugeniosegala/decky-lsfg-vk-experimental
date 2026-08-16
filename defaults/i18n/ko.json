@@ -189,5 +189,9 @@
   "RECOVERY_BLOCKED": "복구가 중단되어 수리가 필요합니다.",
   "RECOVERY_PENDING": "변경은 완료되었지만 영구 정리 작업이 남아 있습니다.",
   "RECOVERY_INVALID_CONFIG": "저장된 설정이 올바르지 않아 수리가 필요합니다.",
-  "RECOVERY_WARNING_TITLE": "상태 복구 경고"
+  "RECOVERY_WARNING_TITLE": "상태 복구 경고",
+  "RECOVERY_RETRY": "상태 복구 다시 시도",
+  "RECOVERY_RETRYING": "상태 복구를 다시 시도하는 중...",
+  "RECOVERY_REFRESH_STATUS": "상태 새로 고침",
+  "RECOVERY_REFRESHING_STATUS": "상태를 새로 고치는 중..."
 }

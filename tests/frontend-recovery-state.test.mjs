@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createMutationBarrier, mapRecoveryState } from "../src/utils/recoveryState.js";
+import {
+  createMutationBarrier,
+  mapRecoveryState,
+  refreshRecoveryStates,
+  summarizeContentRecoveryStates,
+} from "../src/utils/recoveryState.js";
 
 
 const rows = [
@@ -92,6 +97,142 @@ test("missing availability with any recovery metadata is unavailable", () => {
   ]) {
     assert.equal(mapRecoveryState(response).available, false);
   }
+});
+
+test("metadata-free legacy failures fail closed", () => {
+  for (const response of [
+    { success: false },
+    { success: false, error: "" },
+    { error: "legacy read failed" },
+    { success: true, error: "contradictory legacy failure" },
+  ]) {
+    const mapped = mapRecoveryState(response);
+    assert.equal(mapped.available, false);
+    assert.equal(mapped.mutationsDisabled, true);
+    assert.equal(mapped.warningVisible, true);
+  }
+});
+
+test("metadata-free legacy successes remain available", () => {
+  for (const response of [
+    { installed: false },
+    { success: true },
+    { success: true, error: "" },
+  ]) {
+    const mapped = mapRecoveryState(response);
+    assert.equal(mapped.available, true);
+    assert.equal(mapped.mutationsDisabled, false);
+  }
+});
+
+test("an unmounted profile component cannot block a fresh install", () => {
+  const available = mapRecoveryState({ status_available: true, installed: false });
+  const staleUnmountedComponent = mapRecoveryState({
+    status_available: false,
+    error_code: "refresh_required",
+  });
+
+  const summary = summarizeContentRecoveryStates(
+    available,
+    available,
+    available,
+    staleUnmountedComponent,
+    false,
+  );
+
+  assert.equal(staleUnmountedComponent.mutationsDisabled, true);
+  assert.equal(summary.mutationsDisabled, false);
+  assert.equal(summary.warningVisible, false);
+});
+
+test("an active profile component recovery state still blocks mutations", () => {
+  const available = mapRecoveryState({ status_available: true });
+  const cleanupPending = mapRecoveryState({
+    status_available: false,
+    error_code: "recovery_pending",
+    recovery_pending: true,
+    recovery_action: "wait_for_recovery",
+  });
+
+  const summary = summarizeContentRecoveryStates(
+    available,
+    available,
+    available,
+    cleanupPending,
+    true,
+  );
+
+  assert.equal(summary.mutationsDisabled, true);
+  assert.equal(summary.warningVisible, true);
+  assert.equal(summary.recoveryPending, true);
+});
+
+test("blocked recovery evidence does not expose a futile cleanup retry", () => {
+  const available = mapRecoveryState({ status_available: true });
+  const blocked = mapRecoveryState({
+    status_available: false,
+    error_code: "recovery_blocked",
+    recovery_pending: true,
+    recovery_action: "repair_required",
+  });
+
+  const summary = summarizeContentRecoveryStates(
+    blocked,
+    available,
+    available,
+    available,
+    false,
+  );
+
+  assert.equal(summary.mutationsDisabled, true);
+  assert.equal(summary.warningVisible, true);
+  assert.equal(summary.recoveryPending, false);
+  assert.equal(summary.refreshable, false);
+});
+
+test("transient busy state exposes a safe status refresh", () => {
+  const available = mapRecoveryState({ status_available: true });
+  const busy = mapRecoveryState({
+    status_available: false,
+    error_code: "mutation_busy",
+    retryable: true,
+    recovery_pending: false,
+    recovery_action: "refresh",
+  });
+
+  const summary = summarizeContentRecoveryStates(
+    busy,
+    available,
+    available,
+    available,
+    false,
+  );
+
+  assert.equal(summary.mutationsDisabled, true);
+  assert.equal(summary.recoveryPending, false);
+  assert.equal(summary.refreshable, true);
+});
+
+test("status refresh reruns every active source including the mounted profile component", async () => {
+  const calls = [];
+  const refresher = (name) => async () => {
+    calls.push(name);
+  };
+
+  await refreshRecoveryStates(
+    refresher("installation"),
+    refresher("profiles-hook"),
+    refresher("configuration"),
+    refresher("profiles-component"),
+    undefined,
+  );
+
+  assert.deepEqual(calls.sort(), [
+    "configuration",
+    "installation",
+    "profiles-component",
+    "profiles-hook",
+  ]);
 });
 
 test("cleanup pending never enables or recommends retrying a mutation", () => {

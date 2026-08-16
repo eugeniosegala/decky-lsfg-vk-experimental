@@ -181,6 +181,7 @@ class ConfigurationReadRecoveryContracts(unittest.TestCase):
         for name, result, payload_key in self._read_results():
             with self.subTest(read=name):
                 self.assertIs(result.get("success"), False, result)
+                self.assertIs(result.get("status_available"), False, result)
                 self.assertIsNone(result.get(payload_key), result)
                 self.assertEqual(result.get("error_code"), error_code)
                 self.assertIs(result.get("retryable"), retryable)
@@ -332,6 +333,92 @@ class StartupRecoveryBarrierContracts(unittest.TestCase):
         self.assertEqual(coordinator.recover_calls, 1)
         for writer in self._main_writers():
             writer.assert_called_once_with()
+
+
+class ExplicitRecoveryContracts(unittest.TestCase):
+    def setUp(self):
+        self.paths = TemporaryHome()
+        self.addCleanup(self.paths.cleanup)
+        self.layout = state_transaction.PathLayout.from_home(self.paths.home)
+        with patch.object(Path, "home", return_value=self.paths.home):
+            self.service = InstallationService(logger=_Logger())
+            self.plugin = Plugin()
+
+    def test_recover_state_exposes_successful_refresh_contract(self):
+        self.paths.write_triplet()
+        coordinator = state_transaction.MutationCoordinator(
+            self.layout, _CrashAtPrepared()
+        )
+        with self.assertRaises(_SimulatedCrash):
+            coordinator.commit(
+                "configuration",
+                replacements={self.layout.config_file: (b"new config\n", 0o640)},
+                removals=(),
+            )
+
+        result = self.service.recover_state()
+
+        self.assertTrue(result["success"], result)
+        self.assertTrue(result["status_available"], result)
+        self.assertFalse(result["recovery_pending"], result)
+        self.assertEqual(result["recovery_action"], "refresh")
+        self.assertFalse(self.layout.journal_file.exists())
+
+    def test_plugin_recover_state_delegates_to_service(self):
+        expected = {"success": True, "status_available": True}
+        self.plugin.installation_service = SimpleNamespace(
+            recover_state=Mock(return_value=expected)
+        )
+
+        result = asyncio.run(self.plugin.recover_state())
+
+        self.assertEqual(result, expected)
+        self.plugin.installation_service.recover_state.assert_called_once_with()
+
+    def test_recover_state_reports_busy_as_unavailable(self):
+        coordinator = _StartupCoordinator(
+            state_transaction.MutationBusyError("another mutation owns the lock")
+        )
+        with patch.object(
+            state_transaction, "MutationCoordinator", return_value=coordinator
+        ):
+            result = self.service.recover_state()
+
+        self.assertFalse(result["success"], result)
+        self.assertFalse(result["status_available"], result)
+        self.assertEqual(result["error_code"], "mutation_busy")
+
+    def test_recover_state_reports_blocked_as_unavailable(self):
+        self.layout.config_dir.mkdir(parents=True)
+        self.layout.journal_file.write_bytes(b"invalid journal")
+
+        result = self.service.recover_state()
+
+        self.assertFalse(result["success"], result)
+        self.assertFalse(result["status_available"], result)
+        self.assertEqual(result["error_code"], "recovery_blocked")
+
+    def test_plugin_uninstall_does_not_log_completion_after_cleanup_failure(self):
+        self.plugin.installation_service = SimpleNamespace(
+            cleanup_on_uninstall=Mock(return_value={
+                "success": False,
+                "error": "journal is ambiguous",
+                "error_code": "recovery_blocked",
+            })
+        )
+        logger = Mock()
+
+        with patch.object(decky, "logger", logger):
+            asyncio.run(self.plugin._uninstall())
+
+        completion_messages = [
+            str(call.args[0]) for call in logger.info.call_args_list if call.args
+        ]
+        self.assertNotIn(
+            "decky-lsfg-vk-experimental plugin uninstall cleanup completed",
+            completion_messages,
+        )
+        logger.error.assert_called_once()
 
 
 if __name__ == "__main__":

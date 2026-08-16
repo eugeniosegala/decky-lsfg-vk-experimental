@@ -248,6 +248,79 @@ class ConfigurationTransactionTests(unittest.TestCase):
         self.assertEqual(result.get("error_code"), "invalid_persisted_state")
         self.assertEqual(self._snapshot_user_tree(), before)
 
+    def test_wrapper_profile_set_mismatch_blocks_mutation_without_data_loss(self):
+        self._write_valid_initial_state()
+        payload = json.loads(self.paths.wrapper_json.read_text(encoding="utf-8"))
+        payload["profiles"]["Orphan"] = dict(
+            payload["profiles"][DEFAULT_PROFILE_NAME]
+        )
+        self.paths.wrapper_json.write_text(
+            json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        before = self._snapshot_user_tree()
+
+        result = self.service.create_profile("Gaming")
+
+        self.assertFalse(result["success"], result)
+        self.assertEqual(result.get("error_code"), "invalid_persisted_state")
+        self.assertEqual(self._snapshot_user_tree(), before)
+
+    def test_legacy_multi_profile_migration_creates_complete_wrapper_state(self):
+        self._write_valid_initial_state()
+        self.assertTrue(self.service.create_profile("Gaming")["success"])
+        self.paths.wrapper_json.unlink()
+
+        migrated = self.service.migrate_wrapper_profile_settings_if_needed()
+        wrapper = json.loads(self.paths.wrapper_json.read_text(encoding="utf-8"))
+        profile_data = ConfigurationManager.parse_toml_content_multi_profile(
+            self.paths.toml.read_text(encoding="utf-8")
+        )
+
+        self.assertTrue(migrated)
+        self.assertEqual(set(wrapper["profiles"]), set(profile_data["profiles"]))
+        result = self.service.create_profile("Handheld")
+        self.assertTrue(result["success"], result)
+
+    def test_profile_set_mismatch_is_visible_on_config_and_profile_reads(self):
+        self._write_valid_initial_state()
+        self.assertTrue(self.service.create_profile("Gaming")["success"])
+        complete = json.loads(self.paths.wrapper_json.read_text(encoding="utf-8"))
+        mismatches = {
+            "missing": {
+                "version": complete["version"],
+                "profiles": {
+                    DEFAULT_PROFILE_NAME: complete["profiles"][DEFAULT_PROFILE_NAME]
+                },
+            },
+            "extra": {
+                "version": complete["version"],
+                "profiles": {
+                    **complete["profiles"],
+                    "Orphan": dict(complete["profiles"][DEFAULT_PROFILE_NAME]),
+                },
+            },
+        }
+
+        for mismatch, payload in mismatches.items():
+            with self.subTest(mismatch=mismatch):
+                self.paths.wrapper_json.write_text(
+                    json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8"
+                )
+                before = self._snapshot_user_tree()
+
+                config_result = self.service.get_config()
+                profiles_result = self.service.get_profiles()
+
+                self.assertEqual(
+                    config_result.get("error_code"), "invalid_persisted_state"
+                )
+                self.assertTrue(config_result.get("warning"))
+                self.assertEqual(
+                    profiles_result.get("error_code"), "invalid_persisted_state"
+                )
+                self.assertIs(profiles_result.get("status_available"), False)
+                self.assertEqual(self._snapshot_user_tree(), before)
+
     def test_get_config_does_not_migrate_or_write_missing_wrapper_settings(self):
         self._write_valid_initial_state()
         self.paths.wrapper_json.unlink()

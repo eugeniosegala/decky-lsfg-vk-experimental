@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import {
   PanelSectionRow,
   Dropdown,
@@ -109,7 +109,14 @@ interface ProfileManagementProps {
   mainRunningApp?: AppOverview;
 }
 
-export function ProfileManagement({ currentProfile, onProfileChange, onRecoveryStateChange, disabled = false, mainRunningApp }: ProfileManagementProps) {
+export interface ProfileManagementHandle {
+  refreshStatus: () => Promise<void>;
+}
+
+export const ProfileManagement = forwardRef<ProfileManagementHandle, ProfileManagementProps>(function ProfileManagement(
+  { currentProfile, onProfileChange, onRecoveryStateChange, disabled = false, mainRunningApp },
+  ref,
+) {
   const [profiles, setProfiles] = useState<string[]>([]);
   const [selectedProfile, setSelectedProfile] = useState<string>(currentProfile || "decky-lsfg-vk");
   const [isLoading, setIsLoading] = useState(false);
@@ -183,6 +190,8 @@ export function ProfileManagement({ currentProfile, onProfileChange, onRecoveryS
       showErrorToast(t('PROFILE_LOAD_ERROR', 'Error loading profiles'), String(error));
     }
   };
+
+  useImperativeHandle(ref, () => ({ refreshStatus: loadProfiles }), [loadProfiles]);
 
   const handleProfileChange = async (profileName: string) => {
     if (disabled || !profilesAvailableRef.current) return;
@@ -518,4 +527,4 @@ export function ProfileManagement({ currentProfile, onProfileChange, onRecoveryS
       )}
     </>
   );
-}
+});
