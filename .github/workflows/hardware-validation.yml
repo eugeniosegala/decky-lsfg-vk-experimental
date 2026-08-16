@@ -116,6 +116,8 @@ jobs:
             --baseline "$REPORT_DIR/baseline.json" \
             --candidate "$REPORT_DIR/candidate.json" \
             --policy gate/.github/hardware-quality-policy.json \
+            --baseline-sha "${{ inputs.baseline_sha }}" \
+            --candidate-sha "${{ inputs.candidate_sha }}" \
             --json-output "$REPORT_DIR/gate-result.json"
 
       - name: Upload bounded evidence

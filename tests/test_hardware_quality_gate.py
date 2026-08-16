@@ -23,6 +23,9 @@ ENVIRONMENT = {
     "workload_build": "sha256:test",
     "workload_settings_hash": "sha256:settings",
 }
+BASELINE_SHA = "1" * 40
+CANDIDATE_SHA = "2" * 40
+ENGINE_SHA256 = "sha256:" + "a" * 64
 
 
 def _policy():
@@ -53,11 +56,11 @@ def _policy():
     }
 
 
-def _report(frame_time=10.0, ssim=0.999, black_frames=0):
+def _report(frame_time=10.0, ssim=0.999, black_frames=0, git_sha=BASELINE_SHA):
     return {
         "schema": 1,
         "environment": dict(ENVIRONMENT),
-        "subject": {"git_sha": "test"},
+        "subject": {"git_sha": git_sha, "engine_sha256": ENGINE_SHA256},
         "runs": [
             {
                 "frame_time_p95_ms": frame_time + offset,
@@ -96,43 +99,52 @@ class HardwareQualityGateTests(unittest.TestCase):
         report = {
             "schema": 1,
             "environment": dict(ENVIRONMENT),
-            "subject": {"git_sha": "test"},
+            "subject": {
+                "git_sha": BASELINE_SHA,
+                "engine_sha256": ENGINE_SHA256,
+            },
             "runs": [dict(run) for _ in range(policy["minimum_runs"])],
         }
 
         self.assertTrue(evaluate(report, report, policy)["passed"])
 
     def test_equivalent_stable_reports_pass(self):
-        result = evaluate(_report(), _report(frame_time=10.2), _policy())
+        result = evaluate(
+            _report(), _report(frame_time=10.2, git_sha=CANDIDATE_SHA), _policy()
+        )
         self.assertTrue(result["passed"])
         self.assertEqual(result["failures"], [])
 
     def test_environment_mismatch_rejects_comparison(self):
-        candidate = _report()
+        candidate = _report(git_sha=CANDIDATE_SHA)
         candidate["environment"]["mesa"] = "different"
         with self.assertRaisesRegex(QualityGateError, "environments differ: mesa"):
             evaluate(_report(), candidate, _policy())
 
     def test_insufficient_repetitions_reject_evidence(self):
-        candidate = _report()
+        candidate = _report(git_sha=CANDIDATE_SHA)
         candidate["runs"] = candidate["runs"][:2]
         with self.assertRaisesRegex(QualityGateError, "at least 5"):
             evaluate(_report(), candidate, _policy())
 
     def test_frame_time_regression_fails(self):
-        result = evaluate(_report(), _report(frame_time=11.0), _policy())
+        result = evaluate(
+            _report(), _report(frame_time=11.0, git_sha=CANDIDATE_SHA), _policy()
+        )
         self.assertFalse(result["passed"])
         self.assertRegex(result["failures"][0], "frame_time_p95_ms")
 
     def test_visual_similarity_regression_fails(self):
-        result = evaluate(_report(), _report(ssim=0.990), _policy())
+        result = evaluate(
+            _report(), _report(ssim=0.990, git_sha=CANDIDATE_SHA), _policy()
+        )
         self.assertFalse(result["passed"])
         self.assertTrue(
             any("generated_frame_ssim" in item for item in result["failures"])
         )
 
     def test_hard_failure_counter_fails_even_when_baseline_matches(self):
-        candidate = _report()
+        candidate = _report(git_sha=CANDIDATE_SHA)
         candidate["runs"][0]["black_frame_count"] = 1
         result = evaluate(_report(), candidate, _policy())
         self.assertFalse(result["passed"])
@@ -142,7 +154,7 @@ class HardwareQualityGateTests(unittest.TestCase):
         baseline = _report()
         for run, value in zip(baseline["runs"], (7.0, 8.0, 10.0, 12.0, 13.0)):
             run["frame_time_p95_ms"] = value
-        result = evaluate(baseline, _report(), _policy())
+        result = evaluate(baseline, _report(git_sha=CANDIDATE_SHA), _policy())
         self.assertFalse(result["passed"])
         self.assertTrue(
             any("baseline relative MAD" in item for item in result["failures"])
@@ -151,7 +163,7 @@ class HardwareQualityGateTests(unittest.TestCase):
     def test_nonfinite_and_boolean_metrics_are_rejected(self):
         for value in (True, float("nan"), float("inf")):
             with self.subTest(value=value):
-                candidate = _report()
+                candidate = _report(git_sha=CANDIDATE_SHA)
                 candidate["runs"][0]["frame_time_p95_ms"] = value
                 with self.assertRaisesRegex(QualityGateError, "finite number"):
                     evaluate(_report(), candidate, _policy())
@@ -167,7 +179,7 @@ class HardwareQualityGateTests(unittest.TestCase):
             }
             documents = {
                 "baseline": _report(),
-                "candidate": _report(frame_time=11.0),
+                "candidate": _report(frame_time=11.0, git_sha=CANDIDATE_SHA),
                 "policy": _policy(),
             }
             for name, document in documents.items():
@@ -182,6 +194,10 @@ class HardwareQualityGateTests(unittest.TestCase):
                         str(paths["candidate"]),
                         "--policy",
                         str(paths["policy"]),
+                        "--baseline-sha",
+                        BASELINE_SHA,
+                        "--candidate-sha",
+                        CANDIDATE_SHA,
                         "--json-output",
                         str(paths["result"]),
                     ]
@@ -189,6 +205,24 @@ class HardwareQualityGateTests(unittest.TestCase):
 
             self.assertEqual(return_code, 1)
             self.assertFalse(json.loads(paths["result"].read_text())["passed"])
+
+    def test_report_subject_must_match_requested_commit(self):
+        with self.assertRaisesRegex(QualityGateError, "requested commit SHA"):
+            evaluate(
+                _report(),
+                _report(git_sha=CANDIDATE_SHA),
+                _policy(),
+                expected_baseline_sha="3" * 40,
+                expected_candidate_sha=CANDIDATE_SHA,
+            )
+
+    def test_subject_requires_full_git_and_engine_hashes(self):
+        for field, value in (("git_sha", "short"), ("engine_sha256", "sha256:bad")):
+            with self.subTest(field=field):
+                candidate = _report(git_sha=CANDIDATE_SHA)
+                candidate["subject"][field] = value
+                with self.assertRaisesRegex(QualityGateError, field):
+                    evaluate(_report(), candidate, _policy())
 
 
 if __name__ == "__main__":

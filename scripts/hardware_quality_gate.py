@@ -20,6 +20,8 @@ from typing import Any
 
 REPORT_SCHEMA = 1
 POLICY_SCHEMA = 1
+GIT_SHA_LENGTH = 40
+SHA256_HEX_LENGTH = 64
 
 
 class QualityGateError(ValueError):
@@ -45,6 +47,18 @@ def _number(value: object, label: str) -> float:
     return number
 
 
+def _lower_hex(value: object, *, length: int, label: str) -> str:
+    if (
+        not isinstance(value, str)
+        or len(value) != length
+        or any(character not in "0123456789abcdef" for character in value)
+    ):
+        raise QualityGateError(
+            f"{label} must be {length} lowercase hexadecimal characters"
+        )
+    return value
+
+
 def _validate_report(
     report: dict[str, Any], *, label: str, metrics: set[str], minimum_runs: int
 ) -> None:
@@ -56,6 +70,25 @@ def _validate_report(
         raise QualityGateError(f"{label} environment must be a non-empty object")
     if not isinstance(report["subject"], dict) or not report["subject"]:
         raise QualityGateError(f"{label} subject must be a non-empty object")
+    if set(report["subject"]) != {"git_sha", "engine_sha256"}:
+        raise QualityGateError(
+            f"{label} subject must contain exactly git_sha and engine_sha256"
+        )
+    _lower_hex(
+        report["subject"]["git_sha"],
+        length=GIT_SHA_LENGTH,
+        label=f"{label} subject git_sha",
+    )
+    engine_sha256 = report["subject"]["engine_sha256"]
+    if not isinstance(engine_sha256, str) or not engine_sha256.startswith("sha256:"):
+        raise QualityGateError(
+            f"{label} subject engine_sha256 must use the sha256:<hex> form"
+        )
+    _lower_hex(
+        engine_sha256.removeprefix("sha256:"),
+        length=SHA256_HEX_LENGTH,
+        label=f"{label} subject engine_sha256",
+    )
     runs = report["runs"]
     if not isinstance(runs, list) or len(runs) < minimum_runs:
         raise QualityGateError(
@@ -147,7 +180,12 @@ def _relative_mad(values: list[float]) -> float:
 
 
 def evaluate(
-    baseline: dict[str, Any], candidate: dict[str, Any], policy: dict[str, Any]
+    baseline: dict[str, Any],
+    candidate: dict[str, Any],
+    policy: dict[str, Any],
+    *,
+    expected_baseline_sha: str | None = None,
+    expected_candidate_sha: str | None = None,
 ) -> dict[str, Any]:
     metrics = _validate_policy(policy)
     metric_names = set(metrics)
@@ -158,6 +196,19 @@ def evaluate(
     _validate_report(
         candidate, label="candidate", metrics=metric_names, minimum_runs=minimum_runs
     )
+
+    expected_subjects = (
+        ("baseline", baseline, expected_baseline_sha),
+        ("candidate", candidate, expected_candidate_sha),
+    )
+    for label, report, expected_sha in expected_subjects:
+        if expected_sha is None:
+            continue
+        _lower_hex(expected_sha, length=GIT_SHA_LENGTH, label=f"expected {label} SHA")
+        if report["subject"]["git_sha"] != expected_sha:
+            raise QualityGateError(
+                f"{label} report subject does not match the requested commit SHA"
+            )
 
     environment_keys = policy["environment_keys"]
     missing = [
@@ -245,6 +296,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--baseline", type=Path, required=True)
     parser.add_argument("--candidate", type=Path, required=True)
     parser.add_argument("--policy", type=Path, required=True)
+    parser.add_argument("--baseline-sha", required=True)
+    parser.add_argument("--candidate-sha", required=True)
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args(argv)
     try:
@@ -252,6 +305,8 @@ def main(argv: list[str] | None = None) -> int:
             _load_json(args.baseline),
             _load_json(args.candidate),
             _load_json(args.policy),
+            expected_baseline_sha=args.baseline_sha,
+            expected_candidate_sha=args.candidate_sha,
         )
     except QualityGateError as error:
         print(f"hardware quality evidence rejected: {error}", file=sys.stderr)
