@@ -24,7 +24,7 @@ class Trace:
                 "schema": 1,
                 "trace_id": f"simulated-{scenario}",
                 "producer": "latency_trace_simulator",
-                "measurement_scope": "synthetic_software_proxy",
+                "measurement_scope": "synthetic_conformance",
                 "clock": {"domain": "synthetic_monotonic", "unit": "ns"},
                 "subject": {
                     "plugin_git_sha": "0000000000000000000000000000000000000000",
@@ -73,6 +73,7 @@ class Trace:
                 "sequence": self.sequence,
                 "timestamp_ns": self.now,
                 "status": "complete",
+                "lost_event_count": 0,
             }
         )
 

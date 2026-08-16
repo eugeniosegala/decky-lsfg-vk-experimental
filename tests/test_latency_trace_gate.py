@@ -4,12 +4,15 @@ from copy import deepcopy
 from contextlib import redirect_stderr, redirect_stdout
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
+import scripts.latency_trace_gate as latency_trace_gate
 from scripts.latency_trace_gate import (
     EXIT_INVALID_TRACE,
     MAX_EVENT_COUNT,
@@ -33,6 +36,42 @@ def _event(records: list[dict], event: str) -> dict:
     return next(record for record in records if record.get("event") == event)
 
 
+def _renumber(records: list[dict]) -> None:
+    for sequence, record in enumerate(records[1:], start=1):
+        record["sequence"] = sequence
+
+
+def _enable_feedback(records: list[dict]) -> None:
+    records[0]["capabilities"].update(
+        {
+            "presentation_feedback": True,
+            "feedback_clock_domain": records[0]["clock"]["domain"],
+        }
+    )
+
+
+def _feedback(
+    output_frame_id: str,
+    *,
+    feedback_timestamp_ns: int | None,
+    event_timestamp_ns: int,
+    status: str = "presented",
+) -> dict:
+    return {
+        "record": "event",
+        "sequence": 0,
+        "timestamp_ns": event_timestamp_ns,
+        "context_id": "ctx",
+        "epoch": 0,
+        "event": "presentation_feedback",
+        "data": {
+            "output_frame_id": output_frame_id,
+            "feedback_timestamp_ns": feedback_timestamp_ns,
+            "status": status,
+        },
+    }
+
+
 class LatencyTraceContractTests(unittest.TestCase):
     def test_hand_authored_real_only_trace_has_deterministic_proxy(self):
         first = evaluate_trace(_records())
@@ -51,7 +90,7 @@ class LatencyTraceContractTests(unittest.TestCase):
             },
         )
         self.assertEqual(
-            first["summary"]["input_observed_to_present_call_proxy_ns"]["p95"],
+            first["summary"]["input_observed_to_present_call_entry_proxy_ns"]["p95"],
             600,
         )
 
@@ -83,6 +122,168 @@ class LatencyTraceContractTests(unittest.TestCase):
         self.assertEqual(result["summary"]["present_results"]["out_of_date"], 1)
         self.assertEqual(result["summary"]["recovery_failed_count"], 1)
 
+    def test_failed_real_present_attempts_do_not_create_latency_samples(self):
+        for result in ("timeout", "out_of_date", "error"):
+            with self.subTest(result=result):
+                records = _records()
+                _event(records, "present_call_returned")["data"]["result"] = result
+
+                summary = evaluate_trace(records)["summary"]
+
+                self.assertEqual(
+                    summary["real_ready_to_present_call_proxy_ns"]["sample_count"],
+                    0,
+                )
+                self.assertEqual(
+                    summary["input_observed_to_present_call_entry_proxy_ns"][
+                        "sample_count"
+                    ],
+                    0,
+                )
+
+    def test_failed_only_real_attempts_have_an_exact_unavailable_reason(self):
+        records = _records()
+        _event(records, "present_call_returned")["data"]["result"] = "error"
+
+        metric = evaluate_trace(records)["summary"][
+            "real_ready_to_present_call_proxy_ns"
+        ]
+
+        self.assertEqual(metric["unavailable_reason"], "no_successful_real_presents")
+
+    def test_failed_real_present_with_input_mapping_has_precise_reasons(self):
+        records = _records()
+        _event(records, "present_call_returned")["data"]["result"] = "error"
+
+        summary = evaluate_trace(records)["summary"]
+
+        self.assertIn("input_observed_to_present_call_entry_proxy_ns", summary)
+        self.assertIn("input_observed_to_real_feedback_proxy_ns", summary)
+        self.assertEqual(
+            summary["input_observed_to_present_call_entry_proxy_ns"][
+                "unavailable_reason"
+            ],
+            "no_successful_real_present_for_input_boundary",
+        )
+        self.assertEqual(
+            summary["input_observed_to_real_feedback_proxy_ns"]["unavailable_reason"],
+            "presentation_feedback_unavailable",
+        )
+
+    def test_dangling_simulation_is_invalid_for_every_destroy_reason(self):
+        for reason in ("normal", "out_of_date", "recovery_failed", "shutdown"):
+            with self.subTest(reason=reason):
+                records = _records()
+                records = [
+                    record
+                    for record in records
+                    if record.get("event")
+                    not in {
+                        "real_frame_ready",
+                        "present_call_started",
+                        "present_call_returned",
+                    }
+                ]
+                for record in records:
+                    if record.get("event") == "context_destroyed":
+                        record["data"]["reason"] = reason
+                _renumber(records)
+
+                with self.assertRaisesRegex(
+                    LatencyTraceError,
+                    "simulation_started lacking real_frame_ready",
+                ):
+                    evaluate_trace(records)
+
+    def test_generated_frame_cannot_reuse_a_simulation_output_id(self):
+        records = _records("valid-partial-prefix.jsonl")
+        context_index = next(
+            index
+            for index, record in enumerate(records)
+            if record.get("event") == "context_created"
+        )
+        records[context_index + 1 : context_index + 1] = [
+            {
+                "record": "event",
+                "sequence": 0,
+                "timestamp_ns": 50,
+                "context_id": "ctx",
+                "epoch": 0,
+                "event": "input_observed",
+                "data": {"input_id": "input-future"},
+            },
+            {
+                "record": "event",
+                "sequence": 0,
+                "timestamp_ns": 50,
+                "context_id": "ctx",
+                "epoch": 0,
+                "event": "simulation_started",
+                "data": {
+                    "input_id": "input-future",
+                    "real_frame_id": "future-real",
+                },
+            },
+        ]
+        _renumber(records)
+        generated = _event(records, "generated_slot_planned")
+        generated["data"]["generated_frame_id"] = "future-real"
+
+        with self.assertRaisesRegex(
+            LatencyTraceError,
+            "output frame ids must be unique per epoch",
+        ):
+            evaluate_trace(records)
+
+    def test_feedback_reason_distinguishes_capability_from_missing_feedback(self):
+        without_feedback = _records()
+        summary = evaluate_trace(without_feedback)["summary"]
+        self.assertEqual(
+            summary["input_observed_to_real_feedback_proxy_ns"]["unavailable_reason"],
+            "presentation_feedback_unavailable",
+        )
+
+        with_feedback = _records()
+        _enable_feedback(with_feedback)
+        present_return_index = next(
+            index
+            for index, record in enumerate(with_feedback)
+            if record.get("event") == "present_call_returned"
+        )
+        present = with_feedback[present_return_index]
+        with_feedback.insert(
+            present_return_index + 1,
+            _feedback(
+                present["data"]["output_frame_id"],
+                feedback_timestamp_ns=None,
+                event_timestamp_ns=present["timestamp_ns"],
+                status="dropped",
+            ),
+        )
+        _renumber(with_feedback)
+
+        summary = evaluate_trace(with_feedback)["summary"]
+        self.assertEqual(
+            summary["input_observed_to_real_feedback_proxy_ns"]["unavailable_reason"],
+            "no_presented_feedback_for_input_boundary",
+        )
+
+    def test_absent_input_mapping_reserves_input_boundary_unavailable_reason(self):
+        summary = evaluate_trace(_records("valid-runtime-failure.jsonl"))["summary"]
+
+        self.assertIn("input_observed_to_present_call_entry_proxy_ns", summary)
+        self.assertIn("input_observed_to_real_feedback_proxy_ns", summary)
+        self.assertEqual(
+            summary["input_observed_to_present_call_entry_proxy_ns"][
+                "unavailable_reason"
+            ],
+            "input_boundary_unavailable",
+        )
+        self.assertEqual(
+            summary["input_observed_to_real_feedback_proxy_ns"]["unavailable_reason"],
+            "input_boundary_unavailable",
+        )
+
     def test_equal_timestamps_are_valid_but_decreasing_timestamps_are_not(self):
         records = _records()
         records[4]["timestamp_ns"] = records[3]["timestamp_ns"]
@@ -100,6 +301,77 @@ class LatencyTraceContractTests(unittest.TestCase):
                 with self.assertRaisesRegex(LatencyTraceError, message):
                     evaluate_trace(records)
 
+    def test_event_sequence_must_not_skip_a_value(self):
+        records = _records()
+        for record in records[2:]:
+            record["sequence"] += 1
+
+        with self.assertRaisesRegex(LatencyTraceError, "contiguous"):
+            evaluate_trace(records)
+
+    def test_end_sequence_must_immediately_follow_the_last_event(self):
+        records = _records()
+        records[-1]["sequence"] += 1
+
+        with self.assertRaisesRegex(LatencyTraceError, "contiguous"):
+            evaluate_trace(records)
+
+    def test_first_real_index_in_each_context_epoch_must_be_zero(self):
+        records = _records()
+        _event(records, "real_frame_ready")["data"]["real_index"] = 1
+        _event(records, "present_call_started")["data"]["content_order"][
+            "right_real_index"
+        ] = 1
+
+        with self.assertRaisesRegex(LatencyTraceError, "real_index.*zero"):
+            evaluate_trace(records)
+
+    def test_real_indices_must_be_contiguous_within_a_context_epoch(self):
+        records = _records()
+        second_frame = [
+            {
+                "record": "event",
+                "sequence": 0,
+                "timestamp_ns": 760,
+                "context_id": "ctx",
+                "epoch": 0,
+                "event": "real_frame_ready",
+                "data": {"real_frame_id": "real-2", "real_index": 2},
+            },
+            {
+                "record": "event",
+                "sequence": 0,
+                "timestamp_ns": 770,
+                "context_id": "ctx",
+                "epoch": 0,
+                "event": "present_call_started",
+                "data": {
+                    "output_kind": "real",
+                    "output_frame_id": "real-2",
+                    "queue_depth": 0,
+                    "content_order": {
+                        "right_real_index": 2,
+                        "numerator": 1,
+                        "denominator": 1,
+                    },
+                },
+            },
+            {
+                "record": "event",
+                "sequence": 0,
+                "timestamp_ns": 780,
+                "context_id": "ctx",
+                "epoch": 0,
+                "event": "present_call_returned",
+                "data": {"output_frame_id": "real-2", "result": "success"},
+            },
+        ]
+        records[-2:-2] = second_frame
+        _renumber(records)
+
+        with self.assertRaisesRegex(LatencyTraceError, "real_index.*contiguous"):
+            evaluate_trace(records)
+
     def test_unknown_fields_events_and_scope_fail_closed(self):
         cases = []
         extra = _records()
@@ -116,17 +388,18 @@ class LatencyTraceContractTests(unittest.TestCase):
                 with self.assertRaisesRegex(LatencyTraceError, message):
                     evaluate_trace(records)
 
-    def test_hashes_and_native_deadline_source_are_strict(self):
+    def test_hashes_are_strict(self):
         bad_hash = _records()
         bad_hash[0]["subject"]["config_sha256"] = "sha256:nope"
         with self.assertRaisesRegex(LatencyTraceError, "config_sha256"):
             evaluate_trace(bad_hash)
 
-        native = _records()
-        native[0]["measurement_scope"] = "native_software_proxy"
-        native[0]["capabilities"]["deadline_source"] = "synthetic_vblank"
-        with self.assertRaisesRegex(LatencyTraceError, "synthetic_vblank"):
-            evaluate_trace(native)
+    def test_v1_rejects_native_scope_until_native_semantics_are_defined(self):
+        records = _records()
+        records[0]["measurement_scope"] = "native_software_proxy"
+
+        with self.assertRaisesRegex(LatencyTraceError, "native.*reserved"):
+            evaluate_trace(records)
 
     def test_feedback_requires_same_normalized_clock_and_valid_present(self):
         records = _records()
@@ -190,6 +463,190 @@ class LatencyTraceContractTests(unittest.TestCase):
             metric["unavailable_reason"], "presentation_feedback_unavailable"
         )
 
+    def test_feedback_capability_requires_feedback_for_every_successful_present(self):
+        for result in ("success", "suboptimal"):
+            with self.subTest(result=result):
+                records = _records()
+                _enable_feedback(records)
+                _event(records, "present_call_returned")["data"]["result"] = result
+
+                with self.assertRaisesRegex(LatencyTraceError, "missing.*feedback"):
+                    evaluate_trace(records)
+
+    def test_feedback_capability_rejects_selectively_missing_feedback(self):
+        records = _records("valid-partial-prefix.jsonl")
+        _enable_feedback(records)
+        records.insert(
+            -2,
+            _feedback(
+                "gen-1",
+                feedback_timestamp_ns=1660,
+                event_timestamp_ns=1760,
+            ),
+        )
+        _renumber(records)
+
+        with self.assertRaisesRegex(LatencyTraceError, "missing.*feedback"):
+            evaluate_trace(records)
+
+    def test_feedback_summary_separates_real_and_generated_present_samples(self):
+        records = _records("valid-partial-prefix.jsonl")
+        _enable_feedback(records)
+        records[-2:-2] = [
+            _feedback(
+                "real-0",
+                feedback_timestamp_ns=300,
+                event_timestamp_ns=1760,
+            ),
+            _feedback(
+                "gen-1",
+                feedback_timestamp_ns=1660,
+                event_timestamp_ns=1770,
+            ),
+            _feedback(
+                "real-1",
+                feedback_timestamp_ns=1760,
+                event_timestamp_ns=1780,
+            ),
+        ]
+        _event(records, "context_destroyed")["timestamp_ns"] = 1780
+        records[-1]["timestamp_ns"] = 1780
+        _renumber(records)
+
+        summary = evaluate_trace(records)["summary"]
+        self.assertIn("real_present_call_to_feedback_proxy_ns", summary)
+        self.assertIn("generated_present_call_to_feedback_proxy_ns", summary)
+        self.assertEqual(
+            summary["real_present_call_to_feedback_proxy_ns"]["sample_count"], 2
+        )
+        self.assertEqual(
+            summary["generated_present_call_to_feedback_proxy_ns"]["sample_count"],
+            1,
+        )
+
+    def test_feedback_summary_reports_direct_real_and_input_boundaries(self):
+        records = _records()
+        _enable_feedback(records)
+        records.insert(
+            -2,
+            _feedback(
+                "real-0",
+                feedback_timestamp_ns=770,
+                event_timestamp_ns=780,
+            ),
+        )
+        _renumber(records)
+
+        summary = evaluate_trace(records)["summary"]
+        self.assertIn("real_ready_to_presentation_feedback_proxy_ns", summary)
+        self.assertIn("input_observed_to_real_feedback_proxy_ns", summary)
+        self.assertEqual(
+            summary["real_ready_to_presentation_feedback_proxy_ns"]["p50"], 270
+        )
+        self.assertEqual(
+            summary["input_observed_to_real_feedback_proxy_ns"]["p50"],
+            670,
+        )
+
+    def test_dropped_feedback_is_valid_and_fully_accounted(self):
+        records = _records()
+        _enable_feedback(records)
+        records.insert(
+            -2,
+            _feedback(
+                "real-0",
+                feedback_timestamp_ns=None,
+                event_timestamp_ns=780,
+                status="dropped",
+            ),
+        )
+        _renumber(records)
+
+        result = evaluate_trace(records)
+        summary = result["summary"]
+
+        self.assertTrue(result["valid"])
+        self.assertEqual(summary["expected_feedback_count"], 1)
+        self.assertEqual(summary["received_feedback_count"], 1)
+        self.assertEqual(summary["presented_feedback_count"], 0)
+        self.assertEqual(summary["dropped_feedback_count"], 1)
+        self.assertEqual(summary["unknown_feedback_count"], 0)
+        self.assertEqual(summary["missing_feedback_count"], 0)
+        self.assertEqual(
+            summary["received_feedback_count"],
+            summary["presented_feedback_count"]
+            + summary["dropped_feedback_count"]
+            + summary["unknown_feedback_count"],
+        )
+
+    def test_unknown_feedback_is_valid_and_fully_accounted(self):
+        records = _records()
+        _enable_feedback(records)
+        records.insert(
+            -2,
+            _feedback(
+                "real-0",
+                feedback_timestamp_ns=None,
+                event_timestamp_ns=780,
+                status="unknown",
+            ),
+        )
+        _renumber(records)
+
+        result = evaluate_trace(records)
+        summary = result["summary"]
+
+        self.assertTrue(result["valid"])
+        self.assertEqual(summary["expected_feedback_count"], 1)
+        self.assertEqual(summary["received_feedback_count"], 1)
+        self.assertEqual(summary["presented_feedback_count"], 0)
+        self.assertEqual(summary["dropped_feedback_count"], 0)
+        self.assertEqual(summary["unknown_feedback_count"], 1)
+        self.assertEqual(summary["missing_feedback_count"], 0)
+        self.assertEqual(
+            summary["received_feedback_count"],
+            summary["presented_feedback_count"]
+            + summary["dropped_feedback_count"]
+            + summary["unknown_feedback_count"],
+        )
+
+    def test_nonpresented_feedback_has_exact_boundary_unavailable_reasons(self):
+        for status in ("dropped", "unknown"):
+            with self.subTest(status=status):
+                records = _records()
+                _enable_feedback(records)
+                records.insert(
+                    -2,
+                    _feedback(
+                        "real-0",
+                        feedback_timestamp_ns=None,
+                        event_timestamp_ns=780,
+                        status=status,
+                    ),
+                )
+                _renumber(records)
+
+                summary = evaluate_trace(records)["summary"]
+
+                self.assertEqual(
+                    summary["real_present_call_to_feedback_proxy_ns"][
+                        "unavailable_reason"
+                    ],
+                    "no_presented_real_feedback",
+                )
+                self.assertEqual(
+                    summary["generated_present_call_to_feedback_proxy_ns"][
+                        "unavailable_reason"
+                    ],
+                    "no_presented_generated_feedback",
+                )
+                self.assertEqual(
+                    summary["input_observed_to_real_feedback_proxy_ns"][
+                        "unavailable_reason"
+                    ],
+                    "no_presented_feedback_for_input_boundary",
+                )
+
     def test_simulation_cannot_start_after_its_output_frame_exists(self):
         records = _records()
         simulation = _event(records, "simulation_started")
@@ -229,13 +686,13 @@ class LatencyTraceContractTests(unittest.TestCase):
             if record.get("event") == "present_call_started"
             and record["data"]["output_frame_id"] == "real-1"
         )
-        (
-            records[generated_present]["data"]["content_order"],
-            records[real_present]["data"]["content_order"],
-        ) = (
-            records[real_present]["data"]["content_order"],
-            records[generated_present]["data"]["content_order"],
-        )
+        generated_pair = records[generated_present : generated_present + 2]
+        real_pair = records[real_present : real_present + 2]
+        records[generated_present : real_present + 2] = real_pair + generated_pair
+        for record in records[generated_present:]:
+            record["timestamp_ns"] = 1800
+        _renumber(records)
+
         with self.assertRaisesRegex(LatencyTraceError, "content order"):
             evaluate_trace(records)
 
@@ -253,6 +710,49 @@ class LatencyTraceContractTests(unittest.TestCase):
             record["timestamp_ns"] = max(record["timestamp_ns"], 2001)
         with self.assertRaisesRegex(LatencyTraceError, "deadline"):
             evaluate_trace(records)
+
+    def test_deadline_applies_to_present_call_entry_not_return_or_display(self):
+        records = _records("valid-partial-prefix.jsonl")
+        _enable_feedback(records)
+        generated_start = next(
+            record
+            for record in records
+            if record.get("event") == "present_call_started"
+            and record["data"]["output_kind"] == "generated"
+        )
+        generated_return = next(
+            record
+            for record in records
+            if record.get("event") == "present_call_returned"
+            and record["data"]["output_frame_id"] == "gen-1"
+        )
+        generated_start["timestamp_ns"] = 2000
+        generated_return["timestamp_ns"] = 2500
+        start_index = records.index(generated_start)
+        for record in records[start_index + 2 :]:
+            record["timestamp_ns"] = max(record["timestamp_ns"], 2500)
+        records[-2:-2] = [
+            _feedback(
+                "real-0",
+                feedback_timestamp_ns=2400,
+                event_timestamp_ns=2600,
+            ),
+            _feedback(
+                "gen-1",
+                feedback_timestamp_ns=2600,
+                event_timestamp_ns=2700,
+            ),
+            _feedback(
+                "real-1",
+                feedback_timestamp_ns=2750,
+                event_timestamp_ns=2750,
+            ),
+        ]
+        _event(records, "context_destroyed")["timestamp_ns"] = 2800
+        records[-1]["timestamp_ns"] = 2800
+        _renumber(records)
+
+        self.assertTrue(evaluate_trace(records)["valid"])
 
     def test_late_present_requires_exact_deadline_miss_event(self):
         records = _records("valid-partial-prefix.jsonl")
@@ -352,6 +852,7 @@ class LatencyTraceContractTests(unittest.TestCase):
     def test_full_admission_needs_no_skip_but_partial_requires_one(self):
         records = _records("valid-partial-prefix.jsonl")
         records.remove(_event(records, "generated_batch_skipped"))
+        _renumber(records)
         with self.assertRaisesRegex(LatencyTraceError, "skipped suffix"):
             evaluate_trace(records)
 
@@ -359,6 +860,7 @@ class LatencyTraceContractTests(unittest.TestCase):
         admission = _event(records, "generated_batch_admitted")
         admission["data"]["admitted_count"] = 3
         records.remove(_event(records, "generated_batch_skipped"))
+        _renumber(records)
         with self.assertRaisesRegex(LatencyTraceError, "admitted slot"):
             evaluate_trace(records)
 
@@ -408,6 +910,7 @@ class LatencyTraceContractTests(unittest.TestCase):
 
         records = _records()
         records.pop(-3)
+        _renumber(records)
         with self.assertRaisesRegex(LatencyTraceError, "present"):
             evaluate_trace(records)
 
@@ -550,6 +1053,21 @@ class LatencyTraceContractTests(unittest.TestCase):
         with self.assertRaisesRegex(LatencyTraceError, "right real frame"):
             evaluate_trace(selected)
 
+    def test_adjacent_real_pair_accepts_only_one_generated_frame_plan(self):
+        records = _records("valid-partial-prefix.jsonl")
+        original = _event(records, "frame_plan_created")
+        duplicate = deepcopy(original)
+        duplicate["sequence"] = 0
+        duplicate["data"]["batch_id"] = "batch-duplicate"
+        records.insert(records.index(original) + 1, duplicate)
+        _renumber(records)
+
+        with self.assertRaisesRegex(
+            LatencyTraceError,
+            "real-frame pair may have only one",
+        ):
+            evaluate_trace(records)
+
     def test_plan_metadata_must_finish_before_right_real_present_starts(self):
         for stop_event in ("frame_plan_created", "generated_batch_admitted"):
             with self.subTest(stop_event=stop_event):
@@ -669,6 +1187,125 @@ class LatencyTraceContractTests(unittest.TestCase):
             self.assertEqual(code, EXIT_INVALID_TRACE)
             self.assertNotIn("Traceback", stderr.getvalue())
 
+    def test_loader_rejects_fifo_without_waiting_for_a_writer(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fifo = Path(directory) / "trace.fifo"
+            os.mkfifo(fifo)
+            command = [
+                sys.executable,
+                "-c",
+                (
+                    "from pathlib import Path; "
+                    "from scripts.latency_trace_gate import "
+                    "LatencyTraceError, load_trace; "
+                    f"path = Path({str(fifo)!r}); "
+                    "\ntry: load_trace(path)\n"
+                    "except LatencyTraceError as exc: "
+                    "print(exc); raise SystemExit(0)\n"
+                    "raise SystemExit(1)"
+                ),
+            ]
+
+            try:
+                completed = subprocess.run(
+                    command,
+                    cwd=ROOT,
+                    capture_output=True,
+                    text=True,
+                    timeout=4,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired:
+                self.fail("load_trace blocked while opening a FIFO")
+
+        self.assertEqual(completed.returncode, 0)
+        self.assertRegex(completed.stdout, "regular file")
+
+    def test_loader_rejects_special_files_as_non_regular(self):
+        with self.assertRaisesRegex(LatencyTraceError, "regular file"):
+            load_trace(Path(os.devnull))
+
+    def test_loader_rejects_record_amplification_before_json_expansion(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "amplified.jsonl"
+            path.write_text("{}\n" * (MAX_EVENT_COUNT + 3), encoding="utf-8")
+
+            with mock.patch(
+                "scripts.latency_trace_gate.json.loads",
+                side_effect=AssertionError("JSON objects must not be expanded"),
+            ):
+                with self.assertRaisesRegex(LatencyTraceError, "record count"):
+                    load_trace(path)
+
+    def test_loader_rejects_same_size_rewrite_detected_by_file_times(self):
+        source = FIXTURES / "valid-real-only.jsonl"
+        old = source.read_bytes()
+        new = old.replace(
+            b'"trace_id":"real-only"',
+            b'"trace_id":"new-trace"',
+            1,
+        ).replace(
+            b'"timestamp_ns":800,"status":"complete"',
+            b'"timestamp_ns":801,"status":"complete"',
+            1,
+        )
+        self.assertEqual(len(old), len(new))
+        first_change = old.index(b'"trace_id":"real-only"')
+        second_change = old.index(b'"timestamp_ns":800,"status":"complete"')
+        split = (first_change + second_change) // 2
+        hybrid = old[:split] + new[split:]
+        self.assertNotEqual(hybrid, old)
+        self.assertNotEqual(hybrid, new)
+        self.assertTrue(
+            evaluate_trace([json.loads(line) for line in hybrid.splitlines()])["valid"]
+        )
+
+        source_stat = source.stat()
+        before = mock.Mock(
+            st_mode=source_stat.st_mode,
+            st_size=len(old),
+            st_dev=source_stat.st_dev,
+            st_ino=source_stat.st_ino,
+            st_mtime_ns=100,
+            st_ctime_ns=200,
+        )
+        after = mock.Mock(
+            st_mode=source_stat.st_mode,
+            st_size=len(old),
+            st_dev=source_stat.st_dev,
+            st_ino=source_stat.st_ino,
+            st_mtime_ns=101,
+            st_ctime_ns=201,
+        )
+        with (
+            mock.patch("scripts.latency_trace_gate.os.open", return_value=17),
+            mock.patch(
+                "scripts.latency_trace_gate.os.fstat", side_effect=[before, after]
+            ),
+            mock.patch(
+                "scripts.latency_trace_gate.os.read",
+                side_effect=[old[:split], new[split:], b""],
+            ),
+            mock.patch("scripts.latency_trace_gate.os.close"),
+        ):
+            with self.assertRaisesRegex(LatencyTraceError, "changed while reading"):
+                load_trace(source)
+
+    def test_record_bound_is_checked_without_materializing_all_split_lines(self):
+        class SplitlinesBomb(bytes):
+            def splitlines(self, *args, **kwargs):
+                raise AssertionError("unbounded bytes.splitlines was called")
+
+        splitter = getattr(latency_trace_gate, "_split_bounded_lines", None)
+        self.assertIsNotNone(
+            splitter,
+            "load_trace needs a bounded line scanner before JSON expansion",
+        )
+        payload = SplitlinesBomb(b"{}\n" * (MAX_EVENT_COUNT + 3))
+
+        with self.assertRaisesRegex(LatencyTraceError, "record count"):
+            splitter(payload)
+
     def test_duplicate_json_keys_are_rejected_before_exact_field_validation(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -688,15 +1325,13 @@ class LatencyTraceContractTests(unittest.TestCase):
                     with self.assertRaisesRegex(LatencyTraceError, "duplicate"):
                         load_trace(path)
 
-    def test_native_trace_requires_artifact_identity_and_result_retains_provenance(
-        self,
-    ):
+    def test_result_retains_canonical_producer(self):
         records = _records("valid-runtime-failure.jsonl")
-        records[0]["subject"]["engine_source_commit"] = "unavailable"
-        records[0]["subject"]["engine_sha256"] = "unavailable"
-        with self.assertRaisesRegex(LatencyTraceError, "engine_sha256"):
-            evaluate_trace(records)
+        result = evaluate_trace(records)
+        self.assertIn("producer", result)
+        self.assertEqual(result["producer"], records[0]["producer"])
 
+    def test_result_retains_header_provenance(self):
         records = _records("valid-runtime-failure.jsonl")
         result = evaluate_trace(records)
         self.assertEqual(result["subject"], records[0]["subject"])
@@ -710,6 +1345,30 @@ class LatencyTraceContractTests(unittest.TestCase):
         for sequence, record in enumerate(records[1:], start=1):
             record["sequence"] = sequence
         with self.assertRaisesRegex(LatencyTraceError, "event count"):
+            evaluate_trace(records)
+
+    def test_complete_end_requires_explicit_zero_lost_event_count(self):
+        records = _records()
+        records[-1].pop("lost_event_count")
+
+        with self.assertRaisesRegex(LatencyTraceError, "lost_event_count"):
+            evaluate_trace(records)
+
+    def test_zero_lost_event_count_is_valid(self):
+        records = _records()
+        records[-1]["lost_event_count"] = 0
+
+        try:
+            result = evaluate_trace(records)
+        except LatencyTraceError as exc:
+            self.fail(f"zero lost_event_count was rejected: {exc}")
+        self.assertTrue(result["valid"])
+
+    def test_nonzero_lost_event_count_is_rejected(self):
+        records = _records()
+        records[-1]["lost_event_count"] = 1
+
+        with self.assertRaisesRegex(LatencyTraceError, "lost_event_count must be zero"):
             evaluate_trace(records)
 
     def test_cli_has_stable_invalid_exit_and_no_trusted_summary(self):
@@ -754,9 +1413,7 @@ class LatencyTraceContractTests(unittest.TestCase):
                     trace.write(first)
                     trace.flush()
                     result = evaluate_trace(load_trace(Path(trace.name)))
-                self.assertEqual(
-                    result["measurement_scope"], "synthetic_software_proxy"
-                )
+                self.assertEqual(result["measurement_scope"], "synthetic_conformance")
 
 
 if __name__ == "__main__":

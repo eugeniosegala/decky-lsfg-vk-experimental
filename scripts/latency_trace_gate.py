@@ -10,8 +10,10 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 from pathlib import Path
 import re
+import stat
 import sys
 from typing import Any
 
@@ -71,25 +73,92 @@ def _exceeds_depth(value: Any, limit: int) -> bool:
     return False
 
 
+def _split_bounded_lines(raw: bytes) -> list[bytes]:
+    """Split LF/CRLF JSONL only after proving the physical record bound."""
+    record_count = raw.count(b"\n")
+    if raw and not raw.endswith(b"\n"):
+        record_count += 1
+    if record_count > MAX_EVENT_COUNT + 2:
+        raise LatencyTraceError("physical record count exceeds limit")
+
+    lines: list[bytes] = []
+    start = 0
+    number = 1
+    while start < len(raw):
+        end = raw.find(b"\n", start)
+        if end < 0:
+            end = len(raw)
+        line_end = end - 1 if end > start and raw[end - 1] == 0x0D else end
+        if line_end - start > MAX_LINE_BYTES:
+            raise LatencyTraceError(
+                f"line {number} size exceeds {MAX_LINE_BYTES} bytes"
+            )
+        lines.append(raw[start:line_end])
+        number += 1
+        if end == len(raw):
+            break
+        start = end + 1
+    return lines
+
+
 def load_trace(path: Path) -> list[dict[str, Any]]:
+    flags = os.O_RDONLY
+    for optional_flag in ("O_CLOEXEC", "O_NOFOLLOW", "O_NONBLOCK"):
+        flags |= getattr(os, optional_flag, 0)
     try:
-        size = path.stat().st_size
+        fd = os.open(path, flags)
     except OSError as exc:
         raise LatencyTraceError(f"cannot read trace: {exc}") from exc
-    if size > MAX_FILE_BYTES:
-        raise LatencyTraceError(f"trace size exceeds {MAX_FILE_BYTES} bytes")
     try:
-        raw_lines = path.read_bytes().splitlines()
+        before = os.fstat(fd)
+        if not stat.S_ISREG(before.st_mode):
+            raise LatencyTraceError("trace must be a regular file")
+        if before.st_size > MAX_FILE_BYTES:
+            raise LatencyTraceError(f"trace size exceeds {MAX_FILE_BYTES} bytes")
+
+        chunks: list[bytes] = []
+        remaining = MAX_FILE_BYTES + 1
+        while remaining:
+            chunk = os.read(fd, min(64 * 1024, remaining))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        raw = b"".join(chunks)
+        if len(raw) > MAX_FILE_BYTES:
+            raise LatencyTraceError(f"trace size exceeds {MAX_FILE_BYTES} bytes")
+
+        after = os.fstat(fd)
+        before_stability = (
+            before.st_dev,
+            before.st_ino,
+            before.st_size,
+            before.st_mtime_ns,
+            before.st_ctime_ns,
+        )
+        after_stability = (
+            after.st_dev,
+            after.st_ino,
+            after.st_size,
+            after.st_mtime_ns,
+            after.st_ctime_ns,
+        )
+        if before_stability != after_stability:
+            raise LatencyTraceError("trace metadata changed while reading")
+        if len(raw) != after.st_size:
+            raise LatencyTraceError(
+                "trace size changed or could not be read completely"
+            )
     except OSError as exc:
         raise LatencyTraceError(f"cannot read trace: {exc}") from exc
+    finally:
+        os.close(fd)
+
+    raw_lines = _split_bounded_lines(raw)
     if not raw_lines:
         raise LatencyTraceError("trace is empty")
     records: list[dict[str, Any]] = []
     for number, raw in enumerate(raw_lines, 1):
-        if len(raw) > MAX_LINE_BYTES:
-            raise LatencyTraceError(
-                f"line {number} size exceeds {MAX_LINE_BYTES} bytes"
-            )
         try:
             text = raw.decode("utf-8")
         except UnicodeDecodeError as exc:
@@ -195,11 +264,12 @@ def _validate_header(record: dict[str, Any]) -> dict[str, Any]:
         raise LatencyTraceError("first record must be latency trace header schema 1")
     for field in ("trace_id", "producer", "workload_id"):
         _identifier(record[field], field)
-    scope = _one_of(
-        record["measurement_scope"],
-        {"synthetic_software_proxy", "native_software_proxy"},
-        "measurement_scope",
-    )
+    scope = record["measurement_scope"]
+    if scope == "native_software_proxy":
+        raise LatencyTraceError(
+            "native measurement scope is reserved for a future schema v2"
+        )
+    _one_of(scope, {"synthetic_conformance"}, "measurement_scope")
     clock = record["clock"]
     if not isinstance(clock, dict):
         raise LatencyTraceError("clock must be an object")
@@ -233,10 +303,6 @@ def _validate_header(record: dict[str, Any]) -> dict[str, Any]:
         raise LatencyTraceError(
             "engine_sha256 must be unavailable or sha256:<64 lowercase hex>"
         )
-    if scope == "native_software_proxy" and engine_hash == "unavailable":
-        raise LatencyTraceError(
-            "native software proxy requires engine_sha256 artifact identity"
-        )
     if not isinstance(subject["config_sha256"], str) or not _DIGEST_RE.fullmatch(
         subject["config_sha256"]
     ):
@@ -258,15 +324,11 @@ def _validate_header(record: dict[str, Any]) -> dict[str, Any]:
         caps["gpu_duration"], bool
     ):
         raise LatencyTraceError("capability flags must be booleans")
-    deadline_source = _one_of(
+    _one_of(
         caps["deadline_source"],
         {"none", "synthetic_vblank", "display_timing"},
         "deadline_source",
     )
-    if scope == "native_software_proxy" and deadline_source == "synthetic_vblank":
-        raise LatencyTraceError(
-            "native scope cannot use synthetic_vblank deadline source"
-        )
     if caps["presentation_feedback"]:
         if caps["feedback_clock_domain"] != clock["domain"]:
             raise LatencyTraceError(
@@ -290,6 +352,7 @@ class _Context:
         self.real_indices: dict[int, str] = {}
         self.last_real_index: int | None = None
         self.plans: dict[str, dict[str, Any]] = {}
+        self.planned_real_pairs: set[tuple[str, str]] = set()
         self.generated: dict[str, dict[str, Any]] = {}
         self.inputs: dict[str, int] = {}
         self.simulations: dict[str, tuple[str, int]] = {}
@@ -355,7 +418,17 @@ def evaluate_trace(records: list[dict[str, Any]]) -> dict[str, Any]:
     previous_timestamp = -1
     seen_end = False
     samples: dict[str, list[int]] = {
-        name: [] for name in ("real", "input", "generation", "acquire", "feedback")
+        name: []
+        for name in (
+            "real",
+            "input",
+            "generation",
+            "acquire",
+            "real_feedback",
+            "generated_feedback",
+            "real_ready_feedback",
+            "input_feedback",
+        )
     }
     summary: dict[str, Any] = {
         "batch_count": 0,
@@ -366,7 +439,12 @@ def evaluate_trace(records: list[dict[str, Any]]) -> dict[str, Any]:
         "maximum_queue_depth": 0,
         "acquire_results": {result: 0 for result in _RESULTS},
         "present_results": {result: 0 for result in _RESULTS},
+        "expected_feedback_count": 0,
+        "received_feedback_count": 0,
+        "presented_feedback_count": 0,
         "dropped_feedback_count": 0,
+        "unknown_feedback_count": 0,
+        "missing_feedback_count": 0,
         "recovery_attempt_count": 0,
         "recovery_failed_count": 0,
         "abandoned_frame_count": 0,
@@ -380,15 +458,29 @@ def evaluate_trace(records: list[dict[str, Any]]) -> dict[str, Any]:
             raise LatencyTraceError("records after end are forbidden")
         kind = record.get("record")
         if kind == "end":
-            _exact(record, {"record", "sequence", "timestamp_ns", "status"}, "end")
+            _exact(
+                record,
+                {
+                    "record",
+                    "sequence",
+                    "timestamp_ns",
+                    "status",
+                    "lost_event_count",
+                },
+                "end",
+            )
             sequence = _integer(record["sequence"], "end sequence", minimum=1)
             timestamp = _integer(record["timestamp_ns"], "end timestamp_ns")
-            if sequence <= previous_sequence:
-                raise LatencyTraceError("end sequence must be strictly increasing")
+            if sequence != previous_sequence + 1:
+                raise LatencyTraceError("end sequence must be globally contiguous")
             if timestamp < previous_timestamp:
                 raise LatencyTraceError("end timestamp must be nondecreasing")
             if record["status"] != "complete":
                 raise LatencyTraceError("end status must be complete")
+            if _integer(record["lost_event_count"], "lost_event_count") != 0:
+                raise LatencyTraceError(
+                    "lost_event_count must be zero for complete trace"
+                )
             if position != len(records) - 1:
                 raise LatencyTraceError("records after end are forbidden")
             seen_end = True
@@ -411,8 +503,10 @@ def evaluate_trace(records: list[dict[str, Any]]) -> dict[str, Any]:
         )
         sequence = _integer(record["sequence"], "sequence", minimum=1)
         timestamp = _integer(record["timestamp_ns"], "timestamp_ns")
-        if sequence <= previous_sequence:
-            raise LatencyTraceError("sequence must be globally strictly increasing")
+        if sequence != previous_sequence + 1:
+            raise LatencyTraceError(
+                "event sequence must start at one and be globally contiguous"
+            )
         if timestamp < previous_timestamp:
             raise LatencyTraceError("timestamp_ns must be globally nondecreasing")
         previous_sequence, previous_timestamp = sequence, timestamp
@@ -476,6 +570,23 @@ def evaluate_trace(records: list[dict[str, Any]]) -> dict[str, Any]:
                 raise LatencyTraceError(
                     f"context destroyed with a started {operation} operation lacking its end"
                 )
+            dangling_simulations = set(ctx.simulations) - set(ctx.real)
+            if dangling_simulations:
+                raise LatencyTraceError(
+                    "context destroyed with simulation_started lacking real_frame_ready"
+                )
+            if caps["presentation_feedback"]:
+                expected_feedback = {
+                    frame_id
+                    for frame_id, present in ctx.presented.items()
+                    if present["result"] in {"success", "suboptimal"}
+                }
+                missing_feedback = expected_feedback - ctx.feedback_ids
+                if missing_feedback:
+                    summary["missing_feedback_count"] += len(missing_feedback)
+                    raise LatencyTraceError(
+                        "missing terminal presentation feedback before context destruction"
+                    )
             open_frames = sum(not frame["closed"] for frame in ctx.real.values())
             open_batches = sum(not plan["closed"] for plan in ctx.plans.values())
             open_generated = sum(
@@ -545,8 +656,14 @@ def evaluate_trace(records: list[dict[str, Any]]) -> dict[str, Any]:
                 raise LatencyTraceError(
                     "real frame id and index must be unique per epoch"
                 )
-            if ctx.last_real_index is not None and index <= ctx.last_real_index:
-                raise LatencyTraceError("real_index must strictly increase per epoch")
+            if ctx.last_real_index is None and index != 0:
+                raise LatencyTraceError(
+                    "first real_index in each context epoch must be zero"
+                )
+            if ctx.last_real_index is not None and index != ctx.last_real_index + 1:
+                raise LatencyTraceError(
+                    "real_index must be contiguous within each context epoch"
+                )
             if frame_id in ctx.simulations and timestamp < ctx.simulations[frame_id][1]:
                 raise LatencyTraceError(
                     "real frame timestamp precedes simulation timestamp"
@@ -589,6 +706,12 @@ def evaluate_trace(records: list[dict[str, Any]]) -> dict[str, Any]:
             )
             if right_index != left_index + 1:
                 raise LatencyTraceError("plan must reference consecutive real indices")
+            pair = (left, right)
+            if pair in ctx.planned_real_pairs:
+                raise LatencyTraceError(
+                    "adjacent real-frame pair may have only one generated-frame plan"
+                )
+            ctx.planned_real_pairs.add(pair)
             ctx.plans[batch_id] = {
                 "planned": count,
                 "left": left,
@@ -627,7 +750,11 @@ def evaluate_trace(records: list[dict[str, Any]]) -> dict[str, Any]:
                 raise LatencyTraceError(
                     "generated slots must be contiguous unique one-based slots"
                 )
-            if frame_id in ctx.generated or frame_id in ctx.real:
+            if (
+                frame_id in ctx.generated
+                or frame_id in ctx.real
+                or frame_id in ctx.simulations
+            ):
                 raise LatencyTraceError("output frame ids must be unique per epoch")
             if (deadline_source == "none") != (deadline is None):
                 raise LatencyTraceError(
@@ -822,10 +949,7 @@ def evaluate_trace(records: list[dict[str, Any]]) -> dict[str, Any]:
                     raise LatencyTraceError(
                         "real present timestamp precedes ready timestamp"
                     )
-                samples["real"].append(timestamp - frame["ready"])
                 simulation = ctx.simulations.get(frame_id)
-                if simulation:
-                    samples["input"].append(timestamp - ctx.inputs[simulation[0]])
             else:
                 frame = ctx.generated.get(frame_id)
                 if frame is None or not frame.get("acquired") or frame["closed"]:
@@ -863,6 +987,15 @@ def evaluate_trace(records: list[dict[str, Any]]) -> dict[str, Any]:
                 "started": timestamp,
                 "returned": False,
                 "result": None,
+                "kind": output_kind,
+                "real_ready_candidate": (
+                    timestamp - frame["ready"] if output_kind == "real" else None
+                ),
+                "input_candidate": (
+                    timestamp - ctx.inputs[simulation[0]]
+                    if output_kind == "real" and simulation
+                    else None
+                ),
             }
         elif event == "present_call_returned":
             _exact(data, {"output_frame_id", "result"}, event)
@@ -881,6 +1014,13 @@ def evaluate_trace(records: list[dict[str, Any]]) -> dict[str, Any]:
             ctx.presented[frame_id]["returned"] = True
             ctx.presented[frame_id]["result"] = result
             summary["present_results"][result] += 1
+            if result in {"success", "suboptimal"}:
+                present = ctx.presented[frame_id]
+                summary["expected_feedback_count"] += int(caps["presentation_feedback"])
+                if present["real_ready_candidate"] is not None:
+                    samples["real"].append(present["real_ready_candidate"])
+                if present["input_candidate"] is not None:
+                    samples["input"].append(present["input_candidate"])
         elif event == "presentation_feedback":
             _exact(data, {"output_frame_id", "feedback_timestamp_ns", "status"}, event)
             if not caps["presentation_feedback"]:
@@ -888,12 +1028,19 @@ def evaluate_trace(records: list[dict[str, Any]]) -> dict[str, Any]:
                     "presentation_feedback event without capability"
                 )
             frame_id = _identifier(data["output_frame_id"], "output_frame_id")
-            feedback_time = _integer(
-                data["feedback_timestamp_ns"], "feedback_timestamp_ns"
-            )
             status = _one_of(
                 data["status"], {"presented", "dropped", "unknown"}, "feedback status"
             )
+            if status == "presented":
+                feedback_time = _integer(
+                    data["feedback_timestamp_ns"], "feedback_timestamp_ns"
+                )
+            else:
+                if data["feedback_timestamp_ns"] is not None:
+                    raise LatencyTraceError(
+                        "dropped or unknown feedback_timestamp_ns must be null"
+                    )
+                feedback_time = None
             presented = ctx.presented.get(frame_id)
             if (
                 presented is None
@@ -904,17 +1051,30 @@ def evaluate_trace(records: list[dict[str, Any]]) -> dict[str, Any]:
                 raise LatencyTraceError(
                     "feedback requires one successfully returned present"
                 )
-            if feedback_time < presented["started"]:
+            if feedback_time is not None and feedback_time < presented["started"]:
                 raise LatencyTraceError("feedback timestamp precedes present call")
-            if feedback_time > timestamp:
+            if feedback_time is not None and feedback_time > timestamp:
                 raise LatencyTraceError(
                     "feedback timestamp cannot be in the future relative to its event"
                 )
             ctx.feedback_ids.add(frame_id)
+            summary["received_feedback_count"] += 1
+            summary[f"{status}_feedback_count"] += 1
             if status == "presented":
-                samples["feedback"].append(feedback_time - presented["started"])
-            elif status == "dropped":
-                summary["dropped_feedback_count"] += 1
+                assert feedback_time is not None
+                samples[f"{presented['kind']}_feedback"].append(
+                    feedback_time - presented["started"]
+                )
+                if presented["kind"] == "real":
+                    frame = ctx.real[frame_id]
+                    samples["real_ready_feedback"].append(
+                        feedback_time - frame["ready"]
+                    )
+                    simulation = ctx.simulations.get(frame_id)
+                    if simulation:
+                        samples["input_feedback"].append(
+                            feedback_time - ctx.inputs[simulation[0]]
+                        )
         elif event == "deadline_missed":
             _exact(data, {"batch_id", "generated_frame_id", "deadline_ns"}, event)
             if deadline_source == "none":
@@ -1007,10 +1167,14 @@ def evaluate_trace(records: list[dict[str, Any]]) -> dict[str, Any]:
     summary["context_epoch_count"] = len(contexts)
     summary["context_id_count"] = len({key[0] for key in contexts})
     summary["real_ready_to_present_call_proxy_ns"] = _distribution(
-        samples["real"], "no_real_presents"
+        samples["real"], "no_successful_real_presents"
     )
-    summary["input_observed_to_present_call_proxy_ns"] = _distribution(
-        samples["input"], "input_boundary_unavailable"
+    has_input_boundary = any(ctx.simulations for ctx in contexts.values())
+    summary["input_observed_to_present_call_entry_proxy_ns"] = _distribution(
+        samples["input"],
+        "no_successful_real_present_for_input_boundary"
+        if has_input_boundary
+        else "input_boundary_unavailable",
     )
     summary["host_generation_duration_ns"] = _distribution(
         samples["generation"], "no_generated_frames"
@@ -1018,16 +1182,49 @@ def evaluate_trace(records: list[dict[str, Any]]) -> dict[str, Any]:
     summary["host_acquire_duration_ns"] = _distribution(
         samples["acquire"], "no_acquire_calls"
     )
-    summary["present_call_to_feedback_proxy_ns"] = _distribution(
-        samples["feedback"],
+    all_feedback = samples["real_feedback"] + samples["generated_feedback"]
+    feedback_unavailable = (
         "presentation_feedback_unavailable"
         if not caps["presentation_feedback"]
-        else "no_presented_feedback",
+        else "no_presented_feedback"
+    )
+    summary["present_call_to_feedback_proxy_ns"] = _distribution(
+        all_feedback,
+        feedback_unavailable,
+    )
+    summary["real_present_call_to_feedback_proxy_ns"] = _distribution(
+        samples["real_feedback"],
+        "presentation_feedback_unavailable"
+        if not caps["presentation_feedback"]
+        else "no_presented_real_feedback",
+    )
+    summary["generated_present_call_to_feedback_proxy_ns"] = _distribution(
+        samples["generated_feedback"],
+        "presentation_feedback_unavailable"
+        if not caps["presentation_feedback"]
+        else "no_presented_generated_feedback",
+    )
+    summary["real_ready_to_presentation_feedback_proxy_ns"] = _distribution(
+        samples["real_ready_feedback"],
+        "presentation_feedback_unavailable"
+        if not caps["presentation_feedback"]
+        else "no_presented_real_feedback",
+    )
+    summary["input_observed_to_real_feedback_proxy_ns"] = _distribution(
+        samples["input_feedback"],
+        (
+            "input_boundary_unavailable"
+            if not has_input_boundary
+            else "presentation_feedback_unavailable"
+            if not caps["presentation_feedback"]
+            else "no_presented_feedback_for_input_boundary"
+        ),
     )
     return {
         "valid": True,
         "schema": 1,
         "trace_id": header["trace_id"],
+        "producer": header["producer"],
         "measurement_scope": header["measurement_scope"],
         "clock": header["clock"],
         "subject": header["subject"],
