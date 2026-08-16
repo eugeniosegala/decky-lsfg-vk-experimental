@@ -1,0 +1,1075 @@
+#!/usr/bin/env python3
+"""Strict conformance gate for the latency trace v1 JSONL contract.
+
+This validates causality and produces software-proxy summaries.  It deliberately
+does not make performance, visual-quality, or input-to-photon claims.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import math
+from pathlib import Path
+import re
+import sys
+from typing import Any
+
+
+EXIT_OK = 0
+EXIT_INVALID_TRACE = 2
+EXIT_USAGE = 64
+MAX_FILE_BYTES = 1024 * 1024
+MAX_LINE_BYTES = 16 * 1024
+MAX_EVENT_COUNT = 10_000
+MAX_NESTING_DEPTH = 6
+MAX_INTEGER_DIGITS = 128
+
+_ID_RE = re.compile(r"^[\x20-\x7e]{1,128}$")
+_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+_DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+_RESULTS = ("success", "suboptimal", "timeout", "out_of_date", "error")
+
+
+class LatencyTraceError(ValueError):
+    """The supplied trace is not trustworthy evidence."""
+
+
+def _reject_constant(value: str) -> None:
+    raise LatencyTraceError(f"non-finite JSON constant is forbidden: {value}")
+
+
+def _parse_integer(value: str) -> int:
+    digits = value[1:] if value.startswith("-") else value
+    if len(digits) > MAX_INTEGER_DIGITS:
+        raise LatencyTraceError(
+            f"JSON integer exceeds {MAX_INTEGER_DIGITS} decimal digits"
+        )
+    return int(value)
+
+
+def _reject_duplicate_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise LatencyTraceError(f"duplicate JSON object key: {key}")
+        result[key] = value
+    return result
+
+
+def _exceeds_depth(value: Any, limit: int) -> bool:
+    """Bound nesting without recursing on attacker-controlled JSON."""
+    stack: list[tuple[Any, int]] = [(value, 1)]
+    while stack:
+        current, depth = stack.pop()
+        if depth > limit:
+            return True
+        if isinstance(current, dict):
+            stack.extend((child, depth + 1) for child in current.values())
+        elif isinstance(current, list):
+            stack.extend((child, depth + 1) for child in current)
+    return False
+
+
+def load_trace(path: Path) -> list[dict[str, Any]]:
+    try:
+        size = path.stat().st_size
+    except OSError as exc:
+        raise LatencyTraceError(f"cannot read trace: {exc}") from exc
+    if size > MAX_FILE_BYTES:
+        raise LatencyTraceError(f"trace size exceeds {MAX_FILE_BYTES} bytes")
+    try:
+        raw_lines = path.read_bytes().splitlines()
+    except OSError as exc:
+        raise LatencyTraceError(f"cannot read trace: {exc}") from exc
+    if not raw_lines:
+        raise LatencyTraceError("trace is empty")
+    records: list[dict[str, Any]] = []
+    for number, raw in enumerate(raw_lines, 1):
+        if len(raw) > MAX_LINE_BYTES:
+            raise LatencyTraceError(
+                f"line {number} size exceeds {MAX_LINE_BYTES} bytes"
+            )
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise LatencyTraceError(f"line {number} is not valid UTF-8") from exc
+        try:
+            value = json.loads(
+                text,
+                parse_constant=_reject_constant,
+                parse_int=_parse_integer,
+                object_pairs_hook=_reject_duplicate_pairs,
+            )
+        except RecursionError as exc:
+            raise LatencyTraceError(
+                f"line {number} nesting exceeds {MAX_NESTING_DEPTH}"
+            ) from exc
+        except (json.JSONDecodeError, LatencyTraceError) as exc:
+            raise LatencyTraceError(f"line {number} invalid JSON: {exc}") from exc
+        if not isinstance(value, dict):
+            raise LatencyTraceError(f"line {number} must be a JSON object")
+        if _exceeds_depth(value, MAX_NESTING_DEPTH):
+            raise LatencyTraceError(
+                f"line {number} nesting exceeds {MAX_NESTING_DEPTH}"
+            )
+        records.append(value)
+    return records
+
+
+def _exact(obj: dict[str, Any], fields: set[str], where: str) -> None:
+    if set(obj) != fields:
+        raise LatencyTraceError(
+            f"{where} fields mismatch: expected {sorted(fields)}, got {sorted(obj)}"
+        )
+
+
+def _integer(value: Any, name: str, *, minimum: int = 0) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise LatencyTraceError(f"{name} must be an integer, not a boolean")
+    if abs(value) > 10**MAX_INTEGER_DIGITS - 1:
+        raise LatencyTraceError(
+            f"{name} integer exceeds {MAX_INTEGER_DIGITS} decimal digits"
+        )
+    if value < minimum:
+        raise LatencyTraceError(f"{name} must be >= {minimum}")
+    return value
+
+
+def _identifier(value: Any, name: str) -> str:
+    if not isinstance(value, str) or not _ID_RE.fullmatch(value):
+        raise LatencyTraceError(f"{name} must be 1-128 printable ASCII characters")
+    return value
+
+
+def _one_of(value: Any, allowed: tuple[str, ...] | set[str], name: str) -> str:
+    if not isinstance(value, str) or value not in allowed:
+        raise LatencyTraceError(f"{name} must be one of {sorted(allowed)}")
+    return value
+
+
+def _nullable_ns(value: Any, name: str) -> int | None:
+    return None if value is None else _integer(value, name)
+
+
+def _distribution(samples: list[int], unavailable_reason: str) -> dict[str, Any]:
+    if not samples:
+        return {
+            "sample_count": 0,
+            "p50": None,
+            "p95": None,
+            "p99": None,
+            "unavailable_reason": unavailable_reason,
+        }
+    ordered = sorted(samples)
+
+    def percentile(p: float) -> int:
+        return ordered[math.ceil(p * len(ordered)) - 1]
+
+    return {
+        "sample_count": len(ordered),
+        "p50": percentile(0.50),
+        "p95": percentile(0.95),
+        "p99": percentile(0.99),
+        "unavailable_reason": None,
+    }
+
+
+def _validate_header(record: dict[str, Any]) -> dict[str, Any]:
+    _exact(
+        record,
+        {
+            "record",
+            "schema",
+            "trace_id",
+            "producer",
+            "measurement_scope",
+            "clock",
+            "subject",
+            "capabilities",
+            "workload_id",
+        },
+        "header",
+    )
+    if record["record"] != "header" or _integer(record["schema"], "schema") != 1:
+        raise LatencyTraceError("first record must be latency trace header schema 1")
+    for field in ("trace_id", "producer", "workload_id"):
+        _identifier(record[field], field)
+    scope = _one_of(
+        record["measurement_scope"],
+        {"synthetic_software_proxy", "native_software_proxy"},
+        "measurement_scope",
+    )
+    clock = record["clock"]
+    if not isinstance(clock, dict):
+        raise LatencyTraceError("clock must be an object")
+    _exact(clock, {"domain", "unit"}, "clock")
+    _identifier(clock["domain"], "clock.domain")
+    if clock["unit"] != "ns":
+        raise LatencyTraceError("clock.unit must be ns")
+    subject = record["subject"]
+    if not isinstance(subject, dict):
+        raise LatencyTraceError("subject must be an object")
+    _exact(
+        subject,
+        {"plugin_git_sha", "engine_source_commit", "engine_sha256", "config_sha256"},
+        "subject",
+    )
+    if not isinstance(subject["plugin_git_sha"], str) or not _SHA_RE.fullmatch(
+        subject["plugin_git_sha"]
+    ):
+        raise LatencyTraceError("plugin_git_sha must be a lowercase 40-hex SHA")
+    engine_commit = subject["engine_source_commit"]
+    if engine_commit != "unavailable" and (
+        not isinstance(engine_commit, str) or not _SHA_RE.fullmatch(engine_commit)
+    ):
+        raise LatencyTraceError(
+            "engine_source_commit must be unavailable or a lowercase 40-hex SHA"
+        )
+    engine_hash = subject["engine_sha256"]
+    if engine_hash != "unavailable" and (
+        not isinstance(engine_hash, str) or not _DIGEST_RE.fullmatch(engine_hash)
+    ):
+        raise LatencyTraceError(
+            "engine_sha256 must be unavailable or sha256:<64 lowercase hex>"
+        )
+    if scope == "native_software_proxy" and engine_hash == "unavailable":
+        raise LatencyTraceError(
+            "native software proxy requires engine_sha256 artifact identity"
+        )
+    if not isinstance(subject["config_sha256"], str) or not _DIGEST_RE.fullmatch(
+        subject["config_sha256"]
+    ):
+        raise LatencyTraceError("config_sha256 must be sha256:<64 lowercase hex>")
+    caps = record["capabilities"]
+    if not isinstance(caps, dict):
+        raise LatencyTraceError("capabilities must be an object")
+    _exact(
+        caps,
+        {
+            "presentation_feedback",
+            "feedback_clock_domain",
+            "gpu_duration",
+            "deadline_source",
+        },
+        "capabilities",
+    )
+    if not isinstance(caps["presentation_feedback"], bool) or not isinstance(
+        caps["gpu_duration"], bool
+    ):
+        raise LatencyTraceError("capability flags must be booleans")
+    deadline_source = _one_of(
+        caps["deadline_source"],
+        {"none", "synthetic_vblank", "display_timing"},
+        "deadline_source",
+    )
+    if scope == "native_software_proxy" and deadline_source == "synthetic_vblank":
+        raise LatencyTraceError(
+            "native scope cannot use synthetic_vblank deadline source"
+        )
+    if caps["presentation_feedback"]:
+        if caps["feedback_clock_domain"] != clock["domain"]:
+            raise LatencyTraceError(
+                "feedback_clock_domain must equal the normalized main clock domain"
+            )
+    elif caps["feedback_clock_domain"] != "unavailable":
+        raise LatencyTraceError(
+            "feedback_clock_domain must be unavailable without presentation feedback"
+        )
+    return record
+
+
+class _Context:
+    def __init__(self, context_id: str, epoch: int):
+        self.context_id = context_id
+        self.epoch = epoch
+        self.created = False
+        self.destroyed = False
+        self.destroy_reason: str | None = None
+        self.real: dict[str, dict[str, Any]] = {}
+        self.real_indices: dict[int, str] = {}
+        self.last_real_index: int | None = None
+        self.plans: dict[str, dict[str, Any]] = {}
+        self.generated: dict[str, dict[str, Any]] = {}
+        self.inputs: dict[str, int] = {}
+        self.simulations: dict[str, tuple[str, int]] = {}
+        self.operations: dict[tuple[str, str], tuple[int, dict[str, Any]]] = {}
+        self.presented: dict[str, dict[str, Any]] = {}
+        self.feedback_ids: set[str] = set()
+        self.recovery_ids: set[str] = set()
+        self.last_content_order: tuple[int, int, int] | None = None
+
+
+def _content_order(
+    value: Any, output_kind: str, frame: dict[str, Any], name: str
+) -> tuple[int, int, int]:
+    if not isinstance(value, dict):
+        raise LatencyTraceError(f"{name} content_order must be an object")
+    _exact(value, {"right_real_index", "numerator", "denominator"}, "content_order")
+    right = _integer(value["right_real_index"], "content_order.right_real_index")
+    numerator = _integer(value["numerator"], "content_order.numerator", minimum=1)
+    denominator = _integer(value["denominator"], "content_order.denominator", minimum=1)
+    if output_kind == "real":
+        if (right, numerator, denominator) != (frame["real_index"], 1, 1):
+            raise LatencyTraceError(
+                "real content order must be its real index plus 1/1"
+            )
+    else:
+        slot = frame["slot_index"]
+        count = frame["slot_count"]
+        if (right, numerator, denominator) != (
+            frame["right_real_index"],
+            slot,
+            count + 1,
+        ):
+            raise LatencyTraceError(
+                "generated content order must match its exact one-based rational slot"
+            )
+    return right, numerator, denominator
+
+
+def _order_less(left: tuple[int, int, int], right: tuple[int, int, int]) -> bool:
+    if left[0] != right[0]:
+        return left[0] < right[0]
+    return left[1] * right[2] < right[1] * left[2]
+
+
+def evaluate_trace(records: list[dict[str, Any]]) -> dict[str, Any]:
+    if not isinstance(records, list) or len(records) < 3:
+        raise LatencyTraceError("trace must contain header, events, and end")
+    header = _validate_header(records[0])
+    if (
+        sum(
+            1
+            for record in records
+            if isinstance(record, dict) and record.get("record") == "event"
+        )
+        > MAX_EVENT_COUNT
+    ):
+        raise LatencyTraceError("event count exceeds limit")
+    caps = header["capabilities"]
+    deadline_source = caps["deadline_source"]
+    contexts: dict[tuple[str, int], _Context] = {}
+    highest_epoch: dict[str, int] = {}
+    previous_sequence = 0
+    previous_timestamp = -1
+    seen_end = False
+    samples: dict[str, list[int]] = {
+        name: [] for name in ("real", "input", "generation", "acquire", "feedback")
+    }
+    summary: dict[str, Any] = {
+        "batch_count": 0,
+        "planned_generated_frame_count": 0,
+        "admitted_generated_frame_count": 0,
+        "skipped_generated_frame_count": 0,
+        "missed_generated_frame_count": 0,
+        "maximum_queue_depth": 0,
+        "acquire_results": {result: 0 for result in _RESULTS},
+        "present_results": {result: 0 for result in _RESULTS},
+        "dropped_feedback_count": 0,
+        "recovery_attempt_count": 0,
+        "recovery_failed_count": 0,
+        "abandoned_frame_count": 0,
+        "abandoned_batch_count": 0,
+    }
+
+    for position, record in enumerate(records[1:], 1):
+        if not isinstance(record, dict):
+            raise LatencyTraceError(f"record {position} must be an object")
+        if seen_end:
+            raise LatencyTraceError("records after end are forbidden")
+        kind = record.get("record")
+        if kind == "end":
+            _exact(record, {"record", "sequence", "timestamp_ns", "status"}, "end")
+            sequence = _integer(record["sequence"], "end sequence", minimum=1)
+            timestamp = _integer(record["timestamp_ns"], "end timestamp_ns")
+            if sequence <= previous_sequence:
+                raise LatencyTraceError("end sequence must be strictly increasing")
+            if timestamp < previous_timestamp:
+                raise LatencyTraceError("end timestamp must be nondecreasing")
+            if record["status"] != "complete":
+                raise LatencyTraceError("end status must be complete")
+            if position != len(records) - 1:
+                raise LatencyTraceError("records after end are forbidden")
+            seen_end = True
+            previous_sequence, previous_timestamp = sequence, timestamp
+            continue
+        if kind != "event":
+            raise LatencyTraceError("middle records must have record=event")
+        _exact(
+            record,
+            {
+                "record",
+                "sequence",
+                "timestamp_ns",
+                "context_id",
+                "epoch",
+                "event",
+                "data",
+            },
+            "event envelope",
+        )
+        sequence = _integer(record["sequence"], "sequence", minimum=1)
+        timestamp = _integer(record["timestamp_ns"], "timestamp_ns")
+        if sequence <= previous_sequence:
+            raise LatencyTraceError("sequence must be globally strictly increasing")
+        if timestamp < previous_timestamp:
+            raise LatencyTraceError("timestamp_ns must be globally nondecreasing")
+        previous_sequence, previous_timestamp = sequence, timestamp
+        context_id = _identifier(record["context_id"], "context_id")
+        epoch = _integer(record["epoch"], "epoch")
+        event = record["event"]
+        if not isinstance(event, str):
+            raise LatencyTraceError("event must be a string")
+        data = record["data"]
+        if not isinstance(data, dict):
+            raise LatencyTraceError("event data must be an object")
+        key = (context_id, epoch)
+
+        if event == "context_created":
+            _exact(data, {"present_mode", "refresh_interval_ns"}, event)
+            _one_of(
+                data["present_mode"],
+                {"fifo", "mailbox", "fifo_latest_ready", "unknown"},
+                "present_mode",
+            )
+            _integer(data["refresh_interval_ns"], "refresh_interval_ns", minimum=1)
+            if key in contexts:
+                raise LatencyTraceError("context epoch was already created")
+            expected = highest_epoch.get(context_id, -1) + 1
+            if epoch != expected:
+                raise LatencyTraceError(
+                    "context epoch must start at zero and increment by one"
+                )
+            if epoch > 0 and not contexts[(context_id, epoch - 1)].destroyed:
+                raise LatencyTraceError(
+                    "previous epoch must be destroyed before creating the next epoch"
+                )
+            ctx = contexts[key] = _Context(context_id, epoch)
+            ctx.created = True
+            highest_epoch[context_id] = epoch
+            continue
+        ctx = contexts.get(key)
+        if ctx is None or not ctx.created:
+            raise LatencyTraceError(
+                "event references a context epoch before context_created"
+            )
+        if ctx.destroyed:
+            raise LatencyTraceError("event references a destroyed context epoch")
+
+        if event == "context_destroyed":
+            _exact(data, {"reason"}, event)
+            reason = _one_of(
+                data["reason"],
+                {"normal", "out_of_date", "recovery_failed", "shutdown"},
+                "destroy reason",
+            )
+            if any(
+                frame["missed"] and not frame["miss_presented"]
+                for frame in ctx.generated.values()
+            ):
+                raise LatencyTraceError(
+                    "deadline_missed requires a subsequent late generated present"
+                )
+            if ctx.operations:
+                operation = next(iter(ctx.operations))[0]
+                raise LatencyTraceError(
+                    f"context destroyed with a started {operation} operation lacking its end"
+                )
+            open_frames = sum(not frame["closed"] for frame in ctx.real.values())
+            open_batches = sum(not plan["closed"] for plan in ctx.plans.values())
+            open_generated = sum(
+                not frame["closed"]
+                for frame in ctx.generated.values()
+                if frame["admitted"]
+            )
+            if reason == "normal":
+                for plan in ctx.plans.values():
+                    if plan["planned"] and plan["admitted"] is None:
+                        raise LatencyTraceError("planned batch lacks admission")
+                    if plan["admitted"] is not None:
+                        if plan["admitted"] < plan["planned"] and plan["skip"] is None:
+                            raise LatencyTraceError(
+                                "partial admission lacks skipped suffix"
+                            )
+                        for slot in range(1, plan["admitted"] + 1):
+                            if not ctx.generated[plan["slots"][slot]][
+                                "generation_done"
+                            ]:
+                                raise LatencyTraceError(
+                                    "admitted slot lacks completed generation"
+                                )
+                if open_frames or open_batches:
+                    raise LatencyTraceError(
+                        "normal context end requires all frame and batch lifecycles closed"
+                    )
+            summary["abandoned_frame_count"] += open_frames
+            summary["abandoned_frame_count"] += open_generated
+            summary["abandoned_batch_count"] += open_batches
+            ctx.destroyed = True
+            ctx.destroy_reason = reason
+            continue
+
+        if event == "input_observed":
+            _exact(data, {"input_id"}, event)
+            input_id = _identifier(data["input_id"], "input_id")
+            if input_id in ctx.inputs:
+                raise LatencyTraceError("input_id must be unique per epoch")
+            ctx.inputs[input_id] = timestamp
+        elif event == "simulation_started":
+            _exact(data, {"input_id", "real_frame_id"}, event)
+            input_id = _identifier(data["input_id"], "input_id")
+            frame_id = _identifier(data["real_frame_id"], "real_frame_id")
+            if input_id not in ctx.inputs:
+                raise LatencyTraceError("simulation_started input_id does not exist")
+            if frame_id in ctx.simulations:
+                raise LatencyTraceError(
+                    "real_frame_id has duplicate simulation_started"
+                )
+            if frame_id in ctx.real or frame_id in ctx.generated:
+                raise LatencyTraceError(
+                    "simulation_started real_frame_id already exists as an output frame"
+                )
+            if timestamp < ctx.inputs[input_id]:
+                raise LatencyTraceError("simulation timestamp precedes input timestamp")
+            ctx.simulations[frame_id] = (input_id, timestamp)
+        elif event == "real_frame_ready":
+            _exact(data, {"real_frame_id", "real_index"}, event)
+            frame_id = _identifier(data["real_frame_id"], "real_frame_id")
+            index = _integer(data["real_index"], "real_index")
+            if (
+                frame_id in ctx.real
+                or frame_id in ctx.generated
+                or index in ctx.real_indices
+            ):
+                raise LatencyTraceError(
+                    "real frame id and index must be unique per epoch"
+                )
+            if ctx.last_real_index is not None and index <= ctx.last_real_index:
+                raise LatencyTraceError("real_index must strictly increase per epoch")
+            if frame_id in ctx.simulations and timestamp < ctx.simulations[frame_id][1]:
+                raise LatencyTraceError(
+                    "real frame timestamp precedes simulation timestamp"
+                )
+            ctx.real[frame_id] = {
+                "real_index": index,
+                "ready": timestamp,
+                "closed": False,
+            }
+            ctx.real_indices[index] = frame_id
+            ctx.last_real_index = index
+        elif event == "frame_plan_created":
+            _exact(
+                data,
+                {
+                    "batch_id",
+                    "left_real_frame_id",
+                    "right_real_frame_id",
+                    "planned_count",
+                },
+                event,
+            )
+            batch_id = _identifier(data["batch_id"], "batch_id")
+            left = _identifier(data["left_real_frame_id"], "left_real_frame_id")
+            right = _identifier(data["right_real_frame_id"], "right_real_frame_id")
+            count = _integer(data["planned_count"], "planned_count")
+            if count > 3:
+                raise LatencyTraceError("planned_count must be <= 3")
+            if batch_id in ctx.plans or left not in ctx.real or right not in ctx.real:
+                raise LatencyTraceError(
+                    "plan batch must be unique and reference existing real frames"
+                )
+            if right in ctx.presented:
+                raise LatencyTraceError(
+                    "plan cannot be created after the right real frame present started"
+                )
+            left_index, right_index = (
+                ctx.real[left]["real_index"],
+                ctx.real[right]["real_index"],
+            )
+            if right_index != left_index + 1:
+                raise LatencyTraceError("plan must reference consecutive real indices")
+            ctx.plans[batch_id] = {
+                "planned": count,
+                "left": left,
+                "right": right,
+                "right_real_index": right_index,
+                "slots": {},
+                "admitted": None,
+                "skip": None,
+                "closed": count == 0,
+            }
+            summary["batch_count"] += 1
+            summary["planned_generated_frame_count"] += count
+        elif event == "generated_slot_planned":
+            _exact(
+                data,
+                {
+                    "batch_id",
+                    "generated_frame_id",
+                    "slot_index",
+                    "slot_count",
+                    "deadline_ns",
+                },
+                event,
+            )
+            batch_id = _identifier(data["batch_id"], "batch_id")
+            frame_id = _identifier(data["generated_frame_id"], "generated_frame_id")
+            slot = _integer(data["slot_index"], "slot_index", minimum=1)
+            count = _integer(data["slot_count"], "slot_count", minimum=1)
+            deadline = _nullable_ns(data["deadline_ns"], "deadline_ns")
+            plan = ctx.plans.get(batch_id)
+            if plan is None or plan["admitted"] is not None or plan["planned"] != count:
+                raise LatencyTraceError(
+                    "generated slot must precede admission and match planned_count"
+                )
+            if slot != len(plan["slots"]) + 1 or slot > count:
+                raise LatencyTraceError(
+                    "generated slots must be contiguous unique one-based slots"
+                )
+            if frame_id in ctx.generated or frame_id in ctx.real:
+                raise LatencyTraceError("output frame ids must be unique per epoch")
+            if (deadline_source == "none") != (deadline is None):
+                raise LatencyTraceError(
+                    "deadline must be null iff deadline_source is none"
+                )
+            if slot > 1:
+                previous_frame_id = plan["slots"][slot - 1]
+                previous_deadline = ctx.generated[previous_frame_id]["deadline"]
+                if deadline is not None and deadline < previous_deadline:
+                    raise LatencyTraceError(
+                        "generated slot deadlines must be nondecreasing"
+                    )
+            frame = {
+                "batch": batch_id,
+                "slot_index": slot,
+                "slot_count": count,
+                "right_real_index": plan["right_real_index"],
+                "deadline": deadline,
+                "admitted": False,
+                "generation_done": False,
+                "closed": False,
+                "missed": False,
+                "miss_presented": False,
+                "acquire_attempted": False,
+            }
+            plan["slots"][slot] = frame_id
+            ctx.generated[frame_id] = frame
+        elif event == "generated_batch_admitted":
+            _exact(data, {"batch_id", "admitted_count"}, event)
+            batch_id = _identifier(data["batch_id"], "batch_id")
+            admitted = _integer(data["admitted_count"], "admitted_count")
+            plan = ctx.plans.get(batch_id)
+            if (
+                plan is None
+                or plan["planned"] == 0
+                or plan["admitted"] is not None
+                or len(plan["slots"]) != plan["planned"]
+                or admitted > plan["planned"]
+            ):
+                raise LatencyTraceError(
+                    "admission requires all planned slots and a valid admitted prefix"
+                )
+            for slot in range(1, admitted + 1):
+                frame = ctx.generated[plan["slots"][slot]]
+                if frame["deadline"] is not None and timestamp > frame["deadline"]:
+                    raise LatencyTraceError(
+                        "generated batch admission occurred after a slot deadline"
+                    )
+                frame["admitted"] = True
+            plan["admitted"] = admitted
+            summary["admitted_generated_frame_count"] += admitted
+        elif event == "generated_batch_skipped":
+            _exact(data, {"batch_id", "first_skipped_slot", "reason"}, event)
+            batch_id = _identifier(data["batch_id"], "batch_id")
+            first = _integer(
+                data["first_skipped_slot"], "first_skipped_slot", minimum=1
+            )
+            _one_of(
+                data["reason"],
+                {"deadline_risk", "capacity", "recovery", "unsupported_timing"},
+                "skip reason",
+            )
+            plan = ctx.plans.get(batch_id)
+            if (
+                plan is None
+                or plan["admitted"] is None
+                or plan["admitted"] >= plan["planned"]
+                or plan["skip"] is not None
+                or first != plan["admitted"] + 1
+            ):
+                raise LatencyTraceError(
+                    "generated_batch_skipped must declare the exact unadmitted skipped suffix"
+                )
+            plan["skip"] = first
+            summary["skipped_generated_frame_count"] += (
+                plan["planned"] - plan["admitted"]
+            )
+        elif event == "generation_started":
+            _exact(data, {"batch_id", "generated_frame_id"}, event)
+            batch_id = _identifier(data["batch_id"], "batch_id")
+            frame_id = _identifier(data["generated_frame_id"], "generated_frame_id")
+            frame = ctx.generated.get(frame_id)
+            if (
+                frame is None
+                or frame["batch"] != batch_id
+                or not frame["admitted"]
+                or frame["generation_done"]
+            ):
+                raise LatencyTraceError(
+                    "generation_started must reference an admitted unfinished slot"
+                )
+            op = ("generation", frame_id)
+            if op in ctx.operations:
+                raise LatencyTraceError("generation already started")
+            ctx.operations[op] = (timestamp, data)
+        elif event == "generation_finished":
+            _exact(data, {"batch_id", "generated_frame_id", "gpu_duration_ns"}, event)
+            batch_id = _identifier(data["batch_id"], "batch_id")
+            frame_id = _identifier(data["generated_frame_id"], "generated_frame_id")
+            gpu = _nullable_ns(data["gpu_duration_ns"], "gpu_duration_ns")
+            if caps["gpu_duration"] != (gpu is not None):
+                raise LatencyTraceError(
+                    "gpu_duration_ns availability must match capability"
+                )
+            op = ctx.operations.pop(("generation", frame_id), None)
+            frame = ctx.generated.get(frame_id)
+            if op is None or frame is None or frame["batch"] != batch_id:
+                raise LatencyTraceError(
+                    "generation_finished lacks matching generation_started"
+                )
+            if timestamp < op[0]:
+                raise LatencyTraceError(
+                    "generation finish timestamp precedes start timestamp"
+                )
+            samples["generation"].append(timestamp - op[0])
+            frame["generation_done"] = True
+        elif event == "acquire_started":
+            _exact(data, {"output_frame_id"}, event)
+            frame_id = _identifier(data["output_frame_id"], "output_frame_id")
+            frame = ctx.generated.get(frame_id)
+            if frame is None or not frame["generation_done"] or frame["closed"]:
+                raise LatencyTraceError(
+                    "acquire_started requires finished generated output"
+                )
+            if frame["acquire_attempted"]:
+                raise LatencyTraceError(
+                    "acquire may be attempted exactly once per generated output"
+                )
+            op = ("acquire", frame_id)
+            if op in ctx.operations:
+                raise LatencyTraceError("acquire already started")
+            frame["acquire_attempted"] = True
+            ctx.operations[op] = (timestamp, data)
+        elif event == "acquire_finished":
+            _exact(data, {"output_frame_id", "result"}, event)
+            frame_id = _identifier(data["output_frame_id"], "output_frame_id")
+            result = _one_of(data["result"], set(_RESULTS), "acquire result")
+            op = ctx.operations.pop(("acquire", frame_id), None)
+            frame = ctx.generated.get(frame_id)
+            if op is None or frame is None:
+                raise LatencyTraceError(
+                    "acquire_finished lacks matching acquire_started"
+                )
+            if timestamp < op[0]:
+                raise LatencyTraceError(
+                    "acquire finish timestamp precedes start timestamp"
+                )
+            samples["acquire"].append(timestamp - op[0])
+            summary["acquire_results"][result] += 1
+            if result in {"timeout", "out_of_date", "error"}:
+                frame["closed"] = True
+            else:
+                frame["acquired"] = True
+        elif event == "present_call_started":
+            _exact(
+                data,
+                {"output_kind", "output_frame_id", "queue_depth", "content_order"},
+                event,
+            )
+            output_kind = _one_of(
+                data["output_kind"], {"real", "generated"}, "output_kind"
+            )
+            frame_id = _identifier(data["output_frame_id"], "output_frame_id")
+            queue_depth = _integer(data["queue_depth"], "queue_depth")
+            summary["maximum_queue_depth"] = max(
+                summary["maximum_queue_depth"], queue_depth
+            )
+            if output_kind == "real":
+                frame = ctx.real.get(frame_id)
+                if frame is None or frame["closed"]:
+                    raise LatencyTraceError(
+                        "real present references unknown or closed frame"
+                    )
+                for plan in ctx.plans.values():
+                    if plan["right"] != frame_id or plan["planned"] == 0:
+                        continue
+                    metadata_complete = (
+                        len(plan["slots"]) == plan["planned"]
+                        and plan["admitted"] is not None
+                        and (
+                            plan["admitted"] == plan["planned"]
+                            or plan["skip"] is not None
+                        )
+                    )
+                    if not metadata_complete:
+                        raise LatencyTraceError(
+                            "generated plan metadata must be complete before the right "
+                            "real frame present starts; a partial admission requires its "
+                            "skipped suffix"
+                        )
+                if timestamp < frame["ready"]:
+                    raise LatencyTraceError(
+                        "real present timestamp precedes ready timestamp"
+                    )
+                samples["real"].append(timestamp - frame["ready"])
+                simulation = ctx.simulations.get(frame_id)
+                if simulation:
+                    samples["input"].append(timestamp - ctx.inputs[simulation[0]])
+            else:
+                frame = ctx.generated.get(frame_id)
+                if frame is None or not frame.get("acquired") or frame["closed"]:
+                    raise LatencyTraceError(
+                        "generated present requires successful acquire"
+                    )
+                deadline = frame["deadline"]
+                if (
+                    deadline is not None
+                    and timestamp > deadline
+                    and not frame["missed"]
+                ):
+                    raise LatencyTraceError(
+                        "late generated present requires exact deadline_missed event"
+                    )
+                if deadline is not None and timestamp <= deadline and frame["missed"]:
+                    raise LatencyTraceError(
+                        "deadline_missed cannot describe an on-time generated present"
+                    )
+                if frame["missed"]:
+                    frame["miss_presented"] = True
+            order = _content_order(data["content_order"], output_kind, frame, event)
+            if ctx.last_content_order is not None and not _order_less(
+                ctx.last_content_order, order
+            ):
+                raise LatencyTraceError(
+                    "present content order must be strictly increasing"
+                )
+            ctx.last_content_order = order
+            op = ("present", frame_id)
+            if op in ctx.operations or frame_id in ctx.presented:
+                raise LatencyTraceError("output present may start exactly once")
+            ctx.operations[op] = (timestamp, {"kind": output_kind, "frame": frame})
+            ctx.presented[frame_id] = {
+                "started": timestamp,
+                "returned": False,
+                "result": None,
+            }
+        elif event == "present_call_returned":
+            _exact(data, {"output_frame_id", "result"}, event)
+            frame_id = _identifier(data["output_frame_id"], "output_frame_id")
+            result = _one_of(data["result"], set(_RESULTS), "present result")
+            op = ctx.operations.pop(("present", frame_id), None)
+            if op is None:
+                raise LatencyTraceError(
+                    "present_call_returned lacks matching present start"
+                )
+            if timestamp < op[0]:
+                raise LatencyTraceError(
+                    "present return timestamp precedes start timestamp"
+                )
+            op[1]["frame"]["closed"] = True
+            ctx.presented[frame_id]["returned"] = True
+            ctx.presented[frame_id]["result"] = result
+            summary["present_results"][result] += 1
+        elif event == "presentation_feedback":
+            _exact(data, {"output_frame_id", "feedback_timestamp_ns", "status"}, event)
+            if not caps["presentation_feedback"]:
+                raise LatencyTraceError(
+                    "presentation_feedback event without capability"
+                )
+            frame_id = _identifier(data["output_frame_id"], "output_frame_id")
+            feedback_time = _integer(
+                data["feedback_timestamp_ns"], "feedback_timestamp_ns"
+            )
+            status = _one_of(
+                data["status"], {"presented", "dropped", "unknown"}, "feedback status"
+            )
+            presented = ctx.presented.get(frame_id)
+            if (
+                presented is None
+                or not presented["returned"]
+                or presented["result"] not in {"success", "suboptimal"}
+                or frame_id in ctx.feedback_ids
+            ):
+                raise LatencyTraceError(
+                    "feedback requires one successfully returned present"
+                )
+            if feedback_time < presented["started"]:
+                raise LatencyTraceError("feedback timestamp precedes present call")
+            if feedback_time > timestamp:
+                raise LatencyTraceError(
+                    "feedback timestamp cannot be in the future relative to its event"
+                )
+            ctx.feedback_ids.add(frame_id)
+            if status == "presented":
+                samples["feedback"].append(feedback_time - presented["started"])
+            elif status == "dropped":
+                summary["dropped_feedback_count"] += 1
+        elif event == "deadline_missed":
+            _exact(data, {"batch_id", "generated_frame_id", "deadline_ns"}, event)
+            if deadline_source == "none":
+                raise LatencyTraceError(
+                    "deadline_missed forbidden when deadline_source is none"
+                )
+            batch_id = _identifier(data["batch_id"], "batch_id")
+            frame_id = _identifier(data["generated_frame_id"], "generated_frame_id")
+            deadline = _integer(data["deadline_ns"], "deadline_ns")
+            frame = ctx.generated.get(frame_id)
+            if (
+                frame is None
+                or frame["batch"] != batch_id
+                or frame["deadline"] != deadline
+                or not frame["admitted"]
+                or frame["missed"]
+                or timestamp <= deadline
+            ):
+                raise LatencyTraceError(
+                    "deadline_missed must exactly match an admitted late generated slot"
+                )
+            frame["missed"] = True
+            summary["missed_generated_frame_count"] += 1
+        elif event == "recovery_started":
+            _exact(data, {"recovery_id", "reason"}, event)
+            recovery_id = _identifier(data["recovery_id"], "recovery_id")
+            _one_of(
+                data["reason"],
+                {"acquire", "present", "backend", "swapchain"},
+                "recovery reason",
+            )
+            if recovery_id in ctx.recovery_ids:
+                raise LatencyTraceError("recovery_id must be unique per epoch")
+            ctx.recovery_ids.add(recovery_id)
+            ctx.operations[("recovery", recovery_id)] = (timestamp, data)
+            summary["recovery_attempt_count"] += 1
+        elif event == "recovery_finished":
+            _exact(data, {"recovery_id", "result"}, event)
+            recovery_id = _identifier(data["recovery_id"], "recovery_id")
+            result = _one_of(data["result"], {"recovered", "failed"}, "recovery result")
+            recovery = ctx.operations.pop(("recovery", recovery_id), None)
+            if recovery is None:
+                raise LatencyTraceError(
+                    "recovery_finished lacks matching recovery_started"
+                )
+            if timestamp < recovery[0]:
+                raise LatencyTraceError(
+                    "recovery finish timestamp precedes start timestamp"
+                )
+            if result == "failed":
+                summary["recovery_failed_count"] += 1
+        else:
+            raise LatencyTraceError(f"unknown event: {event}")
+
+        # Close batches as soon as their declared work and suffix are complete.
+        for plan in ctx.plans.values():
+            if plan["planned"] == 0 or plan["admitted"] is None:
+                continue
+            suffix_ok = plan["admitted"] == plan["planned"] or plan["skip"] is not None
+            admitted_closed = all(
+                ctx.generated[plan["slots"][i]]["closed"]
+                for i in range(1, plan["admitted"] + 1)
+            )
+            if suffix_ok and admitted_closed:
+                plan["closed"] = True
+
+    if not seen_end:
+        raise LatencyTraceError("trace is truncated: missing complete end record")
+    for ctx in contexts.values():
+        if not ctx.destroyed:
+            raise LatencyTraceError(
+                "complete end requires every context to be destroyed"
+            )
+        if ctx.destroy_reason != "normal":
+            continue
+        for plan in ctx.plans.values():
+            if plan["planned"] and plan["admitted"] is None:
+                raise LatencyTraceError("planned batch lacks admission")
+            if (
+                plan["admitted"] is not None
+                and plan["admitted"] < plan["planned"]
+                and plan["skip"] is None
+            ):
+                raise LatencyTraceError("partial admission lacks skipped suffix")
+            for slot in range(1, (plan["admitted"] or 0) + 1):
+                frame = ctx.generated[plan["slots"][slot]]
+                if not frame["generation_done"]:
+                    raise LatencyTraceError("admitted slot lacks completed generation")
+
+    summary["context_epoch_count"] = len(contexts)
+    summary["context_id_count"] = len({key[0] for key in contexts})
+    summary["real_ready_to_present_call_proxy_ns"] = _distribution(
+        samples["real"], "no_real_presents"
+    )
+    summary["input_observed_to_present_call_proxy_ns"] = _distribution(
+        samples["input"], "input_boundary_unavailable"
+    )
+    summary["host_generation_duration_ns"] = _distribution(
+        samples["generation"], "no_generated_frames"
+    )
+    summary["host_acquire_duration_ns"] = _distribution(
+        samples["acquire"], "no_acquire_calls"
+    )
+    summary["present_call_to_feedback_proxy_ns"] = _distribution(
+        samples["feedback"],
+        "presentation_feedback_unavailable"
+        if not caps["presentation_feedback"]
+        else "no_presented_feedback",
+    )
+    return {
+        "valid": True,
+        "schema": 1,
+        "trace_id": header["trace_id"],
+        "measurement_scope": header["measurement_scope"],
+        "clock": header["clock"],
+        "subject": header["subject"],
+        "capabilities": header["capabilities"],
+        "workload_id": header["workload_id"],
+        "summary": summary,
+    }
+
+
+def _write_json(value: dict[str, Any], output: Path | None) -> None:
+    payload = json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n"
+    if output is None:
+        sys.stdout.write(payload)
+    else:
+        output.write_text(payload, encoding="utf-8")
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Validate latency trace v1 evidence")
+    parser.add_argument("trace", type=Path)
+    parser.add_argument("--json-output", type=Path)
+    try:
+        args = parser.parse_args(argv)
+    except SystemExit as exc:
+        return EXIT_OK if exc.code == 0 else EXIT_USAGE
+    try:
+        result = evaluate_trace(load_trace(args.trace))
+    except (LatencyTraceError, OSError) as exc:
+        rejected = {"valid": False, "error": str(exc)}
+        try:
+            _write_json(rejected, args.json_output)
+        except OSError as write_exc:
+            print(f"latency trace gate output error: {write_exc}", file=sys.stderr)
+        print(f"latency trace rejected: {exc}", file=sys.stderr)
+        return EXIT_INVALID_TRACE
+    try:
+        _write_json(result, args.json_output)
+    except OSError as exc:
+        print(f"latency trace gate output error: {exc}", file=sys.stderr)
+        return EXIT_INVALID_TRACE
+    return EXIT_OK
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
