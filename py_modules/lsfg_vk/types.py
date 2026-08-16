@@ -2,13 +2,19 @@
 Type definitions for the lsfg-vk plugin responses.
 """
 
-from typing import TypedDict, Optional, List, Dict, Any
+from typing import List, NotRequired, Optional, TypedDict
 from .config_schema import ConfigurationData
 
 
 class BaseResponse(TypedDict):
     """Base response structure"""
     success: bool
+    error_code: NotRequired[str]
+    retryable: NotRequired[bool]
+    recovery_pending: NotRequired[bool]
+    warning: NotRequired[Optional[str]]
+    recovery_action: NotRequired[str]
+    status_available: NotRequired[bool]
 
 
 class ErrorResponse(BaseResponse):
@@ -36,6 +42,7 @@ class UninstallationResponse(BaseResponse):
 
 class InstallationCheckResponse(TypedDict):
     """Response for installation check"""
+    status_available: bool
     installed: bool
     lib_exists: bool
     json_exists: bool
@@ -48,6 +55,11 @@ class InstallationCheckResponse(TypedDict):
     engine_version_known: bool
     engine_update_required: bool
     error: Optional[str]
+    error_code: NotRequired[str]
+    retryable: NotRequired[bool]
+    recovery_pending: NotRequired[bool]
+    warning: NotRequired[Optional[str]]
+    recovery_action: NotRequired[str]
 
 
 class DllDetectionResponse(TypedDict):

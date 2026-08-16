@@ -3,12 +3,13 @@ Installation service for lsfg-vk.
 """
 
 import shutil
-import traceback
 import tarfile
 import tempfile
 import json
 import os
 import hashlib
+import stat
+from dataclasses import replace
 from pathlib import Path
 from typing import Dict, Any, Optional
 
@@ -21,6 +22,39 @@ from .constants import (
 )
 from .config_schema import ConfigurationManager
 from .types import InstallationResponse, UninstallationResponse, InstallationCheckResponse
+
+
+_MAX_ARCHIVE_MEMBERS = 1024
+_MAX_SELECTED_MEMBER_BYTES = 256 * 1024 * 1024
+
+
+def _engine_lifecycle_targets(layout):
+    """Return the finite set used only to select install versus update."""
+    return (
+        layout.registered_manifest64,
+        layout.registered_manifest32,
+        layout.obsolete_hdr_manifest,
+        layout.private_library64,
+        layout.private_library32,
+        layout.private_manifest64,
+        layout.private_manifest32,
+        layout.cli,
+        layout.engine_state,
+        *layout.legacy_private_manifests,
+    )
+
+
+def _select_install_or_update_locked(layout) -> str:
+    """Select install only when every engine lifecycle target is absent."""
+    for target in _engine_lifecycle_targets(layout):
+        try:
+            target.lstat()
+        except FileNotFoundError:
+            continue
+        except OSError:
+            return "update"
+        return "update"
+    return "install"
 
 
 class InstallationService(BaseService):
@@ -37,58 +71,337 @@ class InstallationService(BaseService):
         self.engine_state_file = self.local_lib_dir.parent / "installed-engine.json"
     
     def install(self) -> InstallationResponse:
-        """Install the bundled lsfg-vk archive into this plugin's private storage.
-        
-        Returns:
-            InstallationResponse with success status and message/error
-        """
+        """Install or update the bundled engine in one recoverable transaction."""
+        from . import state_transaction
+
+        layout = state_transaction.PathLayout.from_home(self.user_home)
+        coordinator = state_transaction.MutationCoordinator(layout)
         try:
-            plugin_dir = Path(__file__).parent.parent.parent
-            archive_metadata = self._bundled_archive_metadata(plugin_dir)
-            archive_path = plugin_dir / BIN_DIR / archive_metadata["name"]
-            
-            if not archive_path.exists():
-                error_msg = f"Bundled lsfg-vk archive not found at {archive_path}"
-                self.log.error(error_msg)
-                return self._error_response(InstallationResponse, error_msg, message="")
-
-            self._validate_archive_checksum(
-                archive_path,
-                archive_metadata["sha256hash"],
+            with coordinator.locked("install"):
+                recovery = coordinator.recover()
+                if recovery.refresh_required:
+                    return self._lifecycle_error(
+                        InstallationResponse,
+                        "Recovered interrupted state; refresh before retrying",
+                        "refresh_required",
+                    )
+                operation = _select_install_or_update_locked(layout)
+                if operation == "update":
+                    self._validate_lifecycle_types(layout)
+                plugin_dir = Path(__file__).parent.parent.parent
+                metadata = self._bundled_archive_metadata(plugin_dir)
+                archive_path = plugin_dir / BIN_DIR / metadata["name"]
+                self._validate_archive_checksum(archive_path, metadata["sha256hash"])
+                replacements, removals = self._build_install_plan(
+                    layout, plugin_dir, archive_path, metadata
+                )
+                steps = self._ordered_install_steps(
+                    layout, operation, replacements, removals
+                )
+                result = coordinator.commit(
+                    operation,
+                    replacements={},
+                    removals=(),
+                    ordered_steps=steps,
+                )
+                if result.refresh_required:
+                    return self._lifecycle_error(
+                        InstallationResponse,
+                        "Recovered interrupted state; refresh before retrying",
+                        "refresh_required",
+                    )
+                return self._success_response(
+                    InstallationResponse,
+                    "lsfg-vk installed successfully",
+                    retryable=False,
+                    recovery_pending=result.recovery_pending,
+                    recovery_action=(
+                        "wait_for_recovery" if result.recovery_pending else "none"
+                    ),
+                    warning=result.warning,
+                    **({"error_code": "recovery_pending"} if result.recovery_pending else {}),
+                )
+        except state_transaction.MutationBusyError as error:
+            return self._lifecycle_error(
+                InstallationResponse, error, "mutation_busy"
             )
-            
-            self._ensure_directories()
-            
-            self._extract_and_install_files(archive_path)
+        except state_transaction.MutationBlockedError as error:
+            return self._lifecycle_error(
+                InstallationResponse, error, "recovery_blocked"
+            )
+        except (OSError, tarfile.TarError, shutil.Error, ValueError, TypeError, json.JSONDecodeError) as error:
+            code = "invalid_persisted_state" if "persisted" in str(error).lower() else "durability_failure"
+            return self._lifecycle_error(InstallationResponse, error, code)
 
-            # Register a uniquely named, wrapper-scoped manifest in Vulkan's normal
-            # per-user discovery directory. Steam's Pressure Vessel snapshots
-            # that directory before the per-game wrapper starts, so relying on
-            # a wrapper-only additive search path can select a public layer
-            # with the same historical name instead of this private payload.
-            self._register_layer_manifests()
-            self.remove_obsolete_hdr_meta_layer_if_needed()
-            self._remove_legacy_private_manifests()
-            
-            self._create_config_file()
-            
-            self._create_lsfg_launch_script()
+    @staticmethod
+    def _validate_lifecycle_types(layout) -> None:
+        """Fail closed on partial engine state with unsafe filesystem types."""
+        from .state_transaction import MutationBlockedError
 
-            self._install_diagnostics_helper(plugin_dir)
+        for target in _engine_lifecycle_targets(layout):
+            try:
+                metadata = target.lstat()
+            except FileNotFoundError:
+                continue
+            except OSError as error:
+                raise MutationBlockedError(
+                    f"cannot inspect managed target {target}: {error}"
+                ) from error
+            if not stat.S_ISREG(metadata.st_mode):
+                raise MutationBlockedError(
+                    f"managed target is not a regular file: {target}"
+                )
 
-            self._write_engine_state(archive_metadata)
-            
-            self.log.info("lsfg-vk installed successfully")
-            return self._success_response(InstallationResponse, "lsfg-vk installed successfully")
-            
-        except (OSError, tarfile.TarError, shutil.Error) as e:
-            error_msg = f"Error installing lsfg-vk: {str(e)}"
-            self.log.error(error_msg)
-            return self._error_response(InstallationResponse, str(e), message="")
-        except Exception as e:
-            error_msg = f"Unexpected error installing lsfg-vk: {str(e)}"
-            self.log.error(error_msg)
-            return self._error_response(InstallationResponse, str(e), message="")
+    def _lifecycle_error(self, response_type, error, error_code, **kwargs):
+        return self._error_response(
+            response_type,
+            str(error),
+            message="",
+            error_code=error_code,
+            retryable=error_code == "mutation_busy",
+            recovery_pending=False,
+            recovery_action=self._recovery_action_for_error(error_code),
+            warning=None,
+            **kwargs,
+        )
+
+    @staticmethod
+    def _render_manifest(source: bytes, library_path: str, architecture: str) -> bytes:
+        try:
+            value = json.loads(source)
+            layer = value.get("layer")
+            if not isinstance(layer, dict) or not isinstance(layer.get("library_path"), str):
+                raise ValueError("missing layer.library_path")
+            layer.update({
+                "name": EXPERIMENTAL_LAYER_NAME,
+                "description": "Lossless Scaling experimental frame generation layer",
+                "library_path": library_path,
+                "library_arch": architecture,
+                "enable_environment": {EXPERIMENTAL_LAYER_ENABLE_ENV: "1"},
+                "disable_environment": {EXPERIMENTAL_LAYER_DISABLE_ENV: "1"},
+            })
+            return (json.dumps(value, indent=2) + "\n").encode("utf-8")
+        except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError) as error:
+            raise OSError(f"Invalid Vulkan layer manifest: {error}") from error
+
+    def _read_archive_payload(self, archive_path: Path) -> Dict[str, bytes]:
+        selected = {
+            f"lib/{LIB_FILENAME}",
+            f"lib32/{LIB_FILENAME}",
+            f"share/vulkan/implicit_layer.d/{JSON_FILENAME}",
+            f"share/vulkan/implicit_layer.d/{JSON32_FILENAME}",
+            f"bin/{CLI_FILENAME}",
+        }
+        payload: Dict[str, bytes] = {}
+        with tarfile.open(archive_path, "r:xz") as archive:
+            members = archive.getmembers()
+            if len(members) > _MAX_ARCHIVE_MEMBERS:
+                raise OSError("Archive member resource limit exceeded")
+            for member in members:
+                name = member.name.removeprefix("./")
+                if name not in selected:
+                    continue
+                if name in payload:
+                    raise OSError(f"Archive contains duplicate selected member: {name}")
+                if not member.isfile():
+                    raise OSError(f"Archive selected member is not a regular file: {name}")
+                if member.size < 0 or member.size > _MAX_SELECTED_MEMBER_BYTES:
+                    raise OSError(f"Archive selected member is too large: {name}")
+                source = archive.extractfile(member)
+                if source is None:
+                    raise OSError(f"Archive selected member is unreadable: {name}")
+                with source:
+                    content = source.read(_MAX_SELECTED_MEMBER_BYTES + 1)
+                if len(content) != member.size or len(content) > _MAX_SELECTED_MEMBER_BYTES:
+                    raise OSError(f"Archive selected member size is invalid: {name}")
+                payload[name] = content
+        required = (
+            f"lib/{LIB_FILENAME}",
+            f"share/vulkan/implicit_layer.d/{JSON_FILENAME}",
+        )
+        missing = [name for name in required if name not in payload]
+        if missing:
+            raise OSError("Archive did not contain required lsfg-vk files: " + ", ".join(missing))
+        has_lib32 = f"lib32/{LIB_FILENAME}" in payload
+        has_json32 = f"share/vulkan/implicit_layer.d/{JSON32_FILENAME}" in payload
+        if has_lib32 != has_json32:
+            raise OSError("Archive contained an incomplete 32-bit Vulkan layer pair")
+        binaries = [payload[f"lib/{LIB_FILENAME}"]]
+        if has_lib32:
+            binaries.append(payload[f"lib32/{LIB_FILENAME}"])
+        if any(EXPERIMENTAL_LAYER_BUILD_MARKER not in binary for binary in binaries):
+            raise OSError("Experimental layer build marker is missing from archive payload")
+        return payload
+
+    def _configuration_plan(self, layout):
+        from .configuration import ConfigurationService
+        from .config_schema import DEFAULT_PROFILE_NAME, SCRIPT_ONLY_FIELDS
+
+        service = ConfigurationService(logger=self.log)
+        service.user_home = self.user_home
+        service.config_dir = layout.config_dir
+        service.config_file_path = layout.config_file
+        service.wrapper_profile_settings_path = layout.wrapper_settings
+        service.lsfg_script_path = layout.launcher
+        try:
+            layout.config_file.lstat()
+            config_exists = True
+        except FileNotFoundError:
+            config_exists = False
+        try:
+            layout.wrapper_settings.lstat()
+            wrapper_exists = True
+        except FileNotFoundError:
+            wrapper_exists = False
+
+        if config_exists and wrapper_exists:
+            try:
+                profile_data, settings = service._load_effective_state_strict()
+            except Exception as error:
+                raise ValueError(f"Invalid persisted state: {error}") from error
+            rendered = service._render_effective_state(profile_data, settings)
+            return {layout.launcher: rendered[layout.launcher]}
+
+        if config_exists:
+            try:
+                profile_data = service._get_profile_data()
+            except Exception as error:
+                raise ValueError(f"Invalid persisted state: {error}") from error
+            settings = {
+                profile_name: service._wrapper_settings_defaults()
+                for profile_name in profile_data["profiles"]
+            }
+            rendered = service._render_effective_state(profile_data, settings)
+            return {
+                layout.wrapper_settings: rendered[layout.wrapper_settings],
+                layout.launcher: rendered[layout.launcher],
+            }
+
+        if wrapper_exists:
+            try:
+                settings = service._read_wrapper_profile_settings_strict()
+            except Exception as error:
+                raise ValueError(f"Invalid persisted state: {error}") from error
+            profile_names = list(settings) or [DEFAULT_PROFILE_NAME]
+            current_profile = (
+                DEFAULT_PROFILE_NAME
+                if DEFAULT_PROFILE_NAME in profile_names
+                else profile_names[0]
+            )
+            defaults = ConfigurationManager.get_defaults()
+            profile_data = {
+                "current_profile": current_profile,
+                "profiles": {name: dict(defaults) for name in profile_names},
+                "global_config": {
+                    "dll": defaults.get("dll", ""),
+                    "allow_fp16": defaults.get("allow_fp16", True),
+                },
+            }
+            rendered = service._render_effective_state(profile_data, settings)
+            return {
+                layout.config_file: rendered[layout.config_file],
+                layout.launcher: rendered[layout.launcher],
+            }
+
+        defaults = ConfigurationManager.get_defaults()
+        profile_data = {
+            "current_profile": DEFAULT_PROFILE_NAME,
+            "profiles": {DEFAULT_PROFILE_NAME: defaults},
+            "global_config": {
+                "dll": defaults.get("dll", ""),
+                "allow_fp16": defaults.get("allow_fp16", True),
+            },
+        }
+        settings = {
+            DEFAULT_PROFILE_NAME: {
+                field: defaults[field] for field in SCRIPT_ONLY_FIELDS
+            }
+        }
+        return service._render_effective_state(profile_data, settings)
+
+    def _build_install_plan(self, layout, plugin_dir, archive_path, metadata):
+        payload = self._read_archive_payload(archive_path)
+        private64 = self._render_manifest(
+            payload[f"share/vulkan/implicit_layer.d/{JSON_FILENAME}"],
+            "../../lib/liblsfg-vk-layer.so", "64",
+        )
+        replacements = {
+            layout.private_library64: (payload[f"lib/{LIB_FILENAME}"], 0o644),
+            layout.private_manifest64: (private64, 0o644),
+            layout.registered_manifest64: (
+                self._render_manifest(
+                    payload[f"share/vulkan/implicit_layer.d/{JSON_FILENAME}"],
+                    str(layout.private_library64), "64",
+                ), 0o644,
+            ),
+            layout.diagnostics_helper: (
+                self._diagnostics_helper_source(plugin_dir).read_bytes(), 0o755
+            ),
+            layout.engine_state: ((json.dumps({
+                "archive": metadata["name"],
+                "version": metadata["version"],
+                "sha256hash": metadata["sha256hash"],
+                "architectures": metadata.get("architectures", ["64", "32"]),
+            }, indent=2) + "\n").encode("utf-8"), 0o644),
+            **self._configuration_plan(layout),
+        }
+        removals = {
+            layout.obsolete_hdr_manifest,
+            *layout.legacy_private_manifests,
+        }
+        cli_name = f"bin/{CLI_FILENAME}"
+        if cli_name in payload:
+            replacements[layout.cli] = (payload[cli_name], 0o755)
+        else:
+            removals.add(layout.cli)
+        manifest32_name = f"share/vulkan/implicit_layer.d/{JSON32_FILENAME}"
+        if manifest32_name in payload:
+            replacements[layout.private_library32] = (
+                payload[f"lib32/{LIB_FILENAME}"], 0o644
+            )
+            replacements[layout.private_manifest32] = (
+                self._render_manifest(payload[manifest32_name], "../../lib32/liblsfg-vk-layer.so", "32"), 0o644
+            )
+            replacements[layout.registered_manifest32] = (
+                self._render_manifest(payload[manifest32_name], str(layout.private_library32), "32"), 0o644
+            )
+        else:
+            removals.update((layout.private_library32, layout.private_manifest32, layout.registered_manifest32))
+        return replacements, removals
+
+    @staticmethod
+    def _ordered_install_steps(layout, operation, replacements, removals):
+        registered = (layout.registered_manifest64, layout.registered_manifest32)
+        marker = layout.engine_state
+        steps = []
+        if operation == "update":
+            for path in registered:
+                if path.exists():
+                    steps.append((path, "remove", None, 0))
+        middle_order = (
+            layout.private_library64, layout.private_library32, layout.cli,
+            layout.private_manifest64, layout.private_manifest32,
+            layout.diagnostics_helper, layout.config_file,
+            layout.wrapper_settings, layout.launcher,
+            layout.obsolete_hdr_manifest, *layout.legacy_private_manifests,
+        )
+        for path in middle_order:
+            if path in replacements:
+                content, mode = replacements[path]
+                steps.append((path, "replace", content, mode))
+            elif path in removals and path.exists():
+                steps.append((path, "remove", None, 0))
+        for path in registered:
+            if path in replacements:
+                content, mode = replacements[path]
+                steps.append((path, "replace", content, mode))
+            elif path in removals and path.exists() and not any(
+                step[0] == path for step in steps
+            ):
+                steps.append((path, "remove", None, 0))
+        content, mode = replacements[marker]
+        steps.append((marker, "replace", content, mode))
+        return steps
 
     def _bundled_archive_metadata(self, plugin_dir: Path) -> Dict[str, Any]:
         """Return the versioned host payload metadata from package.json."""
@@ -155,15 +468,24 @@ class InstallationService(BaseService):
 
     def _read_engine_state(self) -> Optional[Dict[str, Any]]:
         """Return the plugin-managed payload record, if one exists."""
+        from .state_transaction import read_bytes_nofollow
+
         try:
-            state = json.loads(self.engine_state_file.read_text(encoding="utf-8"))
+            state = json.loads(read_bytes_nofollow(self.engine_state_file).decode("utf-8"))
             if not isinstance(state, dict):
                 return None
             if not all(isinstance(state.get(key), str) and state[key] for key in ("archive", "version", "sha256hash")):
                 return None
             return state
-        except (OSError, json.JSONDecodeError):
+        except FileNotFoundError:
             return None
+
+    @staticmethod
+    def _regular_file_exists_nofollow(path: Path) -> bool:
+        """Inspect a managed file across the coordinator's nofollow boundary."""
+        from .state_transaction import regular_file_exists_nofollow
+
+        return regular_file_exists_nofollow(path)
     
     def _extract_and_install_files(self, archive_path: Path) -> None:
         """Install the layer, manifest, and optional CLI from an upstream tar.xz.
@@ -352,7 +674,7 @@ class InstallationService(BaseService):
                 # Read existing config to preserve user profiles
                 content = self.config_file_path.read_text(encoding='utf-8')
                 existing_profile_data = ConfigurationManager.parse_toml_content_multi_profile(content)
-                self.log.info(f"Found existing config file, preserving user profiles")
+                self.log.info("Found existing config file, preserving user profiles")
                 
                 # Create merged profile data that preserves user settings but adds any new fields
                 merged_profile_data = self._merge_config_with_defaults(existing_profile_data, dll_service)
@@ -369,7 +691,7 @@ class InstallationService(BaseService):
             # No existing config file, create a new one with defaults
             config = ConfigurationManager.get_defaults_with_dll_detection(dll_service)
             toml_content = ConfigurationManager.generate_toml_content(config)
-            self.log.info(f"Creating new config file")
+            self.log.info("Creating new config file")
         
         # Write config file
         self._write_file(self.config_file_path, toml_content, 0o644)
@@ -429,18 +751,44 @@ class InstallationService(BaseService):
 
     def migrate_diagnostics_helper_if_needed(self) -> bool:
         """Install or refresh the helper without requiring an engine reinstall."""
+        from . import state_transaction
+
         plugin_dir = Path(__file__).parent.parent.parent
         source = self._diagnostics_helper_source(plugin_dir)
+        bundled = source.read_bytes()
         try:
             current = self.diagnostics_script_path.read_bytes()
-            bundled = source.read_bytes()
             executable = bool(self.diagnostics_script_path.stat().st_mode & 0o111)
             if current == bundled and executable:
                 return False
         except OSError:
             pass
 
-        self._install_diagnostics_helper(plugin_dir)
+        layout = state_transaction.PathLayout.from_home(self.user_home)
+        if self.diagnostics_script_path != layout.diagnostics_helper:
+            # Preserve the service's established injectable destination seam.
+            layout = replace(
+                state_transaction.PathLayout.from_home(
+                    self.diagnostics_script_path.parent
+                ),
+                diagnostics_helper=self.diagnostics_script_path,
+            )
+        coordinator = state_transaction.MutationCoordinator(layout)
+        with coordinator.locked("migration"):
+            recovery = coordinator.recover()
+            if recovery.refresh_required:
+                raise OSError("recovered interrupted state; refresh before retrying")
+            result = coordinator.commit(
+                "migration",
+                replacements={layout.diagnostics_helper: (bundled, 0o755)},
+                removals=(),
+            )
+            if result.refresh_required:
+                raise OSError("recovered interrupted state; refresh before retrying")
+            if not result.committed:
+                raise OSError("diagnostics helper migration did not commit")
+            if result.warning:
+                self.log.warning(result.warning)
         return True
     
     def get_launch_script_path(self) -> str:
@@ -457,32 +805,38 @@ class InstallationService(BaseService):
         Returns:
             InstallationCheckResponse with installation status and file paths
         """
+        from . import state_transaction
+
+        layout = state_transaction.PathLayout.from_home(self.user_home)
         try:
-            lib_exists = self.lib_file.exists()
-            lib32_exists = self.lib32_file.exists()
-            json_exists = self.json_file.exists()
-            json32_exists = self.json32_file.exists()
-            registered_json_exists = self.registered_json_file.exists()
-            registered_json32_exists = self.registered_json32_file.exists()
-            script_exists = self.lsfg_launch_script_path.exists()
-            installed = (
-                lib_exists and json_exists and registered_json_exists
-                and script_exists
-            )
-            expected = self._bundled_archive_metadata(Path(__file__).parent.parent.parent)
-            expects_32bit = "32" in expected.get("architectures", ["64", "32"])
-            installed = installed and (
-                not expects_32bit
-                or (lib32_exists and json32_exists and registered_json32_exists)
-            )
-            state = self._read_engine_state()
-            version_known = state is not None
-            installed_version = state["version"] if state else None
-            update_required = installed and (
-                state is None
-                or state["version"] != expected["version"]
-                or state["sha256hash"] != expected["sha256hash"]
-            )
+            with state_transaction.read_only_guard(layout):
+                inspect = self._regular_file_exists_nofollow
+                lib_exists = inspect(self.lib_file)
+                lib32_exists = inspect(self.lib32_file)
+                json_exists = inspect(self.json_file)
+                json32_exists = inspect(self.json32_file)
+                registered_json_exists = inspect(self.registered_json_file)
+                registered_json32_exists = inspect(self.registered_json32_file)
+                script_exists = inspect(self.lsfg_launch_script_path)
+                engine_state_exists = inspect(self.engine_state_file)
+                installed = (
+                    lib_exists and json_exists and registered_json_exists
+                    and script_exists
+                )
+                expected = self._bundled_archive_metadata(Path(__file__).parent.parent.parent)
+                expects_32bit = "32" in expected.get("architectures", ["64", "32"])
+                installed = installed and (
+                    not expects_32bit
+                    or (lib32_exists and json32_exists and registered_json32_exists)
+                )
+                state = self._read_engine_state() if engine_state_exists else None
+                version_known = state is not None
+                installed_version = state["version"] if state else None
+                update_required = installed and (
+                    state is None
+                    or state["version"] != expected["version"]
+                    or state["sha256hash"] != expected["sha256hash"]
+                )
             
             self.log.info(
                 "Installation check: lib64=%s, lib32=%s, private-json64=%s, "
@@ -494,6 +848,7 @@ class InstallationService(BaseService):
             )
             
             return {
+                "status_available": True,
                 "installed": installed,
                 "lib_exists": lib_exists,
                 "json_exists": json_exists,
@@ -507,122 +862,146 @@ class InstallationService(BaseService):
                 "engine_update_required": update_required,
                 "error": None
             }
-            
+
+        except state_transaction.MutationBusyError as error:
+            return self._unavailable_installation_status(
+                "mutation_busy", str(error), retryable=True,
+                recovery_pending=False, recovery_action="refresh",
+            )
+        except state_transaction.RecoveryPendingError as error:
+            return self._unavailable_installation_status(
+                "recovery_pending", str(error), retryable=False,
+                recovery_pending=True, recovery_action="wait_for_recovery",
+            )
+        except state_transaction.MutationBlockedError as error:
+            return self._unavailable_installation_status(
+                "recovery_blocked", str(error), retryable=False,
+                recovery_pending=True, recovery_action="repair_required",
+            )
         except Exception as e:
             error_msg = f"Error checking lsfg-vk installation: {str(e)}"
             self.log.error(error_msg)
-            return {
-                "installed": False,
-                "lib_exists": False,
-                "json_exists": False,
-                "script_exists": False,
-                "lib_path": str(self.lib_file),
-                "json_path": str(self.json_file),
-                "script_path": str(self.lsfg_launch_script_path),
-                "installed_engine_version": None,
-                "expected_engine_version": None,
-                "engine_version_known": False,
-                "engine_update_required": False,
-                "error": str(e)
-            }
+            return self._unavailable_installation_status(
+                "recovery_blocked", error_msg, retryable=False,
+                recovery_pending=True, recovery_action="repair_required",
+            )
+
+    def _unavailable_installation_status(
+        self, error_code: str, warning: str, *, retryable: bool,
+        recovery_pending: bool, recovery_action: str,
+    ) -> InstallationCheckResponse:
+        return {
+            "status_available": False,
+            "installed": True,
+            "lib_exists": False,
+            "json_exists": False,
+            "script_exists": False,
+            "lib_path": str(self.lib_file),
+            "json_path": str(self.registered_json_file),
+            "script_path": str(self.lsfg_launch_script_path),
+            "installed_engine_version": None,
+            "expected_engine_version": None,
+            "engine_version_known": False,
+            "engine_update_required": False,
+            "error": warning,
+            "error_code": error_code,
+            "retryable": retryable,
+            "recovery_pending": recovery_pending,
+            "warning": warning,
+            "recovery_action": recovery_action,
+        }
     
     def uninstall(self) -> UninstallationResponse:
-        """Uninstall lsfg-vk by removing the installed files
-        
-        Note: The config file (conf.toml) is preserved to maintain user's custom profiles
-        
-        Returns:
-            UninstallationResponse with success status and removed files list
-        """
+        """Deactivate and remove plugin-owned engine files transactionally."""
+        from . import state_transaction
+
+        layout = state_transaction.PathLayout.from_home(self.user_home)
+        coordinator = state_transaction.MutationCoordinator(layout)
         try:
-            removed_files = []
-            # Remove core lsfg-vk files, but preserve config file to maintain user's custom profiles
-            files_to_remove = [
-                self.lib_file, self.lib32_file, self.json_file, self.json32_file,
-                self.registered_json_file, self.registered_json32_file,
-                self.hdr_meta_json_file,
-                self.cli_file, self.engine_state_file, self.lsfg_launch_script_path,
-                self.diagnostics_script_path,
-            ]
-            files_to_remove.extend(
-                self.local_share_dir / filename
-                for filename in LEGACY_PRIVATE_JSON_FILENAMES
+            with coordinator.locked("uninstall"):
+                recovery = coordinator.recover()
+                if recovery.refresh_required:
+                    return self._lifecycle_error(
+                        UninstallationResponse,
+                        "Recovered interrupted state; refresh before retrying",
+                        "refresh_required",
+                        removed_files=None,
+                    )
+                order = (
+                    layout.registered_manifest64,
+                    layout.registered_manifest32,
+                    layout.private_library64,
+                    layout.private_library32,
+                    layout.private_manifest64,
+                    layout.private_manifest32,
+                    layout.obsolete_hdr_manifest,
+                    layout.cli,
+                    layout.launcher,
+                    layout.diagnostics_helper,
+                    *layout.legacy_private_manifests,
+                    layout.engine_state,
+                )
+                removed = []
+                steps = []
+                for path in order:
+                    try:
+                        metadata = path.lstat()
+                    except FileNotFoundError:
+                        continue
+                    if not stat.S_ISREG(metadata.st_mode):
+                        raise state_transaction.MutationBlockedError(
+                            f"managed target is not a regular file: {path}"
+                        )
+                    removed.append(str(path))
+                    steps.append((path, "remove", None, 0))
+                if not steps:
+                    return self._success_response(
+                        UninstallationResponse,
+                        "No lsfg-vk files found to remove",
+                        removed_files=None,
+                        retryable=False,
+                        recovery_pending=False,
+                        recovery_action="none",
+                        warning=None,
+                    )
+                result = coordinator.commit(
+                    "uninstall", replacements={}, removals=(), ordered_steps=steps
+                )
+                return self._success_response(
+                    UninstallationResponse,
+                    f"lsfg-vk uninstalled successfully. Removed {len(removed)} files.",
+                    removed_files=removed,
+                    retryable=False,
+                    recovery_pending=result.recovery_pending,
+                    recovery_action=(
+                        "wait_for_recovery" if result.recovery_pending else "none"
+                    ),
+                    warning=result.warning,
+                    **({"error_code": "recovery_pending"} if result.recovery_pending else {}),
+                )
+        except state_transaction.MutationBusyError as error:
+            return self._lifecycle_error(
+                UninstallationResponse, error, "mutation_busy", removed_files=None
             )
-            
-            for file_path in files_to_remove:
-                if self._remove_if_exists(file_path):
-                    removed_files.append(str(file_path))
-            
-            # Remove the generated launch script if it exists.
-            if self._remove_if_exists(self.lsfg_script_path):
-                removed_files.append(str(self.lsfg_script_path))
-            
-            # Don't remove config directory since we're preserving the config file
-            
-            if not removed_files:
-                return self._success_response(UninstallationResponse,
-                                            "No lsfg-vk files found to remove",
-                                            removed_files=None)
-            
-            self.log.info("lsfg-vk uninstalled successfully")
-            return self._success_response(UninstallationResponse, 
-                                        f"lsfg-vk uninstalled successfully. Removed {len(removed_files)} files.",
-                                        removed_files=removed_files)
-            
-        except OSError as e:
-            error_msg = f"Error uninstalling lsfg-vk: {str(e)}"
-            self.log.error(error_msg)
-            return self._error_response(UninstallationResponse, str(e), 
-                                      message="", removed_files=None)
-    
+        except state_transaction.MutationBlockedError as error:
+            return self._lifecycle_error(
+                UninstallationResponse, error, "recovery_blocked", removed_files=None
+            )
+        except OSError as error:
+            return self._lifecycle_error(
+                UninstallationResponse, error, "durability_failure", removed_files=None
+            )
+
     def cleanup_on_uninstall(self) -> None:
         """Clean up lsfg-vk files when the plugin is uninstalled
         
         Note: The config file (conf.toml) is preserved to maintain user's custom profiles
         """
-        try:
-            self.log.info("Checking for lsfg-vk files to clean up:")
-            self.log.info(f"  64-bit library file: {self.lib_file}")
-            self.log.info(f"  32-bit library file: {self.lib32_file}")
-            self.log.info(f"  64-bit JSON file: {self.json_file}")
-            self.log.info(f"  32-bit JSON file: {self.json32_file}")
-            self.log.info(f"  Config file: {self.config_file_path} (preserved)")
-            self.log.info(f"  CLI file: {self.cli_file}")
-            self.log.info(f"  Launch script: {self.lsfg_launch_script_path}")
-            self.log.info(f"  Launch script: {self.lsfg_script_path}")
-            self.log.info(f"  Diagnostics helper: {self.diagnostics_script_path}")
-            
-            removed_files = []
-            # Remove core lsfg-vk files, but preserve config file to maintain user's custom profiles
-            files_to_remove = [
-                self.lib_file, self.lib32_file, self.json_file, self.json32_file,
-                self.registered_json_file, self.registered_json32_file,
-                self.hdr_meta_json_file,
-                self.cli_file, self.engine_state_file, self.lsfg_launch_script_path,
-                self.lsfg_script_path, self.diagnostics_script_path,
-            ]
-            files_to_remove.extend(
-                self.local_share_dir / filename
-                for filename in LEGACY_PRIVATE_JSON_FILENAMES
-            )
-            
-            for file_path in files_to_remove:
-                try:
-                    if self._remove_if_exists(file_path):
-                        removed_files.append(str(file_path))
-                except OSError as e:
-                    self.log.error(f"Failed to remove {file_path}: {e}")
-            
-            # Don't remove config directory since we're preserving the config file
-            
-            if removed_files:
-                self.log.info(f"Cleaned up {len(removed_files)} lsfg-vk files during plugin uninstall: {removed_files}")
-            else:
-                self.log.info("No lsfg-vk files found to clean up during plugin uninstall")
-                
-        except Exception as e:
-            self.log.error(f"Error cleaning up lsfg-vk files during uninstall: {str(e)}")
-            self.log.error(f"Traceback: {traceback.format_exc()}")
+        result = self.uninstall()
+        if result.get("success"):
+            self.log.info(result.get("message", "Transactional uninstall completed"))
+        else:
+            self.log.error("Transactional uninstall cleanup failed: %s", result.get("error"))
 
     def _merge_config_with_defaults(self, existing_profile_data, dll_service):
         """Merge existing user config with current schema defaults
