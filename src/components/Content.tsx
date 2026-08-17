@@ -21,6 +21,7 @@ import {
   summarizeContentRecoveryStates,
   type RecoveryState,
 } from "../utils/recoveryState.js";
+import { localDevelopmentBuildInfo } from "../config/devBuildInfo.generated";
 import t from "../i18n/i18n";
 
 export function Content() {
@@ -222,6 +223,61 @@ export function Content() {
                   : t("RECOVERY_REFRESH_STATUS", "Refresh status")}
               </ButtonItem>
             )}
+          </div>
+        </PanelSectionRow>
+      )}
+      {localDevelopmentBuildInfo && (
+        <PanelSectionRow>
+          <div
+            style={{
+              padding: "8px 12px",
+              backgroundColor: "rgba(33, 150, 243, 0.16)",
+              borderRadius: "4px",
+              border: "1px solid rgba(33, 150, 243, 0.5)",
+              color: "#a8d8ff",
+              fontSize: "13px"
+            }}
+          >
+            <div style={{ fontWeight: "bold", marginBottom: "6px" }}>
+              🧪 Local development deployment
+            </div>
+            <div style={{ marginBottom: "10px", color: "#d6ecff" }}>
+              <span style={{ color: "#83bff0" }}>Deployed</span>{" "}
+              {new Date(localDevelopmentBuildInfo.generatedAt).toLocaleString()}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              <div>
+                <div style={{ color: "#83bff0", fontWeight: "600" }}>Decky</div>
+                <div>Commit: <code>{localDevelopmentBuildInfo.decky.commit}</code>{localDevelopmentBuildInfo.decky.dirty ? " + local edits" : ""}</div>
+                <div>Frontend: {localDevelopmentBuildInfo.decky.frontendDeployed ? "deployed" : "unchanged"}</div>
+                <div>Backend: {localDevelopmentBuildInfo.decky.backendDeployed ? "deployed" : "unchanged"}</div>
+              </div>
+              <div>
+                <div style={{ color: "#83bff0", fontWeight: "600" }}>LSFG</div>
+                {localDevelopmentBuildInfo.engine ? (
+                  <>
+                    <div>Commit: <code>{localDevelopmentBuildInfo.engine.commit}</code>{localDevelopmentBuildInfo.engine.dirty ? " + local edits" : ""}</div>
+                    <div>
+                      64-bit layer: {localDevelopmentBuildInfo.engine.layer64Sha256
+                        ? <>deployed · SHA-256 <code>{localDevelopmentBuildInfo.engine.layer64Sha256.slice(0, 12)}</code></>
+                        : "unchanged"}
+                    </div>
+                    <div>
+                      32-bit layer: {localDevelopmentBuildInfo.engine.layer32Sha256
+                        ? <>deployed · SHA-256 <code>{localDevelopmentBuildInfo.engine.layer32Sha256.slice(0, 12)}</code></>
+                        : "unchanged"}
+                    </div>
+                    <div>
+                      Flatpak bundles: {localDevelopmentBuildInfo.engine.flatpakBundlesSha256
+                        ? <>23.08, 24.08, 25.08 deployed · SHA-256 <code>{localDevelopmentBuildInfo.engine.flatpakBundlesSha256.slice(0, 12)}</code></>
+                        : "unchanged"}
+                    </div>
+                  </>
+                ) : (
+                  <div>Unchanged by this deployment</div>
+                )}
+              </div>
+            </div>
           </div>
         </PanelSectionRow>
       )}

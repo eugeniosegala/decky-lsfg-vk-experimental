@@ -23,6 +23,19 @@ try {
   const projectDirectory = path.resolve(scriptDirectory, "..");
   const translationsDirectory = path.join(projectDirectory, "defaults", "i18n");
   const generatedTranslationsPath = path.join(projectDirectory, "src", "i18n", "languages.json");
+  const generatedDevBuildInfoPath = path.join(projectDirectory, "src", "config", "devBuildInfo.generated.ts");
+  const developmentBuildInfoPath = process.env.LSFGVK_DEV_BUILD_INFO_PATH;
+  let developmentBuildInfo = null;
+  if (developmentBuildInfoPath) {
+    developmentBuildInfo = JSON.parse(await readFile(developmentBuildInfoPath, "utf8"));
+  }
+  await writeFile(
+    generatedDevBuildInfoPath,
+    "import type { LocalDevelopmentBuildInfo } from \"./devBuildInfo\";\n\n" +
+    "export const localDevelopmentBuildInfo: LocalDevelopmentBuildInfo | null = " +
+    `${JSON.stringify(developmentBuildInfo, null, 2)};\n`,
+    "utf8"
+  );
   const translationFiles = (await readdir(translationsDirectory))
     .filter((file) => file.endsWith(".json"))
     .sort();

@@ -1,6 +1,7 @@
 """Regression tests for packaging and generated-file release contracts."""
 
 import json
+import hashlib
 import os
 from pathlib import Path
 import shutil
@@ -15,6 +16,175 @@ SCRIPTS_DIR = PROJECT_DIR / "scripts"
 
 
 class PackagingContractTests(unittest.TestCase):
+    def test_direct_deploy_publishes_verified_frontend_last(self):
+        source = (SCRIPTS_DIR / "deploy-dev.sh").read_text(encoding="utf-8")
+
+        backend_verification = source.index(
+            'verify_tree_files "$project_dir/py_modules" "$plugin_dir/py_modules"'
+        )
+        engine_verification = source.index(
+            'verify_file_copy "$built_layer_64" "$installed_layer_64"'
+        )
+        metadata_generation = source.index(
+            'node "$project_dir/scripts/generate-dev-build-info.mjs"'
+        )
+        frontend_publication = source.index(
+            'copy_file "$project_dir/dist/index.js" "$plugin_dir/dist/index.js"'
+        )
+
+        self.assertLess(backend_verification, metadata_generation)
+        self.assertLess(engine_verification, metadata_generation)
+        self.assertLess(metadata_generation, frontend_publication)
+        self.assertIn(
+            'mktemp -d "$flatpak_tmp_root/decky-lsfg-vk-flatpaks.XXXXXX"',
+            source,
+        )
+        self.assertIn(
+            'find "$plugin_dir/py_modules" \\( -type f -o -type l \\) -print0',
+            source,
+        )
+
+    def test_dev_build_info_hashes_verified_flatpak_bundle_set(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            output = root / "build-info.json"
+            subprocess.run(["git", "init", "-q", "-b", "main"], cwd=root, check=True)
+            subprocess.run(
+                ["git", "config", "user.email", "tests@example.invalid"],
+                cwd=root,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Packaging Tests"],
+                cwd=root,
+                check=True,
+            )
+            (root / "tracked").write_text("fixture\n", encoding="utf-8")
+            subprocess.run(["git", "add", "tracked"], cwd=root, check=True)
+            subprocess.run(["git", "commit", "-qm", "fixture"], cwd=root, check=True)
+
+            bundle_paths = {}
+            expected_hash = hashlib.sha256()
+            for runtime in ("23.08", "24.08", "25.08"):
+                bundle_path = root / f"bundle-{runtime}.flatpak"
+                payload = f"bundle:{runtime}\n".encode()
+                bundle_path.write_bytes(payload)
+                bundle_paths[runtime] = bundle_path
+                expected_hash.update(runtime.encode())
+                expected_hash.update(b"\0")
+                expected_hash.update(payload)
+                expected_hash.update(b"\0")
+
+            command = [
+                "node",
+                str(SCRIPTS_DIR / "generate-dev-build-info.mjs"),
+                "--output",
+                str(output),
+                "--decky-repo",
+                str(root),
+                "--frontend-deployed",
+                "true",
+                "--backend-deployed",
+                "true",
+                "--engine-repo",
+                str(root),
+            ]
+            for runtime, bundle_path in bundle_paths.items():
+                command.extend([f"--flatpak-bundle-{runtime}", str(bundle_path)])
+
+            result = subprocess.run(
+                command, check=False, capture_output=True, text=True
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            build_info = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(
+                build_info["engine"]["flatpakBundlesSha256"],
+                expected_hash.hexdigest(),
+            )
+
+            incomplete = subprocess.run(
+                command[:-2], check=False, capture_output=True, text=True
+            )
+            self.assertEqual(incomplete.returncode, 2)
+            self.assertIn(
+                "all three Flatpak runtime bundles must be supplied together",
+                incomplete.stderr,
+            )
+
+    def test_direct_backend_deploy_removes_stale_python_modules(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "repo"
+            scripts = root / "scripts"
+            source_modules = root / "py_modules" / "pkg"
+            plugin = Path(temp_dir) / "plugin"
+            installed_modules = plugin / "py_modules" / "pkg"
+            scripts.mkdir(parents=True)
+            source_modules.mkdir(parents=True)
+            installed_modules.mkdir(parents=True)
+            shutil.copy2(SCRIPTS_DIR / "deploy-dev.sh", scripts)
+            (root / "main.py").write_text("# new main\n", encoding="utf-8")
+            (root / "shared_config.py").write_text("# new config\n", encoding="utf-8")
+            (source_modules / "current.py").write_text(
+                "CURRENT = True\n", encoding="utf-8"
+            )
+            (installed_modules / "removed.py").write_text(
+                "STALE = True\n", encoding="utf-8"
+            )
+            (plugin / "plugin.json").write_text(
+                json.dumps({"name": "Decky LSFG-VK Experimental"}), encoding="utf-8"
+            )
+            (plugin / "dist").mkdir()
+
+            (scripts / "generate_ts_schema.py").write_text("", encoding="utf-8")
+            (scripts / "generate-dev-build-info.mjs").write_text(
+                """import { writeFileSync } from "node:fs";
+const index = process.argv.indexOf("--output");
+writeFileSync(process.argv[index + 1], "{}\\n");
+""",
+                encoding="utf-8",
+            )
+            (scripts / "build-frontend.mjs").write_text(
+                """import { mkdirSync, writeFileSync } from "node:fs";
+mkdirSync(new URL("../dist", import.meta.url), { recursive: true });
+writeFileSync(new URL("../dist/index.js", import.meta.url), "built\\n");
+""",
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [
+                    "bash",
+                    str(scripts / "deploy-dev.sh"),
+                    "--backend",
+                    "--plugin-dir",
+                    str(plugin),
+                ],
+                cwd=root,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertFalse((installed_modules / "removed.py").exists())
+            self.assertEqual(
+                (installed_modules / "current.py").read_text(encoding="utf-8"),
+                "CURRENT = True\n",
+            )
+            self.assertEqual(
+                (plugin / "dist" / "index.js").read_text(encoding="utf-8"),
+                "built\n",
+            )
+
+    def test_watch_and_typecheck_prepare_ignored_dev_build_module(self):
+        manifest = json.loads(
+            (PROJECT_DIR / "package.json").read_text(encoding="utf-8")
+        )
+        prepare = "node scripts/prepare-dev-build-info-module.mjs && "
+
+        self.assertTrue(manifest["scripts"]["watch"].startswith(prepare))
+        self.assertTrue(manifest["scripts"]["typecheck"].startswith(prepare))
+
     def _run_manifest_validator(self, mode: str, manifest: dict):
         with tempfile.TemporaryDirectory() as temp_dir:
             manifest_path = Path(temp_dir) / "package.json"
