@@ -10,6 +10,9 @@ more SteamOS users discover and evaluate the project.
 - [Adaptive Frame Gen Is HERE For The Steam Deck And It's AMAZING! (Easy Guide)](https://www.youtube.com/watch?v=d47zViCRxE8)
   by [Gaming On Steam](https://www.youtube.com/@gaming_onsteam): an easy guide to Adaptive Frame Generation on Steam
   Deck.
+- [ADAPATIVE Frame Gen Is A GAME CHANGER For The Steam Deck! 5 AAA Games TESTED!](https://www.youtube.com/watch?v=FPMydqK4b2Q)
+  by [Gaming On Steam](https://www.youtube.com/@gaming_onsteam): testing Adaptive Frame Generation across five AAA
+  Steam Deck games.
 - [Lossless Scaling gets even better with Decky LSFG-VK Experimental / How to Install and Use / SteamOS](https://www.youtube.com/watch?v=d_Po25-MXas)
   by [NotAGameAddict](https://www.youtube.com/@NotAGameAddict): SteamOS installation and usage guide for the
   experimental plugin.
@@ -42,6 +45,11 @@ more SteamOS users discover and evaluate the project.
 - [How to Install LOSSLESS SCALING 2.0 on STEAM DECK / STEAM MACHINE](https://www.youtube.com/watch?v=1rGKvyA98FI)
   by [HolyDeck](https://www.youtube.com/@HolySteamDeck): an installation guide for Lossless Scaling 2.0 on Steam Deck
   and Steam Machine.
+- [ROG XBOX ALLY Z2A : Je teste Lossless Scaling 2.0 vs Lossless Scaling 1.0](https://www.youtube.com/watch?v=vOzOYT3z4ds)
+  by [Mike](https://www.youtube.com/@mpv99): French-language comparison of Lossless Scaling 2.0 and 1.0 on ROG Xbox
+  Ally Z2A.
+- [Adaptive Frame Gen With Lossless Scaling Massive Performance Legion Go S](https://www.youtube.com/watch?v=9YeqsS2JNws)
+  by [JahsonENT](https://www.youtube.com/@JahsonENT): Adaptive Frame Generation performance coverage on Legion Go S.
 
 ## Coverage includes
 
