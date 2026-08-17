@@ -183,6 +183,48 @@ class ConfigurationTransactionTests(unittest.TestCase):
         self.assertEqual(result.get("error_code"), "invalid_persisted_state")
         self.assertEqual(self._snapshot_user_tree(), before)
 
+    def test_duplicate_wrapper_document_key_blocks_mutation_and_preserves_bytes(self):
+        self._write_valid_initial_state()
+        content = b'{"version":1,"version":1,"profiles":{"Default":{}}}\n'
+        self.paths.wrapper_json.write_bytes(content)
+        before = self._snapshot_user_tree()
+
+        result = self.service.create_profile("Gaming")
+
+        self.assertFalse(result["success"], result)
+        self.assertEqual(result.get("error_code"), "invalid_persisted_state")
+        self.assertEqual(self.paths.wrapper_json.read_bytes(), content)
+        self.assertEqual(self._snapshot_user_tree(), before)
+
+    def test_duplicate_wrapper_profile_key_blocks_mutation_and_preserves_bytes(self):
+        self._write_valid_initial_state()
+        content = b'{"version":1,"profiles":{"Default":{},"Default":{}}}\n'
+        self.paths.wrapper_json.write_bytes(content)
+        before = self._snapshot_user_tree()
+
+        result = self.service.create_profile("Gaming")
+
+        self.assertFalse(result["success"], result)
+        self.assertEqual(result.get("error_code"), "invalid_persisted_state")
+        self.assertEqual(self.paths.wrapper_json.read_bytes(), content)
+        self.assertEqual(self._snapshot_user_tree(), before)
+
+    def test_duplicate_wrapper_field_key_blocks_mutation_and_preserves_bytes(self):
+        self._write_valid_initial_state()
+        content = (
+            b'{"version":1,"profiles":{"Default":'
+            b'{"disable_lsfgvk":false,"disable_lsfgvk":true}}}\n'
+        )
+        self.paths.wrapper_json.write_bytes(content)
+        before = self._snapshot_user_tree()
+
+        result = self.service.create_profile("Gaming")
+
+        self.assertFalse(result["success"], result)
+        self.assertEqual(result.get("error_code"), "invalid_persisted_state")
+        self.assertEqual(self.paths.wrapper_json.read_bytes(), content)
+        self.assertEqual(self._snapshot_user_tree(), before)
+
     def test_future_wrapper_settings_version_blocks_mutation_without_rewrite(self):
         self._write_valid_initial_state()
         self.paths.wrapper_json.write_text(

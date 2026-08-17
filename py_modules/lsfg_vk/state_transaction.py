@@ -223,6 +223,15 @@ def _canonical(path: Path) -> str:
     return os.path.abspath(os.fspath(path))
 
 
+def _journal_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    value: dict[str, object] = {}
+    for key, item in pairs:
+        if key in value:
+            raise MutationBlockedError("transaction journal contains a duplicate object key")
+        value[key] = item
+    return value
+
+
 def _with_platform_root_alias(path: Path) -> Path:
     """Resolve only macOS's fixed ``/var`` -> ``/private/var`` root alias."""
     canonical = Path(_canonical(path))
@@ -254,6 +263,45 @@ def _directory_fd(path: Path) -> Iterator[int]:
             flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
             next_descriptor = os.open(component, flags, dir_fd=descriptor)
             os.set_inheritable(next_descriptor, False)
+            os.close(descriptor)
+            descriptor = next_descriptor
+    except OSError as exc:
+        os.close(descriptor)
+        raise MutationBlockedError(f"directory path is unsafe: {canonical}: {exc}") from exc
+    try:
+        yield descriptor
+    finally:
+        os.close(descriptor)
+
+
+@contextmanager
+def _ensured_directory_fd(path: Path) -> Iterator[int]:
+    """Create and open an absolute directory chain without path-based races."""
+    canonical = _with_platform_root_alias(path)
+    descriptor = os.open(
+        canonical.anchor,
+        os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0),
+    )
+    os.set_inheritable(descriptor, False)
+    try:
+        for component in canonical.parts[1:]:
+            flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+            flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+            created = False
+            try:
+                next_descriptor = os.open(component, flags, dir_fd=descriptor)
+            except FileNotFoundError:
+                try:
+                    os.mkdir(component, 0o755, dir_fd=descriptor)
+                    created = True
+                    os.fsync(descriptor)
+                except FileExistsError:
+                    # A cooperating process may have won the creation race.
+                    pass
+                next_descriptor = os.open(component, flags, dir_fd=descriptor)
+            os.set_inheritable(next_descriptor, False)
+            if created:
+                os.fsync(next_descriptor)
             os.close(descriptor)
             descriptor = next_descriptor
     except OSError as exc:
@@ -399,14 +447,8 @@ def read_bytes_nofollow(path: Path) -> bytes:
 
 def _inspect_read_journal(layout: PathLayout) -> None:
     """Classify a journal without recovering, cleaning, or bootstrapping state."""
-    try:
-        metadata = layout.journal_file.lstat()
-    except FileNotFoundError:
+    if not regular_file_exists_nofollow(layout.journal_file):
         return
-    except OSError as exc:
-        raise MutationBlockedError(f"transaction journal is unreadable: {exc}") from exc
-    if not stat.S_ISREG(metadata.st_mode):
-        raise MutationBlockedError("transaction journal is not a regular file")
     MutationCoordinator(layout)._load_journal()
     raise RecoveryPendingError("transaction recovery is pending")
 
@@ -418,43 +460,63 @@ def read_only_guard(layout: PathLayout) -> Iterator[None]:
     lock_was_absent = False
     try:
         try:
-            lock_metadata = layout.lock_file.lstat()
-        except FileNotFoundError:
-            lock_was_absent = True
-        except OSError as exc:
-            raise MutationBlockedError(f"mutation lock is unreadable: {exc}") from exc
-        else:
-            if not stat.S_ISREG(lock_metadata.st_mode):
-                raise MutationBlockedError("mutation lock is not a regular file")
-            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-            flags |= getattr(os, "O_CLOEXEC", 0)
-            try:
-                descriptor = os.open(layout.lock_file, flags)
-                os.set_inheritable(descriptor, False)
-                opened = os.fstat(descriptor)
-                if (
-                    not stat.S_ISREG(opened.st_mode)
-                    or (opened.st_dev, opened.st_ino)
-                    != (lock_metadata.st_dev, lock_metadata.st_ino)
-                ):
-                    raise MutationBusyError("mutation lock changed during read")
-                fcntl.flock(descriptor, fcntl.LOCK_SH | fcntl.LOCK_NB)
-            except BlockingIOError as exc:
-                raise MutationBusyError("another mutation is in progress") from exc
-            except OSError as exc:
-                raise MutationBlockedError(f"mutation lock is unreadable: {exc}") from exc
+            parent_context = _directory_fd(layout.lock_file.parent)
+            directory_fd = parent_context.__enter__()
+        except MutationBlockedError as exc:
+            if isinstance(exc.__cause__, FileNotFoundError):
+                lock_was_absent = True
+                parent_context = None
+                directory_fd = None
+            else:
+                raise
+        try:
+            if directory_fd is not None:
+                try:
+                    lock_metadata = os.stat(
+                        layout.lock_file.name,
+                        dir_fd=directory_fd,
+                        follow_symlinks=False,
+                    )
+                except FileNotFoundError:
+                    lock_was_absent = True
+                except OSError as exc:
+                    raise MutationBlockedError(
+                        f"mutation lock is unreadable: {exc}"
+                    ) from exc
+                else:
+                    if not stat.S_ISREG(lock_metadata.st_mode) or lock_metadata.st_nlink != 1:
+                        raise MutationBlockedError("mutation lock is not a private regular file")
+                    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+                    flags |= getattr(os, "O_CLOEXEC", 0)
+                    try:
+                        descriptor = os.open(
+                            layout.lock_file.name, flags, dir_fd=directory_fd
+                        )
+                        os.set_inheritable(descriptor, False)
+                        opened = os.fstat(descriptor)
+                        if (
+                            not stat.S_ISREG(opened.st_mode)
+                            or opened.st_nlink != 1
+                            or (opened.st_dev, opened.st_ino)
+                            != (lock_metadata.st_dev, lock_metadata.st_ino)
+                        ):
+                            raise MutationBusyError("mutation lock changed during read")
+                        fcntl.flock(descriptor, fcntl.LOCK_SH | fcntl.LOCK_NB)
+                    except BlockingIOError as exc:
+                        raise MutationBusyError("another mutation is in progress") from exc
+                    except OSError as exc:
+                        raise MutationBlockedError(
+                            f"mutation lock is unreadable: {exc}"
+                        ) from exc
+        finally:
+            if parent_context is not None:
+                parent_context.__exit__(None, None, None)
 
         _inspect_read_journal(layout)
         yield
         _inspect_read_journal(layout)
         if lock_was_absent:
-            try:
-                layout.lock_file.lstat()
-            except FileNotFoundError:
-                pass
-            except OSError as exc:
-                raise MutationBusyError("mutation lock changed during read") from exc
-            else:
+            if regular_file_exists_nofollow(layout.lock_file):
                 raise MutationBusyError("mutation lock appeared during read")
     finally:
         if descriptor is not None:
@@ -466,26 +528,8 @@ def read_only_guard(layout: PathLayout) -> Iterator[None]:
 
 def _ensure_directory(path: Path) -> None:
     """Create a directory chain without accepting symlinked/non-directory parts."""
-    path = _with_platform_root_alias(path)
-    missing: list[Path] = []
-    current = path
-    while True:
-        try:
-            metadata = current.lstat()
-        except FileNotFoundError:
-            missing.append(current)
-            parent = current.parent
-            if parent == current:
-                raise MutationBlockedError(f"no existing parent for {path}")
-            current = parent
-            continue
-        if not stat.S_ISDIR(metadata.st_mode):
-            raise MutationBlockedError(f"directory path is unsafe: {current}")
-        break
-    for directory in reversed(missing):
-        directory.mkdir(mode=0o755)
-        _fsync_directory(directory.parent)
-        _fsync_directory(directory)
+    with _ensured_directory_fd(path):
+        pass
 
 
 def _fsync_directory(path: Path) -> None:
@@ -642,28 +686,72 @@ class MutationCoordinator:
         descriptor: int | None = None
         try:
             try:
-                lock_metadata = self.layout.lock_file.lstat()
-            except FileNotFoundError:
-                lock_was_absent = True
-            else:
-                lock_was_absent = False
-                if not stat.S_ISREG(lock_metadata.st_mode):
-                    raise MutationBlockedError("mutation lock is not a regular file")
-            flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
-            flags |= getattr(os, "O_CLOEXEC", 0)
-            descriptor = os.open(self.layout.lock_file, flags, 0o600)
-            os.set_inheritable(descriptor, False)
-            metadata = os.fstat(descriptor)
-            if not stat.S_ISREG(metadata.st_mode):
-                raise MutationBlockedError("mutation lock is not a regular file")
-            os.fchmod(descriptor, 0o600)
-            if lock_was_absent:
-                os.fsync(descriptor)
-                _fsync_directory(self.layout.lock_file.parent)
-            try:
-                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError as exc:
-                raise MutationBusyError("another mutation is in progress") from exc
+                with _directory_fd(self.layout.lock_file.parent) as directory_fd:
+                    created = False
+                    flags = os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)
+                    flags |= getattr(os, "O_CLOEXEC", 0)
+                    try:
+                        lock_metadata = os.stat(
+                            self.layout.lock_file.name,
+                            dir_fd=directory_fd,
+                            follow_symlinks=False,
+                        )
+                    except FileNotFoundError:
+                        try:
+                            descriptor = os.open(
+                                self.layout.lock_file.name,
+                                flags | os.O_CREAT | os.O_EXCL,
+                                0o600,
+                                dir_fd=directory_fd,
+                            )
+                            created = True
+                        except FileExistsError:
+                            # Another process created the persistent inode first.
+                            lock_metadata = os.stat(
+                                self.layout.lock_file.name,
+                                dir_fd=directory_fd,
+                                follow_symlinks=False,
+                            )
+                    if descriptor is None:
+                        if (
+                            not stat.S_ISREG(lock_metadata.st_mode)
+                            or lock_metadata.st_nlink != 1
+                            or stat.S_IMODE(lock_metadata.st_mode) != 0o600
+                        ):
+                            raise MutationBlockedError(
+                                "mutation lock is not a private regular file"
+                            )
+                        descriptor = os.open(
+                            self.layout.lock_file.name, flags, dir_fd=directory_fd
+                        )
+                    os.set_inheritable(descriptor, False)
+                    metadata = os.fstat(descriptor)
+                    if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+                        raise MutationBlockedError(
+                            "mutation lock is not a private regular file"
+                        )
+                    if not created and (
+                        metadata.st_dev,
+                        metadata.st_ino,
+                    ) != (
+                        lock_metadata.st_dev,
+                        lock_metadata.st_ino,
+                    ):
+                        raise MutationBlockedError("mutation lock changed before open")
+                    if created:
+                        os.fchmod(descriptor, 0o600)
+                        os.fsync(descriptor)
+                        os.fsync(directory_fd)
+                    try:
+                        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    except BlockingIOError as exc:
+                        raise MutationBusyError("another mutation is in progress") from exc
+            except (MutationBlockedError, MutationBusyError):
+                raise
+            except OSError as exc:
+                raise MutationBlockedError(
+                    f"mutation lock path is unsafe: {exc}"
+                ) from exc
             state.owner_thread = thread_id
             state.depth = 1
             state.fd = descriptor
@@ -767,7 +855,7 @@ class MutationCoordinator:
     def _load_journal(self) -> tuple[str, str, str, int, list[TransactionEntry]]:
         try:
             raw = read_bytes_nofollow(self.layout.journal_file)
-            value = json.loads(raw)
+            value = json.loads(raw, object_pairs_hook=_journal_object)
         except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise MutationBlockedError(f"transaction journal is unreadable: {exc}") from exc
         if not isinstance(value, dict):
@@ -869,7 +957,7 @@ class MutationCoordinator:
                     os.unlink(journal.name, dir_fd=directory_fd)
                     os.fsync(directory_fd)
 
-    def _rollback(self, entries: Sequence[TransactionEntry]) -> None:
+    def _rollback(self, operation: str, entries: Sequence[TransactionEntry]) -> None:
         # Establish that every target chain is unambiguous before modifying live paths.
         chains: dict[str, list[TransactionEntry]] = {}
         for entry in entries:
@@ -887,14 +975,50 @@ class MutationCoordinator:
                     raise MutationBlockedError(
                         f"rollback backup is invalid for {first.target}"
                     )
+        # During update, public manifests may already expose the new payload.
+        # Deactivate every safely-backed registered manifest before restoring
+        # any private payload, then let the reverse pass republish the old
+        # manifests last.  A second crash therefore leaves the layer absent,
+        # never active against a mixed old/new payload.
+        if operation == "update":
+            registered = {
+                _canonical(self.layout.registered_manifest64),
+                _canonical(self.layout.registered_manifest32),
+            }
+            for index, chain in enumerate(chains.values()):
+                first = chain[0]
+                if _canonical(first.target) not in registered:
+                    continue
+                live = _identity(first.target)
+                if live.kind != "regular" or live == first.expected_before:
+                    continue
+                if (
+                    first.expected_before.kind == "regular"
+                    and (
+                        first.backup is None
+                        or _identity(first.backup) != first.expected_before
+                    )
+                ):
+                    raise MutationBlockedError(
+                        f"rollback backup is invalid for {first.target}"
+                    )
+                self._hit("rollback_deactivate_registered", index)
+                with _directory_fd(first.target.parent) as directory_fd:
+                    if _identity_at(
+                        directory_fd, first.target.name, first.target
+                    ).kind == "regular":
+                        os.unlink(first.target.name, dir_fd=directory_fd)
+                        os.fsync(directory_fd)
+
         # Restore each target directly to the chain's original boundary.  This
         # handles update's old -> absent -> new manifest transition even when a
         # failure occurs before the first transition is applied.
-        for chain in reversed(tuple(chains.values())):
+        for index, chain in enumerate(reversed(tuple(chains.values()))):
             first = chain[0]
             live = _identity(first.target)
             if live == first.expected_before:
                 continue
+            self._hit("rollback_restore", index)
             if first.expected_before.kind == "absent":
                 with _directory_fd(first.target.parent) as directory_fd:
                     os.unlink(first.target.name, dir_fd=directory_fd)
@@ -940,7 +1064,7 @@ class MutationCoordinator:
                         raise MutationBlockedError(f"committed target is ambiguous: {entry.target}")
                 self._cleanup(entries)
             else:
-                self._rollback(entries)
+                self._rollback(_operation, entries)
             return TransactionResult(refresh_required=True)
 
     def commit(
@@ -1141,7 +1265,7 @@ class MutationCoordinator:
                         ),
                     )
                 try:
-                    self._rollback(entries)
+                    self._rollback(operation, entries)
                 except Exception as rollback_error:
                     raise MutationBlockedError(
                         "transaction failed and rollback could not be completed"

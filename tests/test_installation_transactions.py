@@ -273,6 +273,34 @@ class InstallationTransactionTests(unittest.TestCase):
         self.assertRegex(result["error"], "(?i)(member|resource|limit|large)")
         self.assertEqual(self._snapshot_without_lock(), before)
 
+    def test_archive_replaced_after_checksum_validation_is_not_installed(self):
+        before = self._managed_public_snapshot()
+        validate = self.service._validate_archive_checksum
+
+        def validate_then_replace(path, expected_checksum):
+            payload = validate(path, expected_checksum)
+            write_engine_archive(path, include_cli=False)
+            return payload
+
+        with patch.object(
+            self.service,
+            "_validate_archive_checksum",
+            side_effect=validate_then_replace,
+        ):
+            result = self._call_install()
+
+        if result["success"]:
+            self.assertEqual(
+                self.layout.private_library64.read_bytes(),
+                b"ELF64:" + EXPERIMENTAL_LAYER_BUILD_MARKER,
+            )
+            self.assertTrue(
+                self.layout.cli.is_file(),
+                "successful install must use the verified archive snapshot",
+            )
+        else:
+            self.assertEqual(self._managed_public_snapshot(), before)
+
     def test_fresh_install_writes_complete_target_set_with_expected_modes(self):
         result = self._call_install()
 
@@ -530,6 +558,21 @@ class InstallationTransactionTests(unittest.TestCase):
         self.assertLess(deactivated, payload_removed)
         self.assertEqual(marker_removed, len(observer.states) - 1)
 
+    def test_obsolete_hdr_removal_blocks_symlinked_parent_and_preserves_outside_file(self):
+        outside = self.paths.home / "outside-explicit-layers"
+        outside.mkdir()
+        victim = outside / self.layout.obsolete_hdr_manifest.name
+        victim.write_bytes(b"outside hdr manifest")
+        self.layout.obsolete_hdr_manifest.parent.parent.mkdir(parents=True, exist_ok=True)
+        self.layout.obsolete_hdr_manifest.parent.symlink_to(
+            outside, target_is_directory=True
+        )
+
+        with self.assertRaises(state_transaction.MutationBlockedError):
+            self.service.remove_obsolete_hdr_meta_layer_if_needed()
+
+        self.assertEqual(victim.read_bytes(), b"outside hdr manifest")
+
     def test_committed_uninstall_cleanup_failure_recovers_absent_owned_state(self):
         owned = self._seed_installed_state()
         real_factory = state_transaction.MutationCoordinator
@@ -595,6 +638,7 @@ class InstallationTransactionTests(unittest.TestCase):
         self._seed_installed_state()
         self.layout.lock_file.parent.mkdir(parents=True, exist_ok=True)
         self.layout.lock_file.write_bytes(b"")
+        self.layout.lock_file.chmod(0o600)
         import fcntl
 
         descriptor = self.layout.lock_file.open("rb")

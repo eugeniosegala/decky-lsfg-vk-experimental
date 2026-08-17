@@ -74,7 +74,7 @@ class OperationLockingTests(unittest.TestCase):
 
         def recording_open(path, flags, mode=0o777, *, dir_fd=None):
             descriptor = real_open(path, flags, mode, dir_fd=dir_fd)
-            if Path(path) == self.paths.lock:
+            if Path(path).name == self.paths.lock.name and dir_fd is not None:
                 opened_lock_fds.append(descriptor)
                 self.assertFalse(os.get_inheritable(descriptor))
             return descriptor

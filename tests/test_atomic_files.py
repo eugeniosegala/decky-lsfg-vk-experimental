@@ -267,6 +267,56 @@ class AtomicFileTests(unittest.TestCase):
             self.assertFalse((outside / self.paths.lock.name).exists())
             self.assertFalse((outside / self.paths.journal.name).exists())
 
+    def test_lock_parent_swap_is_blocked_without_creating_an_outside_lock(self):
+        _, blocked_error, coordinator_type, layout_type = _transaction_api()
+        layout = layout_type.from_home(self.paths.home)
+        outside = self.paths.home / "outside-lock-parent"
+        outside.mkdir()
+        sentinel = outside / "sentinel"
+        sentinel.write_bytes(b"outside must remain unchanged")
+        real_open = os.open
+        swapped = False
+
+        def swap_parent_before_lock_open(path, flags, mode=0o777, *, dir_fd=None):
+            nonlocal swapped
+            if (
+                not swapped
+                and dir_fd is not None
+                and os.fspath(path) == layout.lock_file.name
+            ):
+                swapped = True
+                layout.config_dir.rmdir()
+                layout.config_dir.symlink_to(outside, target_is_directory=True)
+            return real_open(path, flags, mode, dir_fd=dir_fd)
+
+        coordinator = coordinator_type(layout)
+        with (
+            patch.object(os, "open", side_effect=swap_parent_before_lock_open),
+            self.assertRaises(blocked_error),
+        ):
+            with coordinator.locked("configuration"):
+                pass
+
+        self.assertTrue(swapped)
+        self.assertEqual(sentinel.read_bytes(), b"outside must remain unchanged")
+        self.assertFalse((outside / layout.lock_file.name).exists())
+
+    def test_hardlinked_lock_is_rejected_without_chmodding_the_victim(self):
+        _, blocked_error, coordinator_type, layout_type = _transaction_api()
+        layout = layout_type.from_home(self.paths.home)
+        victim = self.paths.home / "outside-victim"
+        victim.write_bytes(b"do not mutate")
+        victim.chmod(0o644)
+        layout.lock_file.parent.mkdir(parents=True)
+        os.link(victim, layout.lock_file)
+        before = snapshot_entry(victim)
+
+        with self.assertRaises(blocked_error):
+            with coordinator_type(layout).locked("configuration"):
+                pass
+
+        self.assertEqual(snapshot_entry(victim), before)
+
     def test_snapshot_rejects_directory_at_regular_file_target(self):
         _, blocked_error, coordinator_type, layout_type = _transaction_api()
         self.paths.toml.mkdir(parents=True)
@@ -399,8 +449,10 @@ class AtomicFileTests(unittest.TestCase):
                 removals=(),
                 ordered_steps=(
                     (layout.registered_manifest64, "remove", None, 0),
+                    (layout.registered_manifest32, "remove", None, 0),
                     (layout.private_library64, "replace", b"new library\n", 0o644),
                     (layout.registered_manifest64, "replace", b"new registered\n", 0o644),
+                    (layout.registered_manifest32, "replace", b"new registered32\n", 0o644),
                     (layout.engine_state, "replace", b"new marker\n", 0o644),
                 ),
             )
@@ -410,6 +462,106 @@ class AtomicFileTests(unittest.TestCase):
 
         self.assertTrue(first.refresh_required)
         self.assertFalse(second.refresh_required)
+        for path, (content, mode) in old.items():
+            self.assertEqual(snapshot_entry(path).content, content)
+            self.assertEqual(snapshot_entry(path).mode, mode)
+        self.assertFalse(self.paths.journal.exists())
+
+    def test_interrupted_update_rollback_deactivates_manifest_before_payload_restore(self):
+        _, _, _, layout_type = _transaction_api()
+        layout = layout_type.from_home(self.paths.home)
+        old = {
+            layout.registered_manifest64: (b"old registered\n", 0o640),
+            layout.private_library64: (b"old library\n", 0o600),
+            layout.engine_state: (b"old marker\n", 0o644),
+        }
+        for path, (content, mode) in old.items():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+            path.chmod(mode)
+        crashing = self._coordinator(
+            CheckpointInjector(
+                "before_committed_journal_replace", SimulatedCrash("power loss")
+            )
+        )
+        with self.assertRaises(SimulatedCrash):
+            crashing.commit(
+                "update",
+                replacements={},
+                removals=(),
+                ordered_steps=(
+                    (layout.registered_manifest64, "remove", None, 0),
+                    (layout.private_library64, "replace", b"new library\n", 0o644),
+                    (layout.registered_manifest64, "replace", b"new registered\n", 0o644),
+                    (layout.engine_state, "replace", b"new marker\n", 0o644),
+                ),
+            )
+
+        real_replace = os.replace
+
+        def interrupt_before_payload_restore(src, dst, *args, **kwargs):
+            if os.fspath(dst) == layout.private_library64.name:
+                self.assertFalse(layout.registered_manifest64.exists())
+                self.assertFalse(layout.registered_manifest32.exists())
+                raise SimulatedCrash("second power loss")
+            return real_replace(src, dst, *args, **kwargs)
+
+        with (
+            patch.object(os, "replace", side_effect=interrupt_before_payload_restore),
+            self.assertRaises(SimulatedCrash),
+        ):
+            self._coordinator().recover()
+
+        self.assertFalse(layout.registered_manifest64.exists())
+        self.assertFalse(layout.registered_manifest32.exists())
+        recovered = self._coordinator().recover()
+        self.assertTrue(recovered.refresh_required)
+        for path, (content, mode) in old.items():
+            self.assertEqual(snapshot_entry(path).content, content)
+            self.assertEqual(snapshot_entry(path).mode, mode)
+        self.assertFalse(self.paths.journal.exists())
+
+    def test_update_rollback_is_idempotent_after_old_manifest_is_republished(self):
+        _, _, _, layout_type = _transaction_api()
+        layout = layout_type.from_home(self.paths.home)
+        old = {
+            layout.registered_manifest64: (b"old registered\n", 0o640),
+            layout.private_library64: (b"old library\n", 0o600),
+            layout.engine_state: (b"old marker\n", 0o644),
+        }
+        for path, (content, mode) in old.items():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+            path.chmod(mode)
+
+        with self.assertRaises(SimulatedCrash):
+            self._coordinator(
+                CheckpointInjector(
+                    "before_committed_journal_replace", SimulatedCrash("power loss")
+                )
+            ).commit(
+                "update",
+                replacements={},
+                removals=(),
+                ordered_steps=(
+                    (layout.registered_manifest64, "remove", None, 0),
+                    (layout.private_library64, "replace", b"new library\n", 0o644),
+                    (layout.registered_manifest64, "replace", b"new registered\n", 0o644),
+                    (layout.engine_state, "replace", b"new marker\n", 0o644),
+                ),
+            )
+
+        with self.assertRaises(SimulatedCrash):
+            self._coordinator(
+                CheckpointInjector("cleanup_stage", SimulatedCrash("second power loss"))
+            ).recover()
+
+        self.assertEqual(
+            snapshot_entry(layout.registered_manifest64).content,
+            old[layout.registered_manifest64][0],
+        )
+        recovered = self._coordinator().recover()
+        self.assertTrue(recovered.refresh_required)
         for path, (content, mode) in old.items():
             self.assertEqual(snapshot_entry(path).content, content)
             self.assertEqual(snapshot_entry(path).mode, mode)
@@ -648,6 +800,30 @@ class AtomicFileTests(unittest.TestCase):
         before[self.paths.journal.relative_to(self.paths.home).as_posix()] = snapshot_entry(
             self.paths.journal
         )
+        _, blocked_error, _, _ = _transaction_api()
+
+        with self.assertRaises(blocked_error):
+            self._coordinator().recover()
+
+        self.assertEqual(snapshot_tree(self.paths.home), before)
+
+    def test_recovery_rejects_duplicate_journal_keys_without_touching_files(self):
+        self.paths.write_triplet()
+        crashing = self._coordinator(
+            CheckpointInjector("prepared", SimulatedCrash("power loss"))
+        )
+        with self.assertRaises(SimulatedCrash):
+            crashing.commit(
+                "configuration",
+                replacements={self.paths.toml: (b"new toml\n", 0o644)},
+                removals=(),
+            )
+
+        raw = self.paths.journal.read_text(encoding="utf-8")
+        self.paths.journal.write_text(
+            raw.replace("{", '{"schema":1,', 1), encoding="utf-8"
+        )
+        before = snapshot_tree(self.paths.home)
         _, blocked_error, _, _ = _transaction_api()
 
         with self.assertRaises(blocked_error):

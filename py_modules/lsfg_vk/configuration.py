@@ -50,6 +50,15 @@ class ConfigurationService(BaseService):
     )
 
     @staticmethod
+    def _strict_json_object(pairs: list[tuple[str, Any]]) -> Dict[str, Any]:
+        value: Dict[str, Any] = {}
+        for key, item in pairs:
+            if key in value:
+                raise ValueError("wrapper settings contain a duplicate object key")
+            value[key] = item
+        return value
+
+    @staticmethod
     def _wrapper_settings_defaults() -> Dict[str, Any]:
         return {
             field_name: CONFIG_SCHEMA[field_name].default
@@ -109,7 +118,9 @@ class ConfigurationService(BaseService):
         except FileNotFoundError:
             return {}
 
-        raw_data = json.loads(content)
+        raw_data = json.loads(
+            content, object_pairs_hook=self._strict_json_object
+        )
         if not isinstance(raw_data, dict):
             raise ValueError("wrapper settings must be a JSON object")
         unknown_document_keys = set(raw_data) - {"version", "profiles"}

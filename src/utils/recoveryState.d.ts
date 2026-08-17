@@ -17,7 +17,7 @@ export interface RecoveryState {
   errorCode?: RecoveryMetadata["error_code"];
   retryable: boolean;
   recoveryPending: boolean;
-  warning?: string;
+  warning?: string | null;
 }
 
 export interface MutationBarrier {
@@ -27,19 +27,28 @@ export interface MutationBarrier {
   release(): void;
 }
 
+export interface LatestRequestGate {
+  begin(): number;
+  isLatest(requestId: number): boolean;
+}
+
 export interface RecoveryStateSummary {
   mutationsDisabled: boolean;
   warningVisible: boolean;
-  warning?: string;
+  warning?: string | null;
   recoveryPending: boolean;
   refreshable: boolean;
 }
 
 export function createMutationBarrier(initiallyBlocked?: boolean): MutationBarrier;
 
+export function createLatestRequestGate(): LatestRequestGate;
+
 export function mapRecoveryState(
   response?: RecoveryMetadata & { installed?: boolean; success?: boolean; error?: string },
 ): RecoveryState;
+
+export function transientRefreshRecoveryState(): RecoveryState;
 
 export function summarizeContentRecoveryStates(
   installationState: RecoveryState,

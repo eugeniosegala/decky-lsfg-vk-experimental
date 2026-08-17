@@ -7,7 +7,7 @@ export interface RecoveryMetadata {
     "recovery_pending" | "invalid_persisted_state" | "durability_failure";
   retryable?: boolean;
   recovery_pending?: boolean;
-  warning?: string;
+  warning?: string | null;
   recovery_action?: "retry" | "refresh" | "wait_for_recovery" |
     "repair_required" | "none";
   status_available?: boolean;
@@ -22,6 +22,8 @@ export interface InstallationResult extends RecoveryMetadata {
 
 export interface RecoveryResult extends RecoveryMetadata {
   success: boolean;
+  recovered?: boolean;
+  refresh_required?: boolean;
   message?: string;
   error?: string;
 }

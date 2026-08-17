@@ -71,6 +71,7 @@ class InstallationStatusRecoveryContracts(unittest.TestCase):
     def test_busy_installation_status_is_unavailable_and_does_not_write(self):
         self.layout.config_dir.mkdir(parents=True)
         self.layout.lock_file.write_bytes(b"")
+        self.layout.lock_file.chmod(0o600)
         descriptor = self.layout.lock_file.open("rb")
         self.addCleanup(descriptor.close)
         fcntl.flock(descriptor.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -192,6 +193,7 @@ class ConfigurationReadRecoveryContracts(unittest.TestCase):
     def test_busy_config_and_profile_reads_are_unavailable_without_writing(self):
         self.layout.config_dir.mkdir(parents=True)
         self.layout.lock_file.write_bytes(b"")
+        self.layout.lock_file.chmod(0o600)
         descriptor = self.layout.lock_file.open("rb")
         self.addCleanup(descriptor.close)
         fcntl.flock(descriptor.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)

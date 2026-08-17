@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  createLatestRequestGate,
   createMutationBarrier,
   mapRecoveryState,
   refreshRecoveryStates,
   summarizeContentRecoveryStates,
+  transientRefreshRecoveryState,
 } from "../src/utils/recoveryState.js";
 
 
@@ -211,6 +213,97 @@ test("transient busy state exposes a safe status refresh", () => {
   assert.equal(summary.mutationsDisabled, true);
   assert.equal(summary.recoveryPending, false);
   assert.equal(summary.refreshable, true);
+});
+
+test("an exception fallback fails closed but remains refreshable", () => {
+  const available = mapRecoveryState({ status_available: true });
+  const transientFailure = transientRefreshRecoveryState();
+
+  const summary = summarizeContentRecoveryStates(
+    transientFailure,
+    available,
+    available,
+    available,
+    false,
+  );
+
+  assert.equal(transientFailure.available, false);
+  assert.equal(transientFailure.mutationsDisabled, true);
+  assert.equal(transientFailure.retryable, true);
+  assert.equal(transientFailure.recoveryAction, "refresh");
+  assert.equal(summary.refreshable, true);
+});
+
+test("latest request gate ignores a delayed older success", async () => {
+  const gate = createLatestRequestGate();
+  const published = [];
+  let resolveOlder;
+  let resolveNewer;
+  const olderResponse = new Promise((resolve) => { resolveOlder = resolve; });
+  const newerResponse = new Promise((resolve) => { resolveNewer = resolve; });
+
+  const load = async (response) => {
+    const requestId = gate.begin();
+    const value = await response;
+    if (gate.isLatest(requestId)) published.push(value);
+  };
+
+  const olderLoad = load(olderResponse);
+  const newerLoad = load(newerResponse);
+  resolveNewer("new truth");
+  await newerLoad;
+  resolveOlder("stale truth");
+  await olderLoad;
+
+  assert.deepEqual(published, ["new truth"]);
+});
+
+test("latest request gate ignores a delayed older exception", async () => {
+  const gate = createLatestRequestGate();
+  const published = [];
+  let rejectOlder;
+  let resolveNewer;
+  const olderResponse = new Promise((_, reject) => { rejectOlder = reject; });
+  const newerResponse = new Promise((resolve) => { resolveNewer = resolve; });
+
+  const load = async (response) => {
+    const requestId = gate.begin();
+    try {
+      const value = await response;
+      if (gate.isLatest(requestId)) published.push(value);
+    } catch {
+      if (gate.isLatest(requestId)) published.push("transient failure");
+    }
+  };
+
+  const olderLoad = load(olderResponse);
+  const newerLoad = load(newerResponse);
+  resolveNewer("new truth");
+  await newerLoad;
+  rejectOlder(new Error("stale failure"));
+  await olderLoad;
+
+  assert.deepEqual(published, ["new truth"]);
+});
+
+test("starting a mutation invalidates a read that is still in flight", async () => {
+  const gate = createLatestRequestGate();
+  const published = [];
+  let resolveRead;
+  const response = new Promise((resolve) => { resolveRead = resolve; });
+
+  const load = async () => {
+    const requestId = gate.begin();
+    const value = await response;
+    if (gate.isLatest(requestId)) published.push(value);
+  };
+
+  const pendingRead = load();
+  gate.begin(); // Mutation starts and invalidates pre-mutation read evidence.
+  resolveRead("pre-mutation truth");
+  await pendingRead;
+
+  assert.deepEqual(published, []);
 });
 
 test("status refresh reruns every active source including the mounted profile component", async () => {

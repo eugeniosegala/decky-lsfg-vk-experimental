@@ -136,8 +136,12 @@ class DualArchInstallationTests(unittest.TestCase):
         self.assertTrue(unrelated.exists())
 
     def test_obsolete_hdr_meta_layer_cleanup_is_idempotent(self):
-        self.service.hdr_meta_json_file.parent.mkdir(parents=True, exist_ok=True)
-        self.service.hdr_meta_json_file.write_text("obsolete", encoding="utf-8")
+        from py_modules.lsfg_vk.state_transaction import PathLayout
+
+        self.service.user_home = self.root
+        obsolete = PathLayout.from_home(self.root).obsolete_hdr_manifest
+        obsolete.parent.mkdir(parents=True, exist_ok=True)
+        obsolete.write_text("obsolete", encoding="utf-8")
 
         self.assertTrue(self.service.remove_obsolete_hdr_meta_layer_if_needed())
         self.assertFalse(self.service.remove_obsolete_hdr_meta_layer_if_needed())

@@ -25,7 +25,12 @@ import {
 } from "../api/lsfgApi";
 import { showSuccessToast, showErrorToast } from "../utils/toastUtils";
 import t from '../i18n/i18n';
-import { mapRecoveryState, type RecoveryState } from "../utils/recoveryState.js";
+import {
+  createLatestRequestGate,
+  mapRecoveryState,
+  transientRefreshRecoveryState,
+  type RecoveryState,
+} from "../utils/recoveryState.js";
 
 const PROFILES_COLLAPSED_KEY = 'lsfg-experimental-profiles-collapsed';
 
@@ -122,6 +127,7 @@ export const ProfileManagement = forwardRef<ProfileManagementHandle, ProfileMana
   const [isLoading, setIsLoading] = useState(false);
   const [profilesAvailable, setProfilesAvailable] = useState(false);
   const profilesAvailableRef = useRef(false);
+  const requestGateRef = useRef(createLatestRequestGate());
   const [focusedAction, setFocusedAction] = useState<"edit" | "delete" | null>(null);
 
   const applyRecoveryState = (recovery: RecoveryState) => {
@@ -131,12 +137,17 @@ export const ProfileManagement = forwardRef<ProfileManagementHandle, ProfileMana
     onRecoveryStateChange?.(recovery);
   };
 
-  const beginProfileOperation = () => {
+  const beginProfileOperation = (invalidateReads = true) => {
+    if (invalidateReads) requestGateRef.current.begin();
     applyRecoveryState(mapRecoveryState({
       status_available: false,
       error_code: "mutation_busy",
       recovery_action: "refresh",
     }));
+  };
+
+  const blockAfterProfileException = () => {
+    applyRecoveryState(transientRefreshRecoveryState());
   };
   
   // Initialize with localStorage value, fallback to false (expanded) if not found
@@ -171,9 +182,11 @@ export const ProfileManagement = forwardRef<ProfileManagementHandle, ProfileMana
   }, [currentProfile]);
 
   const loadProfiles = async () => {
-    beginProfileOperation();
+    const requestId = requestGateRef.current.begin();
+    beginProfileOperation(false);
     try {
       const result: ProfilesResult = await getProfiles();
+      if (!requestGateRef.current.isLatest(requestId)) return;
       applyRecoveryState(mapRecoveryState(result));
       if (result.success && result.profiles) {
         setProfiles(result.profiles);
@@ -185,7 +198,8 @@ export const ProfileManagement = forwardRef<ProfileManagementHandle, ProfileMana
         showErrorToast(t('PROFILE_LOAD_FAILED', 'Failed to load profiles'), result.error || t('PROFILE_UNKNOWN_ERROR', 'Unknown error'));
       }
     } catch (error) {
-      applyRecoveryState(mapRecoveryState({ status_available: false, error_code: "mutation_busy" }));
+      if (!requestGateRef.current.isLatest(requestId)) return;
+      blockAfterProfileException();
       console.error("Error loading profiles:", error);
       showErrorToast(t('PROFILE_LOAD_ERROR', 'Error loading profiles'), String(error));
     }
@@ -211,6 +225,7 @@ export const ProfileManagement = forwardRef<ProfileManagementHandle, ProfileMana
         showErrorToast(t('PROFILE_SWITCH_FAILED', 'Failed to switch profile'), result.error || t('PROFILE_UNKNOWN_ERROR', 'Unknown error'));
       }
     } catch (error) {
+      blockAfterProfileException();
       console.error("Error switching profile:", error);
       showErrorToast(t('PROFILE_SWITCH_ERROR', 'Error switching profile'), String(error));
     } finally {
@@ -254,6 +269,7 @@ export const ProfileManagement = forwardRef<ProfileManagementHandle, ProfileMana
         showErrorToast(t('PROFILE_CREATE_FAILED', 'Failed to create profile'), result.error || t('PROFILE_UNKNOWN_ERROR', 'Unknown error'));
       }
     } catch (error) {
+      blockAfterProfileException();
       console.error("Error creating profile:", error);
       showErrorToast(t('PROFILE_CREATE_ERROR', 'Error creating profile'), String(error));
     } finally {
@@ -297,6 +313,7 @@ export const ProfileManagement = forwardRef<ProfileManagementHandle, ProfileMana
         showErrorToast(t('PROFILE_DELETE_FAILED', 'Failed to delete profile'), result.error || t('PROFILE_UNKNOWN_ERROR', 'Unknown error'));
       }
     } catch (error) {
+      blockAfterProfileException();
       console.error("Error deleting profile:", error);
       showErrorToast(t('PROFILE_DELETE_ERROR', 'Error deleting profile'), String(error));
     } finally {
@@ -354,6 +371,7 @@ export const ProfileManagement = forwardRef<ProfileManagementHandle, ProfileMana
         showErrorToast(t('PROFILE_RENAME_FAILED', 'Failed to rename profile'), result.error || t('PROFILE_UNKNOWN_ERROR', 'Unknown error'));
       }
     } catch (error) {
+      blockAfterProfileException();
       console.error("Error renaming profile:", error);
       showErrorToast(t('PROFILE_RENAME_ERROR', 'Error renaming profile'), String(error));
     } finally {

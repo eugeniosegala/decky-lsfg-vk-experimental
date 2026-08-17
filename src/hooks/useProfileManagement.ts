@@ -13,7 +13,13 @@ import {
 import { ConfigurationData } from "../config/configSchema";
 import { showSuccessToast, showErrorToast } from "../utils/toastUtils";
 import t from "../i18n/i18n";
-import { createMutationBarrier, mapRecoveryState, type RecoveryState } from "../utils/recoveryState.js";
+import {
+  createLatestRequestGate,
+  createMutationBarrier,
+  mapRecoveryState,
+  transientRefreshRecoveryState,
+  type RecoveryState,
+} from "../utils/recoveryState.js";
 
 export function useProfileManagement() {
   const [profiles, setProfiles] = useState<string[]>([]);
@@ -23,21 +29,33 @@ export function useProfileManagement() {
     mapRecoveryState({ status_available: false, error_code: "refresh_required" })
   );
   const mutationBarrierRef = useRef(createMutationBarrier(true));
+  const requestGateRef = useRef(createLatestRequestGate());
 
-  const beginMutation = () => {
+  const beginMutation = (invalidateReads = true) => {
+    if (invalidateReads) requestGateRef.current.begin();
     mutationBarrierRef.current.block();
     setRecoveryState((current) => ({ ...current, mutationsDisabled: true }));
   };
 
   const blockAfterMutationError = () => {
-    const unavailable = mapRecoveryState({ status_available: false, error_code: "mutation_busy" });
+    const unavailable = transientRefreshRecoveryState();
     mutationBarrierRef.current.block();
     setRecoveryState(unavailable);
   };
 
+  const mutationExceptionResult = (error: unknown): ProfileResult => ({
+    success: false,
+    error: String(error),
+    error_code: "mutation_busy",
+    retryable: true,
+    recovery_action: "refresh",
+    status_available: false,
+  });
+
   // Load profiles on hook initialization
   const loadProfiles = useCallback(async () => {
-    beginMutation();
+    const requestId = requestGateRef.current.begin();
+    beginMutation(false);
     setRecoveryState((current) => ({
       ...current,
       available: false,
@@ -45,6 +63,7 @@ export function useProfileManagement() {
     }));
     try {
       const result: ProfilesResult = await getProfiles();
+      if (!requestGateRef.current.isLatest(requestId)) return result;
       const recovery = mapRecoveryState(result);
       setRecoveryState(recovery);
       if (recovery.mutationsDisabled) mutationBarrierRef.current.block();
@@ -61,12 +80,15 @@ export function useProfileManagement() {
         return result;
       }
     } catch (error) {
-      const unavailable = mapRecoveryState({ status_available: false, error_code: "mutation_busy" });
+      if (!requestGateRef.current.isLatest(requestId)) {
+        return mutationExceptionResult(error);
+      }
+      const unavailable = transientRefreshRecoveryState();
       setRecoveryState(unavailable);
       mutationBarrierRef.current.block();
       console.error("Error loading profiles:", error);
       showErrorToast(t('PROFILE_LOAD_ERROR', 'Error loading profiles'), String(error));
-      return { success: false, error: String(error) };
+      return mutationExceptionResult(error);
     }
   }, []);
 
@@ -107,7 +129,7 @@ export function useProfileManagement() {
       blockAfterMutationError();
       console.error("Error creating profile:", error);
       showErrorToast(t('PROFILE_CREATE_ERROR', 'Error creating profile'), String(error));
-      return { success: false, error: String(error) };
+      return mutationExceptionResult(error);
     } finally {
       setIsLoading(false);
     }
@@ -143,7 +165,7 @@ export function useProfileManagement() {
       blockAfterMutationError();
       console.error("Error deleting profile:", error);
       showErrorToast(t('PROFILE_DELETE_ERROR', 'Error deleting profile'), String(error));
-      return { success: false, error: String(error) };
+      return mutationExceptionResult(error);
     } finally {
       setIsLoading(false);
     }
@@ -181,7 +203,7 @@ export function useProfileManagement() {
       blockAfterMutationError();
       console.error("Error renaming profile:", error);
       showErrorToast(t('PROFILE_RENAME_ERROR', 'Error renaming profile'), String(error));
-      return { success: false, error: String(error) };
+      return mutationExceptionResult(error);
     } finally {
       setIsLoading(false);
     }
@@ -210,7 +232,7 @@ export function useProfileManagement() {
       blockAfterMutationError();
       console.error("Error switching profile:", error);
       showErrorToast(t('PROFILE_SWITCH_ERROR', 'Error switching profile'), String(error));
-      return { success: false, error: String(error) };
+      return mutationExceptionResult(error);
     } finally {
       setIsLoading(false);
     }
@@ -235,7 +257,7 @@ export function useProfileManagement() {
       blockAfterMutationError();
       console.error("Error updating profile config:", error);
       showErrorToast(t('PROFILE_UPDATE_CONFIG_ERROR', 'Error updating profile config'), String(error));
-      return { success: false, error: String(error) };
+      return mutationExceptionResult(error);
     } finally {
       setIsLoading(false);
     }

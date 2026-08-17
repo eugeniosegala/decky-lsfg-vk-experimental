@@ -8,7 +8,13 @@ import {
 } from "../api/lsfgApi";
 import { ConfigurationData, getDefaults } from "../config/configSchema";
 import { showErrorToast, ToastMessages } from "../utils/toastUtils";
-import { createMutationBarrier, mapRecoveryState, type RecoveryState } from "../utils/recoveryState.js";
+import {
+  createLatestRequestGate,
+  createMutationBarrier,
+  mapRecoveryState,
+  transientRefreshRecoveryState,
+  type RecoveryState,
+} from "../utils/recoveryState.js";
 import t from "../i18n/i18n";
 
 export function useInstallationStatus() {
@@ -20,10 +26,13 @@ export function useInstallationStatus() {
   const [recoveryState, setRecoveryState] = useState<RecoveryState>(() =>
     mapRecoveryState({ status_available: false, error_code: "mutation_busy" })
   );
+  const requestGateRef = useRef(createLatestRequestGate());
 
   const checkInstallation = async () => {
+    const requestId = requestGateRef.current.begin();
     try {
       const status = await checkLsfgVkInstalled();
+      if (!requestGateRef.current.isLatest(requestId)) return status.installed;
       const recovery = mapRecoveryState(status);
       setRecoveryState(recovery);
       if (!recovery.available) {
@@ -44,7 +53,8 @@ export function useInstallationStatus() {
       }
       return status.installed;
     } catch (error) {
-      setRecoveryState(mapRecoveryState({ status_available: false, error_code: "mutation_busy" }));
+      if (!requestGateRef.current.isLatest(requestId)) return false;
+      setRecoveryState(transientRefreshRecoveryState());
       setInstallationStatus(t("STATUS_RECOVERY_UNAVAILABLE", "State recovery is pending or unavailable. Changes are disabled until status refreshes."));
       setEngineUpdateRequired(false);
       setInstalledEngineVersion(undefined);
@@ -73,10 +83,13 @@ export function useInstallationStatus() {
 export function useDllDetection() {
   const [dllDetected, setDllDetected] = useState<boolean>(false);
   const [dllDetectionStatus, setDllDetectionStatus] = useState<string>("");
+  const requestGateRef = useRef(createLatestRequestGate());
 
   const checkDllDetection = async () => {
+    const requestId = requestGateRef.current.begin();
     try {
       const result = await checkLosslessScalingDll();
+      if (!requestGateRef.current.isLatest(requestId)) return;
       setDllDetected(result.detected);
       if (result.detected) {
         setDllDetectionStatus(t("STATUS_LOSSLESS_INSTALLED", "Lossless Scaling installed"));
@@ -84,6 +97,7 @@ export function useDllDetection() {
         setDllDetectionStatus(t("STATUS_LOSSLESS_NOT_INSTALLED", "Lossless Scaling not installed"));
       }
     } catch (error) {
+      if (!requestGateRef.current.isLatest(requestId)) return;
       setDllDetectionStatus(t("STATUS_LOSSLESS_NOT_INSTALLED", "Lossless Scaling not installed"));
     }
   };
@@ -104,8 +118,10 @@ export function useLsfgConfig() {
     mapRecoveryState({ status_available: false, error_code: "refresh_required" })
   );
   const mutationBarrierRef = useRef(createMutationBarrier(true));
+  const requestGateRef = useRef(createLatestRequestGate());
 
   const loadLsfgConfig = useCallback(async () => {
+    const requestId = requestGateRef.current.begin();
     mutationBarrierRef.current.block();
     setRecoveryState((current) => ({
       ...current,
@@ -114,6 +130,7 @@ export function useLsfgConfig() {
     }));
     try {
       const result = await getLsfgConfig();
+      if (!requestGateRef.current.isLatest(requestId)) return result;
       const recovery = mapRecoveryState(result);
       setRecoveryState(recovery);
       if (recovery.mutationsDisabled) mutationBarrierRef.current.block();
@@ -128,8 +145,9 @@ export function useLsfgConfig() {
         console.log("lsfg config not available; preserving last known state:", result.error);
       }
     } catch (error) {
+      if (!requestGateRef.current.isLatest(requestId)) return;
       console.error("Error loading lsfg config:", error);
-      const unavailable = mapRecoveryState({ status_available: false, error_code: "mutation_busy" });
+      const unavailable = transientRefreshRecoveryState();
       setRecoveryState(unavailable);
       mutationBarrierRef.current.block();
     }
@@ -139,6 +157,9 @@ export function useLsfgConfig() {
     if (!mutationBarrierRef.current.tryBlock()) {
       return { success: false, error: t("STATUS_RECOVERY_UNAVAILABLE", "State recovery is pending or unavailable. Changes are disabled until status refreshes."), error_code: "refresh_required", retryable: false, recovery_action: "refresh" };
     }
+    // A mutation changes the source of truth. Prevent an older read from
+    // reopening the barrier or publishing pre-mutation configuration.
+    requestGateRef.current.begin();
     setRecoveryState((current) => ({ ...current, mutationsDisabled: true }));
     try {
       const normalizedConfig = { ...getDefaults(), ...newConfig };
@@ -156,11 +177,18 @@ export function useLsfgConfig() {
       await loadLsfgConfig();
       return result;
     } catch (error) {
-      const unavailable = mapRecoveryState({ status_available: false, error_code: "mutation_busy" });
+      const unavailable = transientRefreshRecoveryState();
       setRecoveryState(unavailable);
       mutationBarrierRef.current.block();
       showErrorToast(ToastMessages.CONFIG_UPDATE_ERROR.title, String(error));
-      return { success: false, error: String(error) };
+      return {
+        success: false,
+        error: String(error),
+        error_code: "mutation_busy",
+        retryable: true,
+        recovery_action: "refresh",
+        status_available: false,
+      };
     }
   }, [loadLsfgConfig]);
 

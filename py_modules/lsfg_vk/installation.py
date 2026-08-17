@@ -91,9 +91,11 @@ class InstallationService(BaseService):
                 plugin_dir = Path(__file__).parent.parent.parent
                 metadata = self._bundled_archive_metadata(plugin_dir)
                 archive_path = plugin_dir / BIN_DIR / metadata["name"]
-                self._validate_archive_checksum(archive_path, metadata["sha256hash"])
+                payload = self._validate_archive_checksum(
+                    archive_path, metadata["sha256hash"]
+                )
                 replacements, removals = self._build_install_plan(
-                    layout, plugin_dir, archive_path, metadata
+                    layout, plugin_dir, payload, metadata
                 )
                 steps = self._ordered_install_steps(
                     layout, operation, replacements, removals
@@ -186,7 +188,7 @@ class InstallationService(BaseService):
         except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError) as error:
             raise OSError(f"Invalid Vulkan layer manifest: {error}") from error
 
-    def _read_archive_payload(self, archive_path: Path) -> Dict[str, bytes]:
+    def _read_archive_payload(self, archive_source) -> Dict[str, bytes]:
         selected = {
             f"lib/{LIB_FILENAME}",
             f"lib32/{LIB_FILENAME}",
@@ -195,7 +197,12 @@ class InstallationService(BaseService):
             f"bin/{CLI_FILENAME}",
         }
         payload: Dict[str, bytes] = {}
-        with tarfile.open(archive_path, "r:xz") as archive:
+        archive_options = (
+            {"fileobj": archive_source, "mode": "r:xz"}
+            if hasattr(archive_source, "read")
+            else {"name": archive_source, "mode": "r:xz"}
+        )
+        with tarfile.open(**archive_options) as archive:
             members = archive.getmembers()
             if len(members) > _MAX_ARCHIVE_MEMBERS:
                 raise OSError("Archive member resource limit exceeded")
@@ -321,8 +328,7 @@ class InstallationService(BaseService):
         }
         return service._render_effective_state(profile_data, settings)
 
-    def _build_install_plan(self, layout, plugin_dir, archive_path, metadata):
-        payload = self._read_archive_payload(archive_path)
+    def _build_install_plan(self, layout, plugin_dir, payload, metadata):
         private64 = self._render_manifest(
             payload[f"share/vulkan/implicit_layer.d/{JSON_FILENAME}"],
             "../../lib/liblsfg-vk-layer.so", "64",
@@ -454,19 +460,53 @@ class InstallationService(BaseService):
         }
         self._write_file(self.engine_state_file, json.dumps(state, indent=2) + "\n", 0o644)
 
-    @staticmethod
-    def _validate_archive_checksum(archive_path: Path, expected_checksum: str) -> None:
-        """Reject a bundled payload that differs from the package manifest."""
+    def _validate_archive_checksum(
+        self, archive_path: Path, expected_checksum: str
+    ) -> Dict[str, bytes]:
+        """Hash and consume one stable opened archive, returning its payload."""
         digest = hashlib.sha256()
         with archive_path.open("rb") as archive:
+            opened_before = os.fstat(archive.fileno())
+            if not stat.S_ISREG(opened_before.st_mode):
+                raise OSError(f"Bundled archive is not a regular file: {archive_path}")
             for chunk in iter(lambda: archive.read(1024 * 1024), b""):
                 digest.update(chunk)
-        actual_checksum = digest.hexdigest()
-        if actual_checksum.lower() != expected_checksum.lower():
-            raise OSError(
-                "Bundled lsfg-vk archive checksum mismatch: "
-                f"expected {expected_checksum.lower()}, got {actual_checksum}"
+            opened_after_hash = os.fstat(archive.fileno())
+            stable_before = (
+                opened_before.st_dev,
+                opened_before.st_ino,
+                opened_before.st_size,
+                opened_before.st_mtime_ns,
+                opened_before.st_ctime_ns,
             )
+            stable_after_hash = (
+                opened_after_hash.st_dev,
+                opened_after_hash.st_ino,
+                opened_after_hash.st_size,
+                opened_after_hash.st_mtime_ns,
+                opened_after_hash.st_ctime_ns,
+            )
+            if stable_before != stable_after_hash:
+                raise OSError("Bundled lsfg-vk archive changed during checksum validation")
+            actual_checksum = digest.hexdigest()
+            if actual_checksum.lower() != expected_checksum.lower():
+                raise OSError(
+                    "Bundled lsfg-vk archive checksum mismatch: "
+                    f"expected {expected_checksum.lower()}, got {actual_checksum}"
+                )
+            archive.seek(0)
+            payload = self._read_archive_payload(archive)
+            opened_after_read = os.fstat(archive.fileno())
+            stable_after_read = (
+                opened_after_read.st_dev,
+                opened_after_read.st_ino,
+                opened_after_read.st_size,
+                opened_after_read.st_mtime_ns,
+                opened_after_read.st_ctime_ns,
+            )
+            if stable_before != stable_after_read:
+                raise OSError("Bundled lsfg-vk archive changed during payload read")
+        return payload
 
     def _read_engine_state(self) -> Optional[Dict[str, Any]]:
         """Return the plugin-managed payload record, if one exists."""
@@ -652,7 +692,25 @@ class InstallationService(BaseService):
 
     def remove_obsolete_hdr_meta_layer_if_needed(self) -> bool:
         """Remove the retired format-22 explicit HDR meta-layer."""
-        return self._remove_if_exists(self.hdr_meta_json_file)
+        from . import state_transaction
+
+        layout = state_transaction.PathLayout.from_home(self.user_home)
+        if not state_transaction.regular_file_exists_nofollow(
+            layout.obsolete_hdr_manifest
+        ):
+            return False
+        coordinator = state_transaction.MutationCoordinator(layout)
+        recovery = coordinator.recover()
+        if recovery.refresh_required:
+            raise OSError("recovered interrupted state; refresh before retrying")
+        result = coordinator.commit(
+            "migration", replacements={}, removals=(layout.obsolete_hdr_manifest,)
+        )
+        if result.refresh_required or not result.committed:
+            raise OSError("obsolete HDR manifest removal did not commit")
+        if result.warning:
+            self.log.warning(result.warning)
+        return True
 
     def _remove_legacy_private_manifests(self) -> None:
         """Remove only obsolete manifests inside this plugin's private directory."""

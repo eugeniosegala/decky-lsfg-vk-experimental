@@ -24,6 +24,18 @@ export function createMutationBarrier(initiallyBlocked = true) {
   };
 }
 
+/** Issue monotonically increasing request ids so only the newest read may publish state. */
+export function createLatestRequestGate() {
+  let latestRequestId = 0;
+  return {
+    begin: () => {
+      latestRequestId += 1;
+      return latestRequestId;
+    },
+    isLatest: (requestId) => requestId === latestRequestId,
+  };
+}
+
 /** Normalize additive recovery metadata without relying on user-facing text. */
 export function mapRecoveryState(response = {}) {
   const hasExplicitAvailability = typeof response.status_available === "boolean";
@@ -69,6 +81,16 @@ export function mapRecoveryState(response = {}) {
     recoveryPending: response.recovery_pending === true,
     warning: response.warning,
   };
+}
+
+/** Fail closed after a transient RPC exception while keeping status refresh available. */
+export function transientRefreshRecoveryState() {
+  return mapRecoveryState({
+    status_available: false,
+    error_code: "mutation_busy",
+    retryable: true,
+    recovery_action: "refresh",
+  });
 }
 
 function summarizeRecoveryStates(states) {
