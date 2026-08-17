@@ -11,7 +11,7 @@ import hashlib
 import stat
 from dataclasses import replace
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any, BinaryIO, Dict, Optional
 
 from .base_service import BaseService
 from .constants import (
@@ -188,7 +188,7 @@ class InstallationService(BaseService):
         except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError) as error:
             raise OSError(f"Invalid Vulkan layer manifest: {error}") from error
 
-    def _read_archive_payload(self, archive_source) -> Dict[str, bytes]:
+    def _read_archive_payload(self, archive_source: BinaryIO) -> Dict[str, bytes]:
         selected = {
             f"lib/{LIB_FILENAME}",
             f"lib32/{LIB_FILENAME}",
@@ -197,12 +197,7 @@ class InstallationService(BaseService):
             f"bin/{CLI_FILENAME}",
         }
         payload: Dict[str, bytes] = {}
-        archive_options = (
-            {"fileobj": archive_source, "mode": "r:xz"}
-            if hasattr(archive_source, "read")
-            else {"name": archive_source, "mode": "r:xz"}
-        )
-        with tarfile.open(**archive_options) as archive:
+        with tarfile.open(fileobj=archive_source, mode="r:xz") as archive:
             members = archive.getmembers()
             if len(members) > _MAX_ARCHIVE_MEMBERS:
                 raise OSError("Archive member resource limit exceeded")
