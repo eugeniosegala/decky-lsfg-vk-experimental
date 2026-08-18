@@ -7,8 +7,6 @@
 >
 > This repository is archived and will no longer receive releases, support, documentation, or issue tracking.
 >
-> ## [Go to MAKO](https://github.com/eugeniosegala/MAKO)
->
 > For the full announcement and background on the move, read:
 >
 > [MAKO: Frame Generation and more on SteamOS](https://www.reddit.com/r/SteamDeck/comments/1vrox2x/mako_frame_generation_and_more_on_steam_os/)
@@ -18,12 +16,6 @@
 <p align="center">
   <img src="assets/decky-lossless-logo-experimental.png" width="256" alt="Decky LSFG-VK Experimental logo" />
 </p>
-
-## MAKO is the continuation of this project
-
-MAKO brings Decky LSFG-VK Experimental and LSFG-VK Experimental together in one active project, including the Decky plugin and standalone renderer.
-
-Future development focuses on Adaptive Frame Generation, game-aware profiles, compatibility, stability, performance, and the Steam Deck interface.
 
 > **Experimental fork:** This independently developed fork of the original
 > [Decky LSFG-VK](https://github.com/xXJSONDeruloXx/decky-lsfg-vk) plugin packages the fast-moving
