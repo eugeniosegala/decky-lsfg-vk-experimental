@@ -143,3 +143,10 @@ Community creators have covered and tested this experimental plugin on Steam Dec
 - **[Deck Wizard](https://www.youtube.com/@DeckWizard)** for community support, guides, testing, feedback, artwork, and
   tutorials
 - The **Decky Loader** team and community contributors and testers
+
+## AI-assisted development
+
+This project uses coding agents as part of an evidence-driven engineering
+workflow while keeping architecture, review, validation, and release decisions
+under human ownership. See
+[AI use in Decky LSFG-VK Experimental](AI_USE.md) for the full approach.
