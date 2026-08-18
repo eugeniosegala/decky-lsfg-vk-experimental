@@ -13,6 +13,8 @@
 >
 > ⭐ If you want to support the project and help me keep adding features, please [star MAKO](https://github.com/eugeniosegala/MAKO) and follow me on [GitHub](https://github.com/eugeniosegala).
 
+---
+
 <p align="center">
   <img src="assets/decky-lossless-logo-experimental.png" width="256" alt="Decky LSFG-VK Experimental logo" />
 </p>
