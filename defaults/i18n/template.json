@@ -182,5 +182,16 @@
   "TOAST_CLIPBOARD_SUCCESS": "Copied to Clipboard!",
   "TOAST_CLIPBOARD_SUCCESS_DESC": "Launch option ready to paste",
   "TOAST_CLIPBOARD_FAILED": "Copy Failed",
-  "TOAST_CLIPBOARD_FAILED_DESC": "Unable to copy to clipboard"
+  "TOAST_CLIPBOARD_FAILED_DESC": "Unable to copy to clipboard",
+  "STATUS_RECOVERY_UNAVAILABLE": "State recovery is pending or unavailable. Changes are disabled until status refreshes.",
+  "RECOVERY_BUSY": "Another change is in progress. Refresh shortly.",
+  "RECOVERY_REFRESH": "Recovered state changed. Refresh before trying again.",
+  "RECOVERY_BLOCKED": "Recovery is blocked and requires repair.",
+  "RECOVERY_PENDING": "The change completed; durable cleanup is pending.",
+  "RECOVERY_INVALID_CONFIG": "Saved configuration is invalid and must be repaired.",
+  "RECOVERY_WARNING_TITLE": "State recovery warning",
+  "RECOVERY_RETRY": "Retry state recovery",
+  "RECOVERY_RETRYING": "Retrying state recovery...",
+  "RECOVERY_REFRESH_STATUS": "Refresh status",
+  "RECOVERY_REFRESHING_STATUS": "Refreshing status..."
 }

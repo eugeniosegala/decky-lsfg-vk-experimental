@@ -10,7 +10,8 @@ const usage = () => {
     "Usage: generate-dev-build-info.mjs --output PATH --decky-repo PATH " +
     "--frontend-deployed true|false --backend-deployed true|false " +
     "[--engine-repo PATH --engine-layer-64 PATH --engine-layer-32 PATH " +
-    "--flatpak-archive PATH]"
+    "--flatpak-bundle-23.08 PATH --flatpak-bundle-24.08 PATH " +
+    "--flatpak-bundle-25.08 PATH]"
   );
 };
 
@@ -58,8 +59,15 @@ const deckyRepository = required("--decky-repo");
 const engineRepository = options.get("--engine-repo");
 const engineLayer64 = options.get("--engine-layer-64");
 const engineLayer32 = options.get("--engine-layer-32");
-const flatpakArchive = options.get("--flatpak-archive");
-const hasEngineArtifact = Boolean(engineLayer64 || engineLayer32 || flatpakArchive);
+const flatpakBundles = ["23.08", "24.08", "25.08"].map((runtime) => ({
+  runtime,
+  path: options.get(`--flatpak-bundle-${runtime}`)
+})).filter(({ path }) => Boolean(path));
+if (flatpakBundles.length !== 0 && flatpakBundles.length !== 3) {
+  console.error("all three Flatpak runtime bundles must be supplied together");
+  process.exit(2);
+}
+const hasEngineArtifact = Boolean(engineLayer64 || engineLayer32 || flatpakBundles.length);
 if (Boolean(engineRepository) !== hasEngineArtifact) {
   console.error("--engine-repo must be supplied when an engine artifact is supplied");
   process.exit(2);
@@ -78,11 +86,23 @@ if (engineRepository) {
     await stat(artifactPath);
     return createHash("sha256").update(await readFile(artifactPath)).digest("hex");
   };
+  const sha256BundleSet = async () => {
+    if (!flatpakBundles.length) return null;
+    const hash = createHash("sha256");
+    for (const bundle of flatpakBundles) {
+      await stat(bundle.path);
+      hash.update(bundle.runtime);
+      hash.update("\0");
+      hash.update(await readFile(bundle.path));
+      hash.update("\0");
+    }
+    return hash.digest("hex");
+  };
   engine = {
     ...(await gitInfo(engineRepository)),
     layer64Sha256: await sha256(engineLayer64),
     layer32Sha256: await sha256(engineLayer32),
-    flatpakArchiveSha256: await sha256(flatpakArchive)
+    flatpakBundlesSha256: await sha256BundleSet()
   };
 }
 

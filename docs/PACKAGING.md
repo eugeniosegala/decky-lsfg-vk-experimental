@@ -104,10 +104,10 @@ SteamOS filesystem is temporarily writable.
 
 The Flatpak command retains its downloaded dependency cache in
 `build/steamos-flatpak-cache` and stages builds under
-`build/steamos-flatpak-tmp`, both inside the engine checkout. This avoids
-SteamOS's comparatively small `/tmp` filesystem and makes later bundle builds
-reuse the downloaded runtimes. Set `LSFGVK_FLATPAK_CACHE_ROOT` or
-`LSFGVK_FLATPAK_TMP_ROOT` to move either location.
+`build/steamos-flatpak-tmp`, including archive extraction, inside the engine
+checkout. This avoids SteamOS's comparatively small `/tmp` filesystem and makes
+later bundle builds reuse the downloaded runtimes. Set
+`LSFGVK_FLATPAK_CACHE_ROOT` or `LSFGVK_FLATPAK_TMP_ROOT` to move either location.
 
 The cache has no automatic expiry and survives reboots. Inspect its current
 size with the safe, dry-run command:
@@ -130,14 +130,17 @@ download the SDK/runtime dependencies again. For safety, the prune command
 targets only the default repo-local locations; if you set either cache-location
 environment variable, manage that custom directory yourself.
 
-Every direct development deployment refreshes a blue status box at the top of
-the plugin. It records the local deployment timestamp, the Decky and LSFG Git
-commits (and whether either checkout had local edits), the deployed frontend
-and backend scope, and the first 12 characters of the 64-bit layer, 32-bit
-layer, and Flatpak-bundle SHA-256 values when those artifacts were part of the
-run. `dev:all`, `dev:host`, and `dev:e2e` are the confirmation that Decky and
-the applicable LSFG artifacts were deployed together in the displayed run;
-narrower commands explicitly identify the part left unchanged.
+Do not run direct development deployment concurrently with the plugin's
+install, update, or uninstall actions. Every direct development deployment
+copies and verifies the requested backend and engine artifacts first, then
+publishes the frontend and its blue status box as the completion marker at the
+top of the plugin. It records the local deployment timestamp, the Decky and LSFG
+Git commits (and whether either checkout had local edits), the deployed frontend
+and backend scope, and the first 12 characters of the 64-bit layer, 32-bit layer,
+and verified installed Flatpak-bundle-set SHA-256 values when those artifacts
+were part of the run. `dev:all`, `dev:host`, and `dev:e2e` are the confirmation
+that Decky and the applicable LSFG artifacts were deployed together in the
+displayed run; narrower commands explicitly identify the part left unchanged.
 
 Set `DECKY_PLUGIN_DIR` if the local plugin was installed elsewhere, or invoke
 `scripts/deploy-dev.sh --engine-repo /path/to/lsfg-vk-experimental --engine`

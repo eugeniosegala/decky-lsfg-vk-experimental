@@ -11,6 +11,6 @@ export interface LocalDevelopmentBuildInfo {
     dirty: boolean;
     layer64Sha256: string | null;
     layer32Sha256: string | null;
-    flatpakArchiveSha256: string | null;
+    flatpakBundlesSha256: string | null;
   } | null;
 }

@@ -3,9 +3,20 @@
   "version": "0.13.0-experimental.25",
   "description": "Experimental lsfg-vk features for Lossless Scaling on Steam OS",
   "type": "module",
+  "packageManager": "pnpm@10.18.0",
+  "engines": {
+    "node": ">=20 <25",
+    "pnpm": ">=10 <11"
+  },
   "scripts": {
     "build": "node scripts/build-frontend.mjs",
-    "watch": "rollup -c -w",
+    "watch": "node scripts/prepare-dev-build-info-module.mjs && rollup -c -w",
+    "typecheck": "node scripts/prepare-dev-build-info-module.mjs && tsc --noEmit",
+    "check:manifest": "node scripts/validate-package-manifest.mjs check package.json",
+    "check:generated": "./scripts/check-generated.sh",
+    "check:python": "python3 -m compileall -q main.py shared_config.py py_modules tests",
+    "check:shell": "bash -n .vscode/build.sh .vscode/config.sh .vscode/setup.sh scripts/build_i18n_json.sh scripts/package-output-path.sh scripts/package-local.sh scripts/publish-package.sh scripts/deploy-dev.sh scripts/lsfg-vk-experimental-diagnostics",
+    "check": "pnpm run check:manifest && pnpm run check:generated && pnpm run check:python && pnpm run check:shell && pnpm test && pnpm run typecheck && pnpm run build",
     "package:local": "./scripts/package-local.sh",
     "package:local-engine": "./scripts/package-local.sh --local-engine-repo ../lsfg-vk-experimental",
     "package:local-engine-fast": "./scripts/package-local.sh --local-engine-repo ../lsfg-vk-experimental --native-only --64-bit-only",
@@ -47,6 +58,7 @@
     "@decky/ui": "^4.7.2",
     "@types/react": "18.3.3",
     "@types/react-dom": "18.3.0",
+    "@types/react-router": "5.1.20",
     "@types/webpack": "^5.28.5",
     "rollup": "^4.22.5",
     "typescript": "^5.6.2"

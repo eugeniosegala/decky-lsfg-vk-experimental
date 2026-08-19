@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 script_dir="$project_dir/scripts"
+source "$script_dir/package-output-path.sh"
 output_path=""
 output_path_set=false
 
@@ -77,24 +78,8 @@ if [[ -n "$(git -C "$project_dir" status --porcelain --untracked-files=normal)" 
 fi
 
 read -r archive_name engine_version package_version github_repository has_flatpak_bundle archive_url release_tag < <(
-  node -e '
-    const manifest = require(process.argv[1]);
-    const [binary] = manifest.remote_binary ?? [];
-    const repositoryUrl = manifest.repository?.url;
-    const githubRepository = repositoryUrl
-      ?.replace(/^git\+https:\/\/github\.com\//, "")
-      .replace(/\.git$/, "");
-    const flatpak = binary?.flatpak_bundle;
-    if (!binary?.name || !binary?.version || !manifest.version || !githubRepository) {
-      process.exitCode = 1;
-      throw new Error("package.json must define version, GitHub repository, and one versioned remote_binary entry");
-    }
-    if (flatpak && (!flatpak.name || !flatpak.url || !flatpak.sha256hash)) {
-      process.exitCode = 1;
-      throw new Error("flatpak_bundle must define name, url, and sha256hash when present");
-    }
-    process.stdout.write(`${binary.name}\t${binary.version}\t${manifest.version}\t${githubRepository}\t${flatpak ? "true" : "false"}\t${binary.url ?? ""}\t${binary.release_tag ?? ""}\n`);
-  ' "$project_dir/package.json"
+  node "$script_dir/validate-package-manifest.mjs" \
+    publish-package "$project_dir/package.json"
 )
 
 notes_package_version="0.13.0-experimental.25"
@@ -136,7 +121,36 @@ elif [[ "$output_path" != /* ]]; then
   output_path="$project_dir/$output_path"
 fi
 
+output_path="$(canonicalize_package_output_path "$output_path")"
+reject_unsafe_repository_output "$project_dir" "$output_path" "publish"
+output_relative_path=""
+if [[ "$output_path" == "$project_dir/"* ]]; then
+  output_relative_path="${output_path#"$project_dir/"}"
+fi
+
 "$script_dir/package-local.sh" "$output_path"
+
+# Packaging regenerates tracked artifacts. Recheck before creating a tag so a
+# stale generated file cannot turn a clean release commit into a dirty tag. A
+# caller-selected ZIP inside the repository is the sole permitted untracked
+# result; tracked output paths are never treated as disposable artifacts.
+post_package_status_args=(status --porcelain --untracked-files=normal -z -- .)
+if [[ -n "$output_relative_path" ]]; then
+  post_package_status_args+=(":(exclude,literal)$output_relative_path")
+fi
+
+post_package_status="$(mktemp "${TMPDIR:-/tmp}/decky-lsfg-vk-status.XXXXXX")"
+if ! git -C "$project_dir" "${post_package_status_args[@]}" > "$post_package_status"; then
+  rm -f "$post_package_status"
+  echo "Could not verify the worktree after packaging." >&2
+  exit 1
+fi
+if [[ -s "$post_package_status" ]]; then
+  rm -f "$post_package_status"
+  echo "Refusing to tag after packaging changed the worktree. Commit the generated changes first." >&2
+  exit 1
+fi
+rm -f "$post_package_status"
 
 release_tag="v$package_version"
 current_commit="$(git -C "$project_dir" rev-parse HEAD)"

@@ -2,14 +2,33 @@ import { callable } from "@decky/api";
 import { ConfigurationData } from "../config/configSchema";
 
 // Type definitions for API responses
-export interface InstallationResult {
+export interface RecoveryMetadata {
+  error_code?: "mutation_busy" | "refresh_required" | "recovery_blocked" |
+    "recovery_pending" | "invalid_persisted_state" | "durability_failure";
+  retryable?: boolean;
+  recovery_pending?: boolean;
+  warning?: string | null;
+  recovery_action?: "retry" | "refresh" | "wait_for_recovery" |
+    "repair_required" | "none";
+  status_available?: boolean;
+}
+
+export interface InstallationResult extends RecoveryMetadata {
   success: boolean;
   error?: string;
   message?: string;
   removed_files?: string[];
 }
 
-export interface InstallationStatus {
+export interface RecoveryResult extends RecoveryMetadata {
+  success: boolean;
+  recovered?: boolean;
+  refresh_required?: boolean;
+  message?: string;
+  error?: string;
+}
+
+export interface InstallationStatus extends RecoveryMetadata {
   installed: boolean;
   lib_exists: boolean;
   json_exists: boolean;
@@ -43,13 +62,13 @@ export interface DllStatsResult {
 // Use centralized configuration data type
 export type LsfgConfig = ConfigurationData;
 
-export interface ConfigResult {
+export interface ConfigResult extends RecoveryMetadata {
   success: boolean;
   config?: LsfgConfig;
   error?: string;
 }
 
-export interface ConfigUpdateResult {
+export interface ConfigUpdateResult extends RecoveryMetadata {
   success: boolean;
   message?: string;
   error?: string;
@@ -119,7 +138,7 @@ export interface FlatpakOperationResult {
 }
 
 // Profile management interfaces
-export interface ProfilesResult {
+export interface ProfilesResult extends RecoveryMetadata {
   success: boolean;
   profiles?: string[];
   current_profile?: string;
@@ -127,7 +146,7 @@ export interface ProfilesResult {
   error?: string;
 }
 
-export interface ProfileResult {
+export interface ProfileResult extends RecoveryMetadata {
   success: boolean;
   profile_name?: string;
   message?: string;
@@ -138,6 +157,7 @@ export interface ProfileResult {
 export const installLsfgVk = callable<[], InstallationResult>("install_lsfg_vk");
 export const uninstallLsfgVk = callable<[], InstallationResult>("uninstall_lsfg_vk");
 export const checkLsfgVkInstalled = callable<[], InstallationStatus>("check_lsfg_vk_installed");
+export const recoverState = callable<[], RecoveryResult>("recover_state");
 export const checkLosslessScalingDll = callable<[], DllDetectionResult>("check_lossless_scaling_dll");
 export const getDllStats = callable<[], DllStatsResult>("get_dll_stats");
 export const getLsfgConfig = callable<[], ConfigResult>("get_lsfg_config");

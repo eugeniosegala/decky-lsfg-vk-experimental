@@ -2,7 +2,9 @@
 # Build a complete, manually installable Decky plugin archive.
 set -euo pipefail
 
-project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+script_dir="$project_dir/scripts"
+source "$script_dir/package-output-path.sh"
 output_path=""
 output_path_set=false
 engine_archive_path=""
@@ -146,7 +148,7 @@ if [[ "$build_64_only" == true && -z "$local_engine_repo" ]]; then
   exit 2
 fi
 
-for command in curl node npm python3 strings tar zip unzip; do
+for command in curl git node npm python3 strings tar zip unzip; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "Required command not found: $command" >&2
     exit 1
@@ -180,28 +182,8 @@ worktree_fingerprint() {
 }
 
 read -r archive_name archive_version archive_url archive_checksum flatpak_archive_name flatpak_archive_url flatpak_archive_checksum < <(
-  node -e '
-    const manifest = require(process.argv[1]);
-    const [binary] = manifest.remote_binary ?? [];
-    if (!binary?.name || !binary?.version || !binary?.url || !binary?.sha256hash) {
-      process.exitCode = 1;
-      throw new Error("package.json must define one versioned, verified remote_binary entry");
-    }
-    const flatpak = binary.flatpak_bundle;
-    if (flatpak && (!flatpak.name || !flatpak.url || !flatpak.sha256hash)) {
-      process.exitCode = 1;
-      throw new Error("flatpak_bundle must define name, url, and sha256hash when present");
-    }
-    process.stdout.write([
-      binary.name,
-      binary.version,
-      binary.url,
-      binary.sha256hash,
-      flatpak?.name ?? "",
-      flatpak?.url ?? "",
-      flatpak?.sha256hash ?? "",
-    ].join("\t") + "\n");
-  ' "$project_dir/package.json"
+  node "$script_dir/validate-package-manifest.mjs" \
+    package-local "$project_dir/package.json"
 )
 
 if [[ -n "$local_engine_repo" ]]; then
@@ -319,6 +301,8 @@ case "$output_path" in
   /*) ;;
   *) output_path="$project_dir/$output_path" ;;
 esac
+output_path="$(canonicalize_package_output_path "$output_path")"
+reject_unsafe_repository_output "$project_dir" "$output_path" "package"
 
 staging_dir="$(mktemp -d "${TMPDIR:-/tmp}/decky-lsfg-vk-package.XXXXXX")"
 package_name="Decky LSFG-VK Experimental"
