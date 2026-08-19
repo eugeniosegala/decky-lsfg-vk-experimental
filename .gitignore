@@ -88,3 +88,22 @@ htmlcov/
 *.sublime-workspace
 .vscode/settings.json
 .vscode/.ropeproject
+# Local AI assistants, agents, MCP configuration, and runtime state.
+.codex/
+.omx/
+omx_wiki/
+.agents/
+.claude/
+.gemini/
+.cursor/
+.windsurf/
+.aider*
+.mcp.json
+mcp.json
+AGENTS.md
+**/AGENTS.md
+CLAUDE.md
+GEMINI.md
+.github/copilot-instructions.md
+.github/instructions/
+.github/prompts/

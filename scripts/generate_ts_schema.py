@@ -140,13 +140,7 @@ def main():
         import subprocess
         
         boilerplate_script = project_root / "scripts" / "generate_python_boilerplate.py"
-        result = subprocess.run([sys.executable, str(boilerplate_script)], 
-                              capture_output=True, text=True)
-        
-        if result.returncode == 0:
-            print(result.stdout)
-        else:
-            print(f"⚠️  Python boilerplate generation had issues:\n{result.stderr}")
+        subprocess.run([sys.executable, str(boilerplate_script)], check=True)
         
     except Exception as e:
         print(f"❌ Error generating schema: {e}")
