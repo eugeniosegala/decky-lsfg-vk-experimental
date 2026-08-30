@@ -34,29 +34,22 @@ This project includes third-party components under the following licenses:
 
 ---
 
-MIT License
+GNU General Public License version 3 or later
 
-Includes components from lsfg-vk licensed under the MIT License:
+The separately bundled lsfg-vk version 2 engine is licensed under
+GPL-3.0-or-later. Copyright in the engine remains with the respective lsfg-vk
+copyright holders. The MIT License used for lsfg-vk version 1 does not
+describe the version 2 engine distributed by this plugin.
 
-Copyright (c) 2025 lsfg-vk
+The direct upstream baseline is PancakeTAS/lsfg-vk commit
+8b0da2661c6f3473a7fccc8ba643880050e71642. The pinned experimental engine is
+eugeniosegala/lsfg-vk-experimental tag v2.0.0-dev28-experimental.25 at commit
+5a293c428409a866bbe91be9eb54b49e71521e14.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+The complete GPL terms are provided in LICENSES/GPL-3.0-or-later.txt. Exact
+source, archive, checksum, and upstream information is recorded in
+UPSTREAM_LSFGVK.md. This engine notice does not replace the BSD-3-Clause terms
+that apply to the separately licensed Decky plugin code above.
 
 ---
 
